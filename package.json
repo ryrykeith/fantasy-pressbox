@@ -1,0 +1,24 @@
+{
+  "name": "fantasy-pressbox",
+  "version": "0.1.0",
+  "description": "AI-powered fantasy football league coverage from Sleeper data: power rankings, previews, recaps, awards, and trash talk.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "fantasy-pressbox": "./src/cli.mjs"
+  },
+  "scripts": {
+    "setup": "node setup.mjs",
+    "start": "node src/cli.mjs",
+    "fetch": "node src/cli.mjs fetch",
+    "preview": "node src/cli.mjs preview",
+    "recap": "node src/cli.mjs recap",
+    "rankings": "node src/cli.mjs rankings",
+    "doctor": "node src/cli.mjs doctor"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {},
+  "private": true
+}
