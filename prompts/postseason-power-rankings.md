@@ -38,6 +38,8 @@ FINAL RANKINGS • 1/15
 14. **The receipts.** Your best call and your worst call of the season, stated
    without softening.
 15. **Next year.** Who is dangerous, who is rebuilding, who is in denial.
+   If you group teams here, every team keeps its rank emoji, exactly as in
+   its own post.
 
 ## Machine-readable rankings
 

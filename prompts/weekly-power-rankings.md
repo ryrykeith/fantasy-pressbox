@@ -74,8 +74,23 @@ POWER RANKINGS • 1/14
    - what this week's result actually proved or failed to prove
    - the case for them and the case against them
    - a line beginning `VERDICT:` — one sentence, quotable
-14. **Tiers.** Group the teams and give each tier a name you wrote this week,
-   not a reused one. Close with a line that will look funny in December.
+14. **Tiers.** Group the teams into tiers. Every team keeps its rank emoji
+   here, exactly as in its own post — the tier list is the part people
+   screenshot, so it has to be readable on its own:
+
+   ```
+   TIER 1 — PLEASE STOP
+   🥇 Jack Daniels
+   🥈 cheflamb1738
+   🥉 wizardbeef
+
+   TIER 2 — REAL CONTENDERS
+   🔥 Apologies in Advance
+   ```
+
+   Leave a blank line between tiers. Name each tier something you wrote this
+   week for these teams, not a label you would reuse. Close with a line that will
+   look funny in December.
 
 For an `imessage` output format, collapse this into one long message: a short
 intro, then a compact block per team, then risers and fallers.

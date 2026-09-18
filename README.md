@@ -16,6 +16,7 @@ comes from your league's real data.
 
 - [What you get](#what-you-get)
 - [How it works](#how-it-works)
+- [Results vary between runs](#the-same-prompt-will-not-give-the-same-answer-twice)
 - [Requirements](#requirements)
 - [Installation](#installation-step-by-step)
 - [Setup](#setup)
@@ -68,23 +69,25 @@ recap can open by admitting it went 2-4.
 
 ## How it works
 
+```mermaid
+flowchart TD
+    A["Your Sleeper league<br/>(public data, no password)"] --> B["Fetch and normalize<br/>(player IDs become names)"]
+    B --> C["Snapshot to disk<br/>(this week is written down<br/>before the next one happens)"]
+    C --> D["Analyze<br/>(scores, potential points,<br/>lineup efficiency, awards)"]
+    D --> E["Build a prompt<br/>(the verified facts,<br/>plus the house style)"]
+    E --> F{"Do you have<br/>an API key?"}
+    F -->|"No"| G["A file you paste<br/>into ChatGPT or Claude"]
+    F -->|"Yes"| H["The posts, written for you"]
+    G --> I["Check the length<br/>(Sleeper rejects long messages)"]
+    H --> I
+    I --> J["Your league chat"]
 ```
-Your Sleeper league
-        ↓  read (public data, no password needed)
-   Fetch and normalize        player IDs become player names
-        ↓
-   Snapshot to disk           this week is written down before the next one
-        ↓
-   Analyze                    scores, potential points, lineup efficiency, awards
-        ↓
-   Build a prompt             the facts, plus the house style rules
-        ↓
-   Write the posts            you paste it into ChatGPT, or it calls an API
-        ↓
-   Check the length           Sleeper rejects long messages, so posts are checked
-        ↓
-   Your league chat
-```
+In words, if that diagram does not render: your league data is fetched and
+translated into names and numbers, saved to disk so this week can never be
+rewritten later, analyzed into facts and awards, then combined with the house
+style into a prompt. You either paste that prompt into a chat or let the tool
+call an API. Either way the finished posts are length-checked before they
+reach your league.
 
 Two ideas do most of the work:
 
@@ -96,7 +99,59 @@ decides what is *interesting*; it never decides what is *true*.
 happens. That is what makes movement arrows, graded predictions and
 "we ranked you 12th and you led the league in scoring" possible.
 
----
+## The same prompt will not give the same answer twice
+
+This is worth understanding before you or anyone in your league is surprised
+by it.
+
+Fantasy Pressbox guarantees the **facts**. It does not guarantee the
+**opinions**, because the opinions are formed fresh by the AI on every run.
+
+| Always the same | Varies every run |
+|---|---|
+| Scores, records, rosters | Where a team is ranked |
+| Potential points, lineup efficiency | Movement arrows *(they follow from the order)* |
+| Award winners and their numbers | Which teams are grouped into which tier |
+| Who plays whom | The wording, jokes and verdicts |
+| The facts available to be written about | Predicted scores, and which storyline leads |
+
+Movement arrows are worth a word of their own. They are always *arithmetically*
+correct — `record` recomputes them from your saved history and would flag a
+wrong one — but they are computed from that run's ranking order. A team placed
+9th in one run and 7th in another honestly shows ↑3 in the first and ↑5 in the
+second.
+
+Here is a real example. The same Week 1 rankings prompt, run twice in two
+fresh ChatGPT sessions, produced:
+
+| Team | First run | Second run |
+|---|---|---|
+| Virginia Virgins | 9th | 7th |
+| Apologies in Advance | 7th | 8th |
+| Burdman09 | 4th | 5th |
+
+Every number in both runs was correct. Both checked out against the league
+data completely. They simply weighed a 161-point week from a thin roster
+differently, which is a judgement call, and judgement calls are exactly what
+a power ranking is.
+
+**What this means in practice:**
+
+- If you regenerate because you didn't like a joke, expect the rankings to
+  shift too. It is not a bug and it is not the tool changing its mind about
+  the facts.
+- If you get an edition you like, **keep it**. Do not regenerate hoping for a
+  slightly better version of the same thing.
+- Once you publish an edition, run `record` on it. That freezes the order, so
+  next week measures movement against what your league actually saw rather
+  than against a version that only ever existed in a chat window.
+- Two people in your league running the same week will get different
+  rankings. The commissioner's copy is the one that counts.
+
+To reduce the variation, make `config/rankings.yml` more opinionated — heavier
+weights push harder in a consistent direction. You cannot remove it entirely,
+and you probably would not want to; an identical ranking every week would be a
+spreadsheet, not a publication.
 
 ## Requirements
 
@@ -114,6 +169,23 @@ You only need an AI API key if you want the posts written automatically. See
 
 If you have never done this before, follow all four steps. It takes about ten
 minutes, and you only do it once.
+
+```mermaid
+flowchart TD
+    S(["Start"]) --> A["1. Install Node.js<br/>nodejs.org, the LTS button"]
+    A --> B["2. Open a terminal<br/>Mac: Terminal / Windows: PowerShell"]
+    B --> C{"Type node --version<br/>Is it v18 or higher?"}
+    C -->|"No"| A2["Close the window,<br/>open a new one, try again"]
+    A2 --> C
+    C -->|"Yes"| D["3. Download the project,<br/>then cd fantasy-pressbox"]
+    D --> E["4. Run npm run setup<br/>and answer a few questions"]
+    E --> F{"Run the doctor command.<br/>Does it show your league name?"}
+    F -->|"No"| G["See Troubleshooting"]
+    F -->|"Yes"| H(["Ready to run your first edition"])
+```
+The four steps in words: install Node.js, open a terminal and confirm Node
+works, download the project and move into its folder, then run setup and check
+it with `doctor`.
 
 ### Step 1 — Install Node.js
 
@@ -216,6 +288,28 @@ You should see your league name, your team count, and your league format.
 ---
 
 ## Your weekly routine
+
+```mermaid
+flowchart TB
+    subgraph T["Thursday, before kickoff"]
+        direction TB
+        A1["Run: preview"] --> A2["Paste into ChatGPT or Claude"]
+        A2 --> A3["Post to Sleeper"]
+        A3 --> A4["Run: record, task preview<br/>(so the picks can be graded)"]
+    end
+    subgraph U["Tuesday, after the games"]
+        direction TB
+        B1["Run: recap"] --> B2["Paste, then post"]
+        B2 --> B3["Run: rankings"]
+        B3 --> B4["Paste, then post"]
+        B4 --> B5["Run: record, task rankings<br/>(so next week shows movement)"]
+    end
+    T --> U
+```
+Twice a week, in the project folder. Thursday you build previews and record
+the picks; Tuesday you build the recap and the rankings, and record the new
+order. The two `record` steps are what give the publication its memory — skip
+them and you lose graded predictions and movement arrows.
 
 Once a week, in the project folder:
 

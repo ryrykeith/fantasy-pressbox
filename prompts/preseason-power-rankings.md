@@ -61,8 +61,23 @@ POWER RANKINGS • 1/14
    - `BEST CASE:` one line
    - `DISASTER:` one line
    - `VERDICT:` one quotable sentence
-14. **Tiers.** Group the teams, name each tier something specific to what that
-   group actually is, and close by inviting the league to screenshot it.
+14. **Tiers.** Group the teams into tiers. Every team keeps its rank emoji
+   here, exactly as in its own post — the tier list is the part people
+   screenshot, so it has to be readable on its own:
+
+   ```
+   TIER 1 — PLEASE STOP
+   🥇 Jack Daniels
+   🥈 cheflamb1738
+   🥉 wizardbeef
+
+   TIER 2 — REAL CONTENDERS
+   🔥 Apologies in Advance
+   ```
+
+   Leave a blank line between tiers. Name each tier something you wrote this
+   week for these teams, not a label you would reuse. Close by inviting the
+   league to screenshot it.
 
 Every player you name must appear on that team's roster in the context.
 
