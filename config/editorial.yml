@@ -19,8 +19,26 @@ output:
   sleeper_max_chars: 900
   include_emoji: true
 
-# The emoji printed next to each rank. Rank 1 gets the first, and so on.
-# Add or remove lines to match your league size.
+# ---------------------------------------------------------------------------
+# RANK EMOJI  —  the emoji printed beside each team, in its own post and in
+# the tier list at the end.
+#
+# Change these freely. The number on the left is the rank; the emoji on the
+# right is what prints next to whoever finishes there. Keep the quotes.
+#
+#   1: "🥇"     ->     🥇 1. WIZARDBEEF ↑2
+#
+# Rules of thumb:
+#   - Have one line per team in your league. 12 teams, 12 lines.
+#   - Too few? The last emoji repeats for the remaining ranks.
+#   - Whatever you write here replaces this list completely, so you can make
+#     it shorter, longer, or nothing like the default.
+#   - To drop emoji entirely, set include_emoji: false above.
+#
+# Run `node src/cli.mjs doctor` after editing to see exactly what you will get.
+#
+# The default below is deliberately mean about the bottom of the table.
+# ---------------------------------------------------------------------------
 ranking_emoji:
   1: "🥇"
   2: "🥈"

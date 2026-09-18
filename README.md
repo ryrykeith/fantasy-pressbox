@@ -24,6 +24,7 @@ comes from your league's real data.
 - [Commands](#commands)
 - [Two ways to write the posts](#two-ways-to-write-the-posts)
 - [Configuration](#configuration)
+  - [Changing the rank emoji](#-changing-the-rank-emoji)
 - [Where files go](#where-files-go)
 - [Troubleshooting](#troubleshooting)
 - [What it costs](#what-it-costs)
@@ -451,10 +452,102 @@ Plain text you can edit in any text editor. Change a value, save, run again.
 
 - `tone` and `roast_intensity` — the voice
 - `output.sleeper_max_chars` — the per-post character limit
-- `ranking_emoji` — the emoji next to each rank; **edit this to match your
-  league size**
+- `output.include_emoji` — emoji on or off everywhere
+- `ranking_emoji` — the emoji next to each rank, covered just below
 - `awards` — which weekly awards can be handed out
 - `banned_phrases` — filler you never want to see printed
+
+### 🥇 Changing the rank emoji
+
+This is the setting people most want to change, so it gets its own section.
+
+Every team gets an emoji based on where it ranks. The emoji shows up twice —
+beside the team in its own post, and beside it again in the tier list that
+closes the edition:
+
+```
+🥇 1. WIZARDBEEF ↑2
+🥈 2. CHEFLAMB1738 —
+💩 12. APOLOGIES IN ADVANCE ↓8
+```
+
+**To change them, open `config/editorial.yml` and edit this block:**
+
+```yaml
+ranking_emoji:
+  1: "🥇"
+  2: "🥈"
+  3: "🥉"
+  4: "🔥"
+  # ...and so on
+```
+
+The number on the left is the rank. The emoji on the right is what prints for
+whoever finishes there. Keep the quotes, save the file, done — there is
+nothing to reinstall or restart.
+
+**See exactly what you'll get** before generating anything:
+
+```bash
+node src/cli.mjs doctor
+```
+
+It prints your finished table against your real number of teams:
+
+```
+  Rank emoji         1🥇  2🥈  3🥉  4🔥  5😤  6👀  7🤨  8🎲  9🫠  10💩  11💩  12💩
+                     Edit these in config/editorial.yml
+```
+
+**Things worth knowing:**
+
+| If you… | Then… |
+|---|---|
+| Have more teams than emoji | The last emoji repeats, and `doctor` warns you |
+| Have fewer teams than emoji | The extras are simply never used |
+| Write your own list | It **replaces** the default completely — no leftovers mixed in |
+| Want no emoji at all | Set `include_emoji: false` and the whole scheme switches off |
+
+**A few ideas**
+
+Kinder to the bottom of the table:
+
+```yaml
+ranking_emoji:
+  1: "🏆"
+  2: "🥈"
+  3: "🥉"
+  4: "📈"
+  5: "📈"
+  6: "➖"
+  7: "➖"
+  8: "➖"
+  9: "📉"
+  10: "📉"
+  11: "🧊"
+  12: "🧊"
+```
+
+Same emoji for everyone, so the ranking number does the talking:
+
+```yaml
+ranking_emoji:
+  1: "🏈"
+```
+
+A 14-team league — just keep going:
+
+```yaml
+ranking_emoji:
+  1: "🥇"
+  # ...
+  13: "💀"
+  14: "💀"
+```
+
+Because the emoji are read from config rather than written into the prompt,
+changing them changes every edition from that point on: rankings, previews and
+recaps alike.
 
 ### `config/rankings.yml` — how teams are judged
 

@@ -8,7 +8,7 @@
  */
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadConfig, ROOT } from './config.mjs';
+import { loadConfig, rankEmoji, ROOT } from './config.mjs';
 import { openLeague, resolveWeek, captureWeek } from './pipeline.mjs';
 import { normalizeTransactions, normalizeFutureDraftCapital } from './sleeper/normalize.mjs';
 import { buildContext, buildPrompt, systemPromptOnly, taskPromptOnly, describePlayer } from './promptContext.mjs';
@@ -113,8 +113,48 @@ async function commandDoctor(config) {
       `${league.format.pointsPerReception} PPR` +
       `${league.format.tePremium ? `, TE premium +${league.format.tePremium}` : ''}`);
   say(`  Current week       ${week} (from ${source})`);
+
+  reportRankEmoji(config, teams.length);
+
   say('\nEverything looks good. Try: node src/cli.mjs preview');
   return 0;
+}
+
+/**
+ * Shows the emoji each rank will actually print.
+ *
+ * Editing config/editorial.yml without being able to see the result is the
+ * kind of thing people try once and give up on, so doctor prints the finished
+ * table against the real number of teams in the league.
+ */
+function reportRankEmoji(config, teamCount) {
+  if (!config.editorial.output.include_emoji) {
+    say('\n  Rank emoji         off (INCLUDE_EMOJI is false)');
+    say('                     Turn them on in config/editorial.yml or .env');
+    return;
+  }
+
+  const table = config.editorial.ranking_emoji || {};
+  const defined = Object.keys(table)
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  const highest = defined.length ? defined.at(-1) : 0;
+
+  const line = Array.from({ length: teamCount }, (_, index) => {
+    const rank = index + 1;
+    return `${rank}${rankEmoji(config, rank)}`;
+  }).join('  ');
+
+  say(`\n  Rank emoji         ${line}`);
+  say('                     Edit these in config/editorial.yml');
+
+  if (highest < teamCount) {
+    say(
+      `                     Note: only ${highest} defined for ${teamCount} teams, ` +
+        `so ranks ${highest + 1}-${teamCount} reuse the last one.`,
+    );
+  }
 }
 
 async function commandFetch(config, args) {

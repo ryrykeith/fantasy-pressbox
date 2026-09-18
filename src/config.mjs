@@ -42,11 +42,27 @@ const DEFAULT_RANKINGS = {
   weekly: { max_normal_movement: 3, allow_exceptional_movement: true },
 };
 
-function readYamlFile(path, fallback) {
+/**
+ * Reads a config file over the built-in defaults.
+ *
+ * `replaceKeys` names the settings where merging would be wrong. A map like
+ * `ranking_emoji` is a single table, not a bag of independent values: someone
+ * who writes out eight emoji means eight, and silently restoring the missing
+ * four from the defaults makes the file look broken. For those keys the file
+ * wins outright whenever it mentions them at all.
+ */
+function readYamlFile(path, fallback, { replaceKeys = [] } = {}) {
   if (!existsSync(path)) return fallback;
   try {
     const parsed = parseYaml(readFileSync(path, 'utf8'));
-    return parsed && typeof parsed === 'object' ? deepMerge(fallback, parsed) : fallback;
+    if (!parsed || typeof parsed !== 'object') return fallback;
+    const merged = deepMerge(fallback, parsed);
+    for (const key of replaceKeys) {
+      if (Object.prototype.hasOwnProperty.call(parsed, key) && parsed[key] !== null) {
+        merged[key] = parsed[key];
+      }
+    }
+    return merged;
   } catch (error) {
     throw new Error(`Could not read ${path}: ${error.message}`);
   }
@@ -73,7 +89,9 @@ export function loadConfig({ envPath = join(ROOT, '.env') } = {}) {
   applyEnvFile(envPath);
   const env = process.env;
 
-  const editorial = readYamlFile(join(ROOT, 'config', 'editorial.yml'), DEFAULT_EDITORIAL);
+  const editorial = readYamlFile(join(ROOT, 'config', 'editorial.yml'), DEFAULT_EDITORIAL, {
+    replaceKeys: ['ranking_emoji', 'awards', 'banned_phrases'],
+  });
   const rankings = readYamlFile(join(ROOT, 'config', 'rankings.yml'), DEFAULT_RANKINGS);
 
   // .env may override the two editorial knobs a beginner is most likely to want.
