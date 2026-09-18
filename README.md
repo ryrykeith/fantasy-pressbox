@@ -129,7 +129,7 @@ fresh ChatGPT sessions, produced:
 |---|---|---|
 | Bye Week Blues | 9th | 7th |
 | Lowered Expectations | 7th | 8th |
-| Sack Lunch | 4th | 5th |
+| Fantasy Island | 4th | 5th |
 
 Every number in both runs was correct. Both checked out against the league
 data completely. They simply weighed a 161-point week from a thin roster
