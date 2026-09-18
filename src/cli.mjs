@@ -10,7 +10,7 @@ import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig, ROOT } from './config.mjs';
 import { openLeague, resolveWeek, captureWeek } from './pipeline.mjs';
-import { normalizeTransactions } from './sleeper/normalize.mjs';
+import { normalizeTransactions, normalizeFutureDraftCapital } from './sleeper/normalize.mjs';
 import { buildContext, buildPrompt, systemPromptOnly, taskPromptOnly, describePlayer } from './promptContext.mjs';
 import { generate, describeProvider, detectProvider } from './generate.mjs';
 import { checkPosts, extractJsonBlock, stripJsonBlock } from './validate.mjs';
@@ -141,7 +141,15 @@ async function commandEdition(config, args, task) {
   }
 
   const ctx = await openLeague(config, { refreshPlayers: args.refreshPlayers });
-  const { league, teams, players, store, client } = ctx;
+  const { league, teams, players, store, client, tradedPicks } = ctx;
+  const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]));
+
+  const futureDraftCapital = normalizeFutureDraftCapital({
+    tradedPicks,
+    league,
+    teamsByRosterId,
+    roundsPerDraft: league.draftRounds,
+  });
 
   // A preview looks at the week about to be played; a recap and its rankings
   // look at the week that just finished.
@@ -160,9 +168,10 @@ async function commandEdition(config, args, task) {
   } else {
     const captured = await captureWeek({ ...ctx, week });
     transactions = normalizeTransactions(captured.transactions, {
-      teamsByRosterId: new Map(teams.map((team) => [team.rosterId, team])),
+      teamsByRosterId,
       players,
       describePlayer,
+      league,
     });
 
     if (task === 'preview') {
@@ -208,6 +217,7 @@ async function commandEdition(config, args, task) {
     previousRankings,
     gradedPredictions,
     transactions,
+    futureDraftCapital,
     format,
   });
 
@@ -366,7 +376,8 @@ function commandCheck(config, args) {
   const file = args._[1];
   if (!file) throw new Error('Usage: node src/cli.mjs check <file>');
   if (!existsSync(file)) throw new Error(`No such file: ${file}`);
-  reportLengths(readFileSync(file, 'utf8'), config, 'sleeper');
+  // The machine-readable tail is not a post and must not be counted as one.
+  reportLengths(stripJsonBlock(readFileSync(file, 'utf8')), config, 'sleeper');
   return 0;
 }
 

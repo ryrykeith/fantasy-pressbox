@@ -88,6 +88,36 @@ Raw transactions are roster IDs pointing at player IDs, which is both
 unreadable and large. `normalizeTransactions` turns them into readable lines
 and keeps only completed moves.
 
+### Draft picks, spent and future
+
+`/traded_picks` returns every pick that has changed hands, for any season. Each
+entry has `roster_id` (whose pick it originally was), `owner_id` (who holds it
+now) and `previous_owner_id`.
+
+**Most of them are usually worthless to analysis.** A league's first season runs
+a startup draft, so the overwhelming majority of traded picks are for that
+draft and were consumed by it. In the development league, 23 of 25 traded picks
+were spent 2026 startup picks and only 2 were real future rookie capital.
+
+A pick counts as capital only if its draft has not been held:
+
+```
+season > league.season                      → future
+season === league.season and status is
+  pre_draft or drafting                     → future
+otherwise                                   → spent
+```
+
+`isFuturePick` implements exactly that, and it filters two places:
+`normalizeFutureDraftCapital` (which builds the per-team picture) and
+`normalizeTransactions` (so a trade of spent picks does not appear as news).
+
+Sleeper only reports picks that *moved*, so a complete picture means starting
+each team at `settings.draft_rounds` picks per future season and applying the
+deltas. Note that `draft_rounds` reflects the **current** setting: a league that
+ran a 30-round startup and has since switched to a 5-round rookie draft reports
+5, which is the right baseline for future seasons.
+
 ### Taxi and reserve
 
 `roster.taxi` and `roster.reserve` hold IDs also present in `roster.players`.

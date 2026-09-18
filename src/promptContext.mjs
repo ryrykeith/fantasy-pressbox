@@ -134,6 +134,7 @@ export function buildContext({
   previousRankings = null,
   gradedPredictions = null,
   transactions = null,
+  futureDraftCapital = null,
   format = 'sleeper',
 }) {
   const context = {
@@ -231,6 +232,11 @@ export function buildContext({
     };
   }
 
+  // Ranking editions weigh future draft capital; previews and recaps do not.
+  if (futureDraftCapital && (task === 'rankings' || task === 'preseason-rankings' || task === 'postseason')) {
+    context.futureDraftCapital = futureDraftCapital;
+  }
+
   if (gradedPredictions) context.previousPredictions = gradedPredictions;
   if (transactions?.length) context.transactions = transactions;
 
@@ -286,6 +292,17 @@ function describeMissingContext({ task, context, week }) {
     });
   }
 
+  if (isRanking && !context.futureDraftCapital) {
+    missing.push({
+      field: 'futureDraftCapital',
+      why: 'No picks have been traded for any draft that has not yet been held.',
+      instruction:
+        'Every team holds its own future picks and nothing else. Do not discuss ' +
+        'draft capital as a point of difference between teams, and do not mention ' +
+        'picks for drafts that have already happened.',
+    });
+  }
+
   if (!context.transactions) {
     missing.push({
       field: 'transactions',
@@ -303,6 +320,20 @@ export function buildPrompt({ task, context }) {
   if (!file) throw new Error(`Unknown task "${task}". Known tasks: ${TASKS.join(', ')}`);
 
   return [
+    // A pasted or attached file arrives with no surrounding instruction, and a
+    // chat assistant will happily treat it as a document to review — summarise
+    // it, then ask what you wanted. Saying plainly what the file is, before
+    // anything else, is what makes "attach and send" work with no message.
+    '**Read this first.** This file is a complete, ready-to-run assignment, not',
+    'a document to review. Read all of it and write the edition it describes,',
+    'following every rule below exactly.',
+    '',
+    'Do not summarise this file. Do not critique or improve it. Do not ask which',
+    'option I want, and do not ask any clarifying questions — everything needed',
+    'is already here. Reply with the finished posts and nothing else.',
+    '',
+    '---',
+    '',
     readPrompt('system.md'),
     '',
     '---',

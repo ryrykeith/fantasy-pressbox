@@ -41,6 +41,17 @@ Default weights live in `config/rankings.yml`:
 These are configurable on purpose. A redraft league and a dynasty league
 should not use the same numbers.
 
+### Draft capital means *future* draft capital
+
+The `future_draft_capital` weight refers only to drafts that have not happened
+yet. Picks for the current season and earlier are spent, and are withheld from
+the model rather than left for it to interpret.
+
+This matters most in a league's first year, when nearly every traded pick is a
+startup-draft pick. Citing one as an asset is not a stylistic slip — it is an
+analytical error that makes a team look like it has capital it already
+converted into the roster being ranked.
+
 ### Weekly results are evidence, not the model
 
 A team that loses with 145 points can rise. A team that wins with 105 can

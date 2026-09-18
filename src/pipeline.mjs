@@ -14,17 +14,26 @@ export async function openLeague(config, { refreshPlayers = false } = {}) {
   const client = createClient({ leagueId: config.leagueId, dataDir: config.dataDir });
   const store = createStore({ dataDir: config.dataDir });
 
-  const [rawLeague, users, rosters] = await Promise.all([
+  const [rawLeague, users, rosters, tradedPicks] = await Promise.all([
     client.league(),
     client.users(),
     client.rosters(),
+    client.tradedPicks(),
   ]);
   const players = await client.players({ refresh: refreshPlayers });
 
   const league = normalizeLeague(rawLeague);
   const teams = normalizeTeams({ rosters, users });
 
-  return { client, store, league, teams, players, raw: { league: rawLeague, users, rosters } };
+  return {
+    client,
+    store,
+    league,
+    teams,
+    players,
+    tradedPicks: tradedPicks ?? [],
+    raw: { league: rawLeague, users, rosters },
+  };
 }
 
 /**

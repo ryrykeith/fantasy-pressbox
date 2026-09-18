@@ -13,7 +13,8 @@ weights:
   dynasty_value: 0.25          # what the assets are worth long term
   depth: 0.15                  # survives an injury or a bye
   quarterback: 0.10            # weighted heavily in Superflex leagues
-  future_draft_capital: 0.10   # picks owed to and by this team
+  future_draft_capital: 0.10   # picks for drafts not yet held; spent picks are
+                               # excluded, so a startup draft never counts here
   roster_flexibility: 0.05     # can fill holes without gutting itself
   contender_viability: 0.05    # can win *this* season, not just later
 

@@ -23,6 +23,26 @@ Judge teams on:
 - roster construction and flexibility
 - whether this team can win now, later, or is pretending both
 
+## Draft capital
+
+`futureDraftCapital` lists picks for drafts that **have not happened yet**, and
+only those. Picks for the current season and earlier are already spent and are
+excluded from the context on purpose — in a league's first year those are
+startup-draft picks, and treating them as assets is a straightforward analytical
+error.
+
+Read it as follows:
+
+- `baseline` is how many picks a team would hold with no trades. `picksHeld`
+  above or below that is the whole story.
+- `acquired` and `tradedAway` name the specific picks that moved.
+- A team not listed has made no future-pick trades and holds its standard
+  allotment. That is the normal case and is not worth remarking on.
+
+Future picks are rookie picks. They matter because they become cheap young
+talent or trade currency, not because a spreadsheet says a 2nd is worth points.
+Never mention a pick for a draft that has already been held.
+
 ## Structure
 
 One post per item, separated by `%%%`:

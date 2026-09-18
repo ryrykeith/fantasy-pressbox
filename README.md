@@ -225,10 +225,22 @@ Once a week, in the project folder:
 node src/cli.mjs preview
 ```
 
-This writes a file into the `output` folder. Open it, copy **all** of it, and
-paste it into [ChatGPT](https://chatgpt.com) or
-[Claude](https://claude.ai). You'll get back a set of previews, one per
-matchup, each short enough to post in Sleeper.
+This writes a file into the `output` folder. Give that file to
+[ChatGPT](https://chatgpt.com) or [Claude](https://claude.ai) — either drag it
+in as an attachment, or open it and copy the whole thing into the message box.
+
+On a Mac, this puts the entire file on your clipboard in one step:
+
+```bash
+cat output/2026-week02-preview-prompt.md | pbcopy
+```
+
+Start a **new chat** rather than continuing an old one. The file carries
+everything needed — your league, the scores, the house style — so there is
+nothing to explain and nothing to type alongside it.
+
+Send it. You'll get back a set of previews, one per matchup, each short enough
+to post in Sleeper.
 
 Copy the reply into a file and record it, so next week can grade the picks:
 
@@ -415,6 +427,23 @@ tool warns you when a week has no scores rather than inventing them.
 The tool tells you which ones and by how much — it never silently cuts a post
 in half. Trim them by hand, or lower `sleeper_max_chars` in
 `config/editorial.yml` so the AI aims smaller next time.
+
+**ChatGPT describes the file instead of writing the posts**
+
+If it summarises the prompt and asks what you'd like it to do — "generate the
+rankings, review the prompt, or use it as the basis for a workflow?" — it has
+treated your attachment as a document to discuss rather than a job to do.
+
+Every prompt file now opens by telling the assistant it is a ready-to-run
+assignment, which prevents this. If you still see it — on an older generated
+file, or with a different assistant — you have two fixes:
+
+- Regenerate the file (`node src/cli.mjs rankings`) so it includes the header,
+  and send it in a **new** chat.
+- Or just reply `Follow the file.` It will then produce the edition normally.
+
+Pasting the file's contents into the message box, rather than attaching it,
+also avoids this.
 
 **The AI made something up**
 Report it. That's the one bug this project treats as serious. Check the prompt

@@ -31,6 +31,7 @@ export function normalizeLeague(league) {
     lastScoredWeek: settings.last_scored_leg ?? null,
     previousLeagueId: league.previous_league_id ?? null,
     draftId: league.draft_id ?? null,
+    draftRounds: settings.draft_rounds ?? null,
     startingSlots,
     benchSlots: (league.roster_positions || []).filter((slot) => slot === 'BN').length,
     taxiSlots: settings.taxi_slots ?? 0,
@@ -142,13 +143,33 @@ export function pairMatchups(matchups, teamsByRosterId) {
 }
 
 /**
+ * Has the current season's draft already been held?
+ *
+ * Matters because a pick for the current season is an asset before the draft
+ * and a spent receipt afterwards. A league's first year is a startup draft, so
+ * those picks are gone the moment it ends; later years draft rookies only.
+ */
+export function currentSeasonDrafted(league) {
+  return !['pre_draft', 'drafting'].includes(league.status);
+}
+
+/** A pick only counts as capital if its draft has not happened yet. */
+export function isFuturePick(pick, league) {
+  const season = Number(pick.season);
+  const current = Number(league.season);
+  if (season > current) return true;
+  if (season < current) return false;
+  return !currentSeasonDrafted(league);
+}
+
+/**
  * Turns Sleeper's transaction objects into lines a human (or a model) can read.
  *
  * The raw shape is roster IDs pointing at player IDs, which is both unreadable
  * and enormous. Only completed moves are reported — a failed waiver claim is
  * not news.
  */
-export function normalizeTransactions(transactions, { teamsByRosterId, players, describePlayer }) {
+export function normalizeTransactions(transactions, { teamsByRosterId, players, describePlayer, league }) {
   const name = (rosterId) => teamsByRosterId.get(rosterId)?.name ?? `Roster ${rosterId}`;
   const player = (id) => describePlayer(id, players[id]);
 
@@ -157,9 +178,15 @@ export function normalizeTransactions(transactions, { teamsByRosterId, players, 
     .map((entry) => {
       const adds = Object.entries(entry.adds || {}).map(([id, rosterId]) => `${name(rosterId)} gets ${player(id)}`);
       const drops = Object.entries(entry.drops || {}).map(([id, rosterId]) => `${name(rosterId)} drops ${player(id)}`);
-      const picks = (entry.draft_picks || []).map(
-        (pick) => `${name(pick.owner_id)} gets ${pick.season} round ${pick.round} pick from ${name(pick.roster_id)}`,
-      );
+      // A pick for a draft that has already been held is a spent receipt, not
+      // an asset. Reporting it invites analysis of draft capital that no
+      // longer exists — especially in a league's startup year, where most
+      // traded picks were consumed by the startup draft itself.
+      const picks = (entry.draft_picks || [])
+        .filter((pick) => (league ? isFuturePick(pick, league) : true))
+        .map(
+          (pick) => `${name(pick.owner_id)} gets ${pick.season} round ${pick.round} pick from ${name(pick.roster_id)}`,
+        );
       const budget = (entry.waiver_budget || []).map(
         (move) => `${name(move.sender)} sends $${move.amount} FAAB to ${name(move.receiver)}`,
       );
@@ -173,4 +200,65 @@ export function normalizeTransactions(transactions, { teamsByRosterId, players, 
       };
     })
     .filter((entry) => entry.moves.length > 0);
+}
+
+const ORDINALS = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'];
+const ordinal = (round) => ORDINALS[round] ?? `round ${round}`;
+
+/**
+ * Net future draft capital per team.
+ *
+ * Sleeper only reports picks that have *moved*, so a complete picture means
+ * starting every team with one pick per round and applying those moves. What
+ * the publication actually wants to know is who is hoarding rookie picks and
+ * who has mortgaged them.
+ */
+export function normalizeFutureDraftCapital({ tradedPicks, league, teamsByRosterId, roundsPerDraft }) {
+  const future = (tradedPicks || []).filter((pick) => isFuturePick(pick, league));
+  if (future.length === 0) return null;
+
+  const rounds = roundsPerDraft > 0 ? roundsPerDraft : 0;
+  const name = (rosterId) => teamsByRosterId.get(rosterId)?.name ?? `Roster ${rosterId}`;
+  const seasons = [...new Set(future.map((pick) => String(pick.season)))].sort();
+
+  const rows = [];
+  for (const season of seasons) {
+    const held = new Map([...teamsByRosterId.keys()].map((rosterId) => [rosterId, rounds]));
+    const acquired = new Map();
+    const lost = new Map();
+
+    for (const pick of future.filter((p) => String(p.season) === season)) {
+      // roster_id is whose pick it originally was; owner_id is who holds it now.
+      if (pick.owner_id === pick.roster_id) continue;
+      held.set(pick.owner_id, (held.get(pick.owner_id) ?? rounds) + 1);
+      held.set(pick.roster_id, (held.get(pick.roster_id) ?? rounds) - 1);
+      if (!acquired.has(pick.owner_id)) acquired.set(pick.owner_id, []);
+      if (!lost.has(pick.roster_id)) lost.set(pick.roster_id, []);
+      acquired.get(pick.owner_id).push(`${name(pick.roster_id)} ${ordinal(pick.round)}`);
+      lost.get(pick.roster_id).push(`own ${ordinal(pick.round)} to ${name(pick.owner_id)}`);
+    }
+
+    for (const rosterId of teamsByRosterId.keys()) {
+      const gained = acquired.get(rosterId) ?? [];
+      const given = lost.get(rosterId) ?? [];
+      if (gained.length === 0 && given.length === 0) continue;
+      rows.push({
+        team: name(rosterId),
+        season,
+        picksHeld: held.get(rosterId),
+        baseline: rounds,
+        acquired: gained,
+        tradedAway: given,
+      });
+    }
+  }
+
+  return {
+    note:
+      `Only picks for drafts that have not happened yet. Picks for ${league.season} and ` +
+      'earlier are spent and are deliberately excluded.',
+    roundsPerDraft: rounds,
+    seasons,
+    teams: rows,
+  };
 }
