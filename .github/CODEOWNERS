@@ -1,0 +1,25 @@
+# Code owners for fantasy-pressbox
+#
+# GitHub uses this file to decide who must review a pull request. The branch
+# ruleset on `main` requires an approving review from a code owner, so every
+# change merged into main needs sign-off from someone listed here.
+#
+# Syntax: <file pattern>  <owner>
+# The LAST matching pattern wins, so put the most specific rules at the bottom.
+
+# Ryan owns everything by default.
+*                       @ryrykeith
+
+# The rules below are redundant while one person owns the whole repository.
+# They are here so that adding a second maintainer later is a one-line change
+# rather than a rethink, and so it is obvious which areas matter most.
+
+# Editorial behaviour: prompts and tunable configuration decide what the
+# publication actually says.
+/prompts/               @ryrykeith
+/config/                @ryrykeith
+
+# Anything touching secrets, ignore rules or repository policy.
+/.github/               @ryrykeith
+/.gitignore             @ryrykeith
+/.env.example           @ryrykeith
