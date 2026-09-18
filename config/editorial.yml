@@ -1,0 +1,59 @@
+# ============================================================================
+# Editorial settings — how the publication sounds and what it prints.
+#
+# Safe to edit. Nothing here is code; change a value, save, run again.
+# League-specific facts (teams, players, your league ID) do NOT belong here.
+# ============================================================================
+
+# How the writing should feel overall.
+# Try: humorous | analytical | dry | unhinged
+tone: humorous
+
+# How hard the publication is allowed to roast people.
+# Try: light | medium | scorched
+roast_intensity: medium
+
+output:
+  # Sleeper's chat box rejects very long messages. Posts longer than this are
+  # reported as errors — they are never silently cut in half.
+  sleeper_max_chars: 900
+  include_emoji: true
+
+# The emoji printed next to each rank. Rank 1 gets the first, and so on.
+# Add or remove lines to match your league size.
+ranking_emoji:
+  1: "🥇"
+  2: "🥈"
+  3: "🥉"
+  4: "🔥"
+  5: "😤"
+  6: "👀"
+  7: "🤨"
+  8: "🎲"
+  9: "🫠"
+  10: "💩"
+  11: "💩"
+  12: "💩"
+
+# Which weekly awards may be handed out. An award is skipped when the week's
+# data does not actually support it, even if it is switched on here.
+awards:
+  team_of_week: true
+  manager_of_week: true
+  player_of_week: true
+  biggest_blowout: true
+  closest_game: true
+  highest_losing_score: true
+  lowest_score: true
+  lineup_malpractice: true
+  bench_pain: true
+
+# Phrases that mean the model has stopped saying anything. It is told to avoid
+# these outright. Add your own least favourite filler.
+banned_phrases:
+  - "Anything can happen."
+  - "This should be a great matchup."
+  - "Both teams have a chance."
+  - "Only time will tell."
+  - "At the end of the day"
+  - "It all comes down to this."

@@ -1,0 +1,20 @@
+# Secrets — never commit these.
+# Ignore every .env variant (including the .env.backup that setup writes),
+# but keep the documented example file in the repository.
+.env*
+!.env.example
+
+# Your league's fetched data and generated content stay on your machine.
+# The folders are kept in git; their contents are not.
+data/*
+!data/.gitkeep
+output/*
+!output/.gitkeep
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS noise
+.DS_Store
+Thumbs.db

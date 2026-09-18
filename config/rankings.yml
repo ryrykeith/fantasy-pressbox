@@ -1,0 +1,30 @@
+# ============================================================================
+# Power ranking settings — how teams are judged.
+#
+# Power rankings are not standings. They answer "who looks strongest right
+# now, accounting for dynasty context", not "who has the best record".
+# ============================================================================
+
+# How much each factor counts. These are guidance given to the model, not a
+# formula it computes — but they steer it hard, so tune them deliberately.
+# They should add up to 1.0.
+weights:
+  starting_lineup: 0.30        # how good the week-to-week starting ten is
+  dynasty_value: 0.25          # what the assets are worth long term
+  depth: 0.15                  # survives an injury or a bye
+  quarterback: 0.10            # weighted heavily in Superflex leagues
+  future_draft_capital: 0.10   # picks owed to and by this team
+  roster_flexibility: 0.05     # can fill holes without gutting itself
+  contender_viability: 0.05    # can win *this* season, not just later
+
+weekly:
+  # How far a team should normally move in one week. One Sunday is a very
+  # small sample and the rankings should act like it.
+  max_normal_movement: 3
+  # ...but a genuinely extraordinary week is allowed to break that rule.
+  allow_exceptional_movement: true
+
+tiers:
+  # Group teams into tiers as well as ranking them 1..N. Tier names are
+  # written fresh each week by the publication; this only turns them on.
+  enabled: true
