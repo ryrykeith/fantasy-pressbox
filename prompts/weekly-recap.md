@@ -49,3 +49,7 @@ team about to be 0-3.
 If `previousPredictions` is present, state the record plainly somewhere in the
 recap — "we went 4-2" — and name the pick that was most embarrassingly wrong.
 Do this every single week. It is the point.
+
+If `unavailable` names `previousPredictions`, no picks were recorded for this
+week. Skip the self-grading entirely. Do not invent a record, and do not claim
+to have called anything.

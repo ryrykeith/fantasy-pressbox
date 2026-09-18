@@ -106,5 +106,16 @@ export function loadConfig({ envPath = join(ROOT, '.env') } = {}) {
 export function rankEmoji(config, rank) {
   if (!config.editorial.output.include_emoji) return '';
   const table = config.editorial.ranking_emoji || {};
-  return table[rank] ?? table[String(rank)] ?? '•';
+  const exact = table[rank] ?? table[String(rank)];
+  if (exact) return exact;
+
+  // A league larger than the configured table still needs an emoji per rank.
+  // Reuse the lowest-ranked one rather than printing a stray bullet, which
+  // looks like a bug next to the ranks that did match.
+  const ranks = Object.keys(table)
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  if (ranks.length === 0) return '';
+  return rank > ranks.at(-1) ? table[ranks.at(-1)] ?? table[String(ranks.at(-1))] : '';
 }

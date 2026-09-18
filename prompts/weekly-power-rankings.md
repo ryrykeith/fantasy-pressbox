@@ -18,8 +18,11 @@ compounds.
 
 ## Movement
 
-`previousRankings` holds last edition's order and the context supplies each
-team's movement. Print it after the team name:
+If `unavailable` names `previousRankings`, this is the first edition: print no
+arrows at all, and open by saying there is nothing to move from yet.
+
+Otherwise `previousRankings` holds last edition's order. Print each team's
+movement after its name:
 
 ```
 🥇 1. WIZARDBEEF ↑2

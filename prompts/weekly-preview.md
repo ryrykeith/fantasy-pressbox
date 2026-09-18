@@ -4,6 +4,12 @@ Preview the coming week. These games have **not** been played. There are no
 scores for this week and you must not invent any. Everything you know about
 performance comes from `previousWeek` and the season records in `standings`.
 
+The matchups are in `upcomingMatchups`. Preview those pairings and no others.
+
+If `unavailable` names `previousWeek`, no games have been played yet. Write the
+previews from rosters, records and league format alone, and do not refer to any
+past performance.
+
 ## Structure
 
 One post per item, separated by `%%%`, numbered in the header:
@@ -35,7 +41,8 @@ vs.
 
 Then, in prose and in this order:
 
-- What each team did last week, with real numbers from `previousWeek`.
+- What each team did last week, with real numbers from `previousWeek`
+  (skip this entirely when `previousWeek` is unavailable).
 - The players who actually decide this game, named from the rosters.
 - The one thing that has to happen for the underdog to win.
 - One joke rooted in something specific to this league.

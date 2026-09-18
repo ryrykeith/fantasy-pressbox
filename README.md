@@ -146,7 +146,7 @@ You should see something like `v22.14.0`. Any number 18 or higher is fine.
 If you have `git`, this is one command:
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/fantasy-pressbox.git
+git clone https://github.com/ryrykeith/fantasy-pressbox.git
 ```
 
 If you don't, go to the project page on GitHub, click the green **Code**

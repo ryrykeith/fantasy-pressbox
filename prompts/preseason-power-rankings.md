@@ -46,6 +46,8 @@ POWER RANKINGS • 1/14
 
 Every player you name must appear on that team's roster in the context.
 
+There is nothing to move from, so print no movement arrows in this edition.
+
 ## Machine-readable rankings
 
 After the final post, and **after** a line containing only `%%%`, output a

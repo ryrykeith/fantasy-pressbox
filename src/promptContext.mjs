@@ -234,7 +234,67 @@ export function buildContext({
   if (gradedPredictions) context.previousPredictions = gradedPredictions;
   if (transactions?.length) context.transactions = transactions;
 
+  context.unavailable = describeMissingContext({ task, context, week });
+
   return context;
+}
+
+/**
+ * States plainly what this edition does NOT know.
+ *
+ * A first-ever ranking has nothing to measure movement against, and a week 1
+ * preview has no prior results. Left to infer that from an absent key, a model
+ * will happily print "↑2" anyway — inventing exactly the kind of fact this
+ * project refuses to invent. So absence is made explicit and instructions are
+ * attached to it.
+ */
+function describeMissingContext({ task, context, week }) {
+  const missing = [];
+  const isRanking =
+    task === 'rankings' || task === 'preseason-rankings' || task === 'postseason';
+
+  if (isRanking && !context.previousRankings) {
+    missing.push({
+      field: 'previousRankings',
+      why: 'No earlier ranking has been published, so this is the first edition.',
+      instruction:
+        'Print no movement arrows and no previous ranks. Do not write ↑, ↓ or —. ' +
+        'Say in the opening that this is the first edition and there is nothing to move from.',
+    });
+  }
+
+  if (task === 'preview' && !context.previousWeek) {
+    missing.push({
+      field: 'previousWeek',
+      why:
+        week <= 1
+          ? 'This is the first week of the season, so no games have been played.'
+          : 'No results for the previous week were available.',
+      instruction:
+        'Do not describe how any team performed last week and do not cite any score. ' +
+        'Base the previews on rosters, records and league format only.',
+    });
+  }
+
+  if (task === 'recap' && !context.previousPredictions) {
+    missing.push({
+      field: 'previousPredictions',
+      why: 'No prediction was recorded for this week.',
+      instruction:
+        'Do not claim to have predicted anything, and do not grade yourself. ' +
+        'Skip the self-grading section entirely rather than inventing a record.',
+    });
+  }
+
+  if (!context.transactions) {
+    missing.push({
+      field: 'transactions',
+      why: 'No completed transactions were found for this week.',
+      instruction: 'Do not mention trades, waiver claims or free-agent moves.',
+    });
+  }
+
+  return missing;
 }
 
 /** The complete text to paste into a chat, or send to an API. */
@@ -256,6 +316,11 @@ export function buildPrompt({ task, context }) {
     'The JSON below is the complete and authoritative record of this league.',
     'Every score, name, record and roster you use must come from it.',
     'If something you want to say is not supported here, do not say it.',
+    '',
+    'Read the `unavailable` list first. It names the things this edition does',
+    'not know. Each entry carries an instruction; follow it exactly. Do not',
+    'estimate, infer or invent anything listed there, however natural it would',
+    'feel to include it.',
     '',
     '```json',
     JSON.stringify(context, null, 2),
