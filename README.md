@@ -129,7 +129,7 @@ fresh ChatGPT sessions, produced:
 |---|---|---|
 | Virginia Virgins | 9th | 7th |
 | Apologies in Advance | 7th | 8th |
-| Burdman09 | 4th | 5th |
+| Mid Squids | 4th | 5th |
 
 Every number in both runs was correct. Both checked out against the league
 data completely. They simply weighed a 161-point week from a thin roster
