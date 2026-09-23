@@ -154,11 +154,84 @@ Two lines of defence, both keyed off `hasMatchups`/the declared format:
   `context.league.format`, in case some other caller reaches it directly and
   skips the CLI guard.
 
-Both name the edition that will eventually replace the one refused
-(`survival-preview`, `chop-recap`) — neither has shipped yet; they are tracked
-under the "Guillotine editions" feature. `rankings` is unaffected: a power
-ranking judges rosters, not games, so it has something to say for any format
-once its own weight set exists.
+Both name the edition that replaces the one refused (`survival-preview`,
+`chop-recap`). `survival-preview` has shipped (see below); `chop-recap` has
+not, and is tracked under the "Guillotine editions" feature. The refusal asks
+`TASKS` which is which rather than carrying its own claim, so the message stops
+saying "not shipped yet" the week a replacement lands instead of going stale.
+`rankings` is unaffected: a power ranking judges rosters, not games, so it has
+something to say for any format once its own weight set exists.
+
+#### The survival preview
+
+The forward-looking edition a guillotine league gets in place of the matchup
+preview. `prompts/survival-preview.md` is registered in `TASK_PROMPTS` as
+`survival-preview`, and `src/cli.mjs` exposes it as its own command.
+
+It is guarded in both directions, mirroring the matchup guard exactly:
+`refuseSurvivalEditionWithoutEliminations` in `src/cli.mjs` refuses it before
+any work begins for a league that is not declared guillotine, and `buildPrompt`
+refuses again from the resolved format via `ELIMINATION_ONLY_TASKS`. The CLI
+guard can read the declaration alone for the same reason the matchup one can:
+guillotine is the only format anyone is chopped out of and it can never be
+detected, so an undeclared league is definitively not one.
+
+Its facts are the ones the format actually turns on, and all of them come from
+analysis that already existed:
+
+| Context key | Built by | Why |
+|---|---|---|
+| `dangerBoard.lastCompletedWeek` | `src/analysis/danger.mjs` | the score it took to survive, and by how little |
+| `dangerBoard.floors` | `src/analysis/danger.mjs` | the number that predicts danger — a team dies on its bad weeks |
+| `byeExposure` | `src/analysis/byeExposure.mjs` | a bye cluster is a genuine elimination risk here |
+| `faabMarket` | `src/analysis/faab.mjs` | who can afford the next roster to hit the wire |
+| `standings`, `eliminationHistory` | `src/analysis/elimination.mjs` | the field still alive, kept apart from the field that is gone |
+
+Two filters in `dangerBoardView` (`src/promptContext.mjs`) are load-bearing:
+
+- **The week being previewed never sets the chop line.** `buildDangerBoard`
+  already skips a week that was not played, but a week *in progress* counts as
+  played — Sunday afternoon has real points on the board — and a chop line
+  drawn under a third of a week's scores is wrong in the most convincing way
+  available. So the view drops every week at or after the one being previewed,
+  and `unavailable` carries a `chopLine` entry when that leaves nothing.
+- **Floors cover only the survivors.** `rollingFloor` deliberately reports
+  every roster that ever scored, but this edition reads the list worst-first as
+  "who is in danger". A chopped team's floor is the worst in the league almost
+  by definition — it is why they went — so leaving one in puts an eliminated
+  team at the top of the list of teams to watch. `lastCompletedWeek.scoringOrder`
+  is *not* filtered: the team chopped in that week belongs in that week's
+  record, sitting on the line it failed to clear. History is not rewritten.
+
+**The called shot is a chop, not a winner.** A format with no games has nothing
+to pick the winner of, so the machine-readable block names the team expected to
+go out:
+
+```json
+[{ "week": 3, "predicted_chop": "Virginia Virgins", "reasoning": "lowest floor, three starters on bye" }]
+```
+
+`recordBlock` files it through the same `store.savePredictions` path a matchup
+preview uses, and `gradePredictions` tells the two shapes apart by their own
+fields (`predicted_chop` versus `predicted_winner`) rather than by the league's
+format — by grading time the record already says which it is, and reading that
+off the record keeps a mixed file from being scored against the wrong rule.
+
+A called chop is graded against the elimination ledger, the only thing in this
+project entitled to say a team was chopped. **A week the ledger has not settled
+is left ungraded, never scored wrong.** That is the ordinary Monday state of a
+guillotine league — the scores are in but the commissioner has not processed
+the chop, or two teams tied for lowest — and marking those wrong would both
+invent a result and punish a correct call for a commissioner's timing. `grade`
+prints the ungraded rows with their reason rather than skipping them, so a
+prediction never silently vanishes from its own grading.
+
+**Ranking weights are asked for only by editions that rank.** `guillotine` has
+no weight set yet and `resolveRankingWeights` refuses rather than borrowing the
+dynasty set, so resolving one for every edition would have blocked the survival
+preview on a decision it never reads. `RANKING_TASKS` in `src/promptContext.mjs`
+is the list that asks; a guillotine league can publish its survival preview
+today and is refused only if it asks for a ranking.
 
 #### The elimination ledger
 

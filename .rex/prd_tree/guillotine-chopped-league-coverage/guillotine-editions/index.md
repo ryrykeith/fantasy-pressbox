@@ -19,4 +19,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 |-------|--------|
 | [Chop recap edition](./chop-recap-edition.md) | pending |
 | [Guillotine power rankings edition](./guillotine-power-rankings-edition.md) | pending |
-| [Survival preview edition](./survival-preview-edition.md) | pending |
+| [Survival preview edition](./survival-preview-edition.md) | in_progress |

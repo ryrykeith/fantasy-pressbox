@@ -15,7 +15,15 @@ import { describeScoringSummary, describeUnmodelledScoring } from './scoringRepo
 import { describeEliminationLedger } from './eliminationReport.mjs';
 import { openLeague, resolveWeek, captureWeek, readEliminationLedger } from './pipeline.mjs';
 import { normalizeTransactions, normalizeFutureDraftCapital } from './sleeper/normalize.mjs';
-import { buildContext, buildPrompt, systemPromptOnly, taskPromptOnly, describePlayer } from './promptContext.mjs';
+import {
+  TASKS,
+  ELIMINATION_ONLY_TASKS,
+  buildContext,
+  buildPrompt,
+  systemPromptOnly,
+  taskPromptOnly,
+  describePlayer,
+} from './promptContext.mjs';
 import { generate, describeProvider, detectProvider } from './generate.mjs';
 import { checkPosts, extractJsonBlock, stripJsonBlock } from './validate.mjs';
 import { gradePredictions, withMovement, movementLabel } from './store.mjs';
@@ -31,6 +39,7 @@ Commands
   doctor                        Check that everything is configured and reachable
   fetch                         Download and save a week of league data
   preview                       Build the weekly matchup previews
+  survival-preview              Build the weekly survival preview (guillotine leagues)
   recap                         Build the weekly recap and awards
   rankings                      Build the weekly power rankings
   preseason-rankings            Build preseason rankings (ignores all results)
@@ -51,6 +60,7 @@ Examples
   node src/cli.mjs preview --week 3
   node src/cli.mjs recap --format imessage --generate
   node src/cli.mjs record output/week2.txt --task preview
+  node src/cli.mjs survival-preview --week 3
 `;
 
 function parseArgs(argv) {
@@ -83,9 +93,11 @@ function requireLeagueId(config) {
 /**
  * What replaces `preview`/`recap` for a guillotine league.
  *
- * Neither edition exists yet — both are tracked under the "Guillotine
- * editions" feature — but shipping a preview of a game nobody plays is worse
- * than an honest "not built yet", so this refuses now rather than waiting.
+ * These ship one at a time, so the refusal below asks TASKS whether the
+ * replacement it is about to name actually exists rather than carrying its own
+ * claim about it. That way the message corrects itself the week a replacement
+ * lands, instead of going stale and sending someone to a command that is not
+ * there — or, worse, telling them to paste a prompt that has already shipped.
  */
 const GUILLOTINE_EDITION_FOR = { preview: 'survival-preview', recap: 'chop-recap' };
 
@@ -102,12 +114,35 @@ const GUILLOTINE_EDITION_FOR = { preview: 'survival-preview', recap: 'chop-recap
 export function refuseGuillotineMatchupEdition(config, task) {
   const replacement = GUILLOTINE_EDITION_FOR[task];
   if (!replacement || config.leagueFormat !== 'guillotine') return;
+
+  const shipped = TASKS.includes(replacement);
   throw new Error(
     `This is a guillotine league: there are no head-to-head matchups, so \`${task}\` has ` +
       `nothing to ${task === 'preview' ? 'preview' : 'recap'} — every team just scores on its ` +
       'own each week and the lowest is eliminated.\n\n' +
-      `Guillotine leagues get a \`${replacement}\` edition instead of \`${task}\`, but it has not ` +
-      'shipped yet. Track it in the PRD under "Guillotine chopped league coverage" → "Guillotine editions".',
+      (shipped
+        ? `Run \`${replacement}\` instead: node src/cli.mjs ${replacement}`
+        : `Guillotine leagues get a \`${replacement}\` edition instead of \`${task}\`, but it has not ` +
+          'shipped yet. Track it in the PRD under "Guillotine chopped league coverage" → "Guillotine editions".'),
+  );
+}
+
+/**
+ * Refuses an elimination-shaped edition in a league where nobody is eliminated.
+ *
+ * The mirror of the guard above, and sound for the same reason: guillotine is
+ * the only format anyone is chopped out of, and it can only ever be declared.
+ * So an undeclared league is definitively not one, `config.leagueFormat`
+ * settles it outright, and no Sleeper call is needed to find out.
+ */
+export function refuseSurvivalEditionWithoutEliminations(config, task) {
+  if (!ELIMINATION_ONLY_TASKS.includes(task) || config.leagueFormat === 'guillotine') return;
+  throw new Error(
+    `\`${task}\` is a guillotine edition: it previews who is about to be chopped, and in this ` +
+      'league nobody is eliminated during the season — every team plays all the way to the end.\n\n' +
+      'Run `preview` instead: node src/cli.mjs preview\n\n' +
+      'If this really is a guillotine league, say so with LEAGUE_FORMAT=guillotine in .env. ' +
+      'Sleeper cannot report that format, so it has to be declared.',
   );
 }
 
@@ -231,6 +266,9 @@ async function commandFetch(config, args) {
   return 0;
 }
 
+/** Editions about a week that has not been played yet. */
+const FORWARD_LOOKING_TASKS = ['preview', 'survival-preview'];
+
 /**
  * Previews, recaps and rankings differ only in which week they are about and
  * which history they need, so they share one path.
@@ -238,6 +276,7 @@ async function commandFetch(config, args) {
 async function commandEdition(config, args, task) {
   requireLeagueId(config);
   refuseGuillotineMatchupEdition(config, task);
+  refuseSurvivalEditionWithoutEliminations(config, task);
   const format = args.format || 'sleeper';
   if (!['sleeper', 'imessage'].includes(format)) {
     throw new Error(`--format must be "sleeper" or "imessage", got "${format}".`);
@@ -256,7 +295,7 @@ async function commandEdition(config, args, task) {
 
   // A preview looks at the week about to be played; a recap and its rankings
   // look at the week that just finished.
-  const offset = task === 'preview' ? 0 : -1;
+  const offset = FORWARD_LOOKING_TASKS.includes(task) ? 0 : -1;
   const { week, source } = await resolveWeek({ client, league, config, requested: args.week, offset });
   say(`Building ${task} for week ${week} (week chosen from ${source}).`);
 
@@ -270,6 +309,8 @@ async function commandEdition(config, args, task) {
   // chopped and captureWeek is never called to compute it.
   let eliminationLedger = null;
   let faabMarket = null;
+  let dangerBoard = null;
+  let byeExposure = null;
 
   if (task === 'preseason-rankings') {
     say('Preseason edition: regular-season results are deliberately excluded.');
@@ -295,13 +336,28 @@ async function commandEdition(config, args, task) {
         const prior = await captureWeek({ ...ctx, week: week - 1 });
         priorWeekAnalysis = prior.analysis;
       }
+    } else if (task === 'survival-preview') {
+      // No pairings to fetch and no prior week to fetch either: everything a
+      // survival preview is built on — every completed week's chop line, each
+      // roster's floor, who is still alive, what they have left to spend —
+      // captureWeek has already assembled from the weeks on disk. The upcoming
+      // week's own scores are deliberately not used: dangerBoardView drops
+      // them, because a chop line drawn under a week in progress is a wrong
+      // fact, not an early one.
+      dangerBoard = captured.danger ?? null;
+      byeExposure = captured.byeExposure ?? null;
+      if (captured.played) {
+        warn(`Note: week ${week} already has scores. This week's chop line is not final and is not used.`);
+      }
     } else {
       if (!captured.played) {
         warn(`Week ${week} has no scores yet. Re-run once the games are final.`);
       }
       weekAnalysis = captured.analysis;
       const saved = store.loadPredictions(league.season, week);
-      gradedPredictions = gradePredictions(saved?.predictions, captured.analysis);
+      gradedPredictions = gradePredictions(saved?.predictions, captured.analysis, {
+        eliminationLedger,
+      });
       if (gradedPredictions) {
         say(`Grading week ${week} predictions: ${gradedPredictions.correct}/${gradedPredictions.total} correct.`);
       }
@@ -330,6 +386,8 @@ async function commandEdition(config, args, task) {
     futureDraftCapital,
     eliminationLedger,
     faabMarket,
+    dangerBoard,
+    byeExposure,
     format,
   });
 
@@ -382,17 +440,27 @@ async function commandEdition(config, args, task) {
  * Previews end with their predictions and ranking editions end with their
  * order. Saving them is what lets a later edition grade a prediction or print
  * "↑2" without anyone re-typing anything.
+ *
+ * Exported so a test can watch what it writes without a real store on disk.
  */
-function recordBlock({ store, league, week, task, block, previousRankings, say }) {
+export function recordBlock({ store, league, week, task, block, previousRankings, say }) {
   if (!Array.isArray(block) || block.length === 0) {
     say('No machine-readable block found in the output — nothing recorded for next week.');
     return false;
   }
 
-  if (task === 'preview') {
+  // Both previews make a called shot and both file it the same way. What is
+  // being called differs — a winner where games are played, the week's chop
+  // where they are not — but that is a difference gradePredictions reads off
+  // the record's own fields, so the storage path does not need to know.
+  if (task === 'preview' || task === 'survival-preview') {
     const path = store.savePredictions(league.season, week, block);
     say(`Recorded ${block.length} predictions → ${path}`);
-    say("Next week's recap will grade them.");
+    say(
+      task === 'survival-preview'
+        ? `Run \`grade --week ${week}\` once the chop is settled to score them.`
+        : "Next week's recap will grade them.",
+    );
     return true;
   }
 
@@ -453,12 +521,13 @@ async function commandRecord(config, args) {
   if (!existsSync(file)) throw new Error(`No such file: ${file}`);
 
   const task = args.task;
-  if (!['preview', 'rankings', 'preseason-rankings', 'postseason'].includes(task ?? '')) {
-    throw new Error('Pass --task preview, rankings, preseason-rankings or postseason.');
+  const recordable = ['preview', 'survival-preview', 'rankings', 'preseason-rankings', 'postseason'];
+  if (!recordable.includes(task ?? '')) {
+    throw new Error(`Pass --task followed by one of: ${recordable.join(', ')}.`);
   }
 
   const ctx = await openLeague(config);
-  const offset = task === 'preview' ? 0 : -1;
+  const offset = FORWARD_LOOKING_TASKS.includes(task) ? 0 : -1;
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week, offset });
 
   const text = readFileSync(file, 'utf8');
@@ -499,7 +568,9 @@ async function commandGrade(config, args) {
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week, offset: -1 });
   const captured = await captureWeek({ ...ctx, week });
   const saved = ctx.store.loadPredictions(ctx.league.season, week);
-  const graded = gradePredictions(saved?.predictions, captured.analysis);
+  const graded = gradePredictions(saved?.predictions, captured.analysis, {
+    eliminationLedger: captured.elimination ?? null,
+  });
   if (!graded) {
     say(`No saved predictions for week ${week}.`);
     say('Predictions are filed when you run preview --generate, or when you run');
@@ -513,7 +584,21 @@ async function commandGrade(config, args) {
 
   say(`Week ${week} predictions: ${graded.correct}/${graded.total} correct (${graded.accuracy}%)\n`);
   for (const row of graded.results) {
-    if (!row.graded) continue;
+    // An ungraded row is reported, not skipped. In a guillotine league it is
+    // the ordinary Monday state — the scores are in but the chop has not been
+    // processed — and a prediction that silently vanished from its own grading
+    // would read as one that was never made.
+    if (!row.graded) {
+      say(`  · not scored yet: ${row.reason}`);
+      continue;
+    }
+    if (row.actual_chop !== undefined) {
+      say(
+        `  ${row.correct ? '✓' : '✗'} called ${row.predicted_chop} for the chop; ` +
+          `${row.actual_chop} went (${row.chop_source})`,
+      );
+      continue;
+    }
     say(
       `  ${row.correct ? '✓' : '✗'} picked ${row.predicted_winner}; ` +
         `${row.team_a} ${row.actual_score_a} — ${row.team_b} ${row.actual_score_b}`,
@@ -542,6 +627,8 @@ async function main() {
       return commandFetch(config, args);
     case 'preview':
       return commandEdition(config, args, 'preview');
+    case 'survival-preview':
+      return commandEdition(config, args, 'survival-preview');
     case 'recap':
       return commandEdition(config, args, 'recap');
     case 'rankings':
