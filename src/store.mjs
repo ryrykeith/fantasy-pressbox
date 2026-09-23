@@ -38,6 +38,25 @@ export function createStore({ dataDir }) {
     loadRaw(season, week) {
       return readJson(pathFor('raw', season, `week-${week}.json`));
     },
+    /**
+     * Every raw bundle already on disk up to and including `throughWeek`,
+     * oldest first. Mirrors loadSnapshotsThrough: fetches nothing, and a week
+     * nobody has captured yet is simply absent from the result rather than an
+     * error — the FAAB market (src/analysis/faab.mjs) reads a chopped
+     * roster's matchup entry out of exactly this, for the week it happened.
+     */
+    loadRawThrough(season, throughWeek) {
+      const dir = join(dataDir, 'raw', String(season));
+      if (!existsSync(dir)) return [];
+      return readdirSync(dir)
+        .map((file) => /^week-(\d+)\.json$/.exec(file))
+        .filter(Boolean)
+        .map((match) => Number.parseInt(match[1], 10))
+        .filter((week) => week <= throughWeek)
+        .sort((a, b) => a - b)
+        .map((week) => store.loadRaw(season, week))
+        .filter(Boolean);
+    },
 
     saveSnapshot(season, week, snapshot) {
       return writeJson(pathFor('snapshots', season, `week-${week}.json`), {

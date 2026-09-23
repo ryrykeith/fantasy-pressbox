@@ -10,6 +10,7 @@ import { normalizeLeague, normalizeTeams } from './sleeper/normalize.mjs';
 import { analyzeWeek } from './analysis/week.mjs';
 import { buildEliminationLedger } from './analysis/elimination.mjs';
 import { buildDangerBoard } from './analysis/danger.mjs';
+import { buildFaabMarket } from './analysis/faab.mjs';
 import { hasEliminations } from './format.mjs';
 import { createStore } from './store.mjs';
 
@@ -124,6 +125,32 @@ export function readDangerBoard({ store, league, teams, config = null, throughWe
   return buildDangerBoard({ teams, weeks, ledger });
 }
 
+/**
+ * The FAAB market (src/analysis/faab.mjs) as far as the weeks already on
+ * disk can tell it: balances for every current survivor, plus each
+ * elimination's released pool and any winning bids on it. Fetches nothing.
+ * Null for a format where nobody is ever eliminated — there is no chop pool
+ * to report.
+ */
+export function readFaabMarket({ store, league, teams, config = null, throughWeek }) {
+  if (!hasEliminations(league.format)) return null;
+  const weeks = storedWeekScores(store, league.season, throughWeek);
+  const ledger = buildEliminationLedger({
+    teams,
+    startingSlots: league.startingSlots,
+    declared: config?.guillotine?.eliminations ?? [],
+    weeks,
+    throughWeek,
+  });
+  return buildFaabMarket({
+    teams,
+    waiverBudget: league.waiverBudget,
+    ledger,
+    rawWeeks: store.loadRawThrough(league.season, throughWeek),
+    teamsByRosterId: new Map(teams.map((team) => [team.rosterId, team])),
+  });
+}
+
 /** Fetch one week, save the raw bundle and the analyzed snapshot. */
 export async function captureWeek({ client, store, league, teams, players, week, config = null }) {
   const [matchups, transactions] = await Promise.all([
@@ -179,6 +206,21 @@ export async function captureWeek({ client, store, league, teams, players, week,
   // sets or clears the chop line for the teams still alive.
   const danger = weeksThroughNow ? buildDangerBoard({ teams, weeks: weeksThroughNow, ledger: elimination }) : null;
 
+  // The waiver market (src/analysis/faab.mjs): what every survivor has left
+  // to spend, and what each chop in the ledger just built above released.
+  // The raw bundle for this week was already saved above, so loadRawThrough
+  // picks it straight back up alongside every earlier week already on disk —
+  // no second fetch, no separate "this week" case to special-case in.
+  const faab = elimination
+    ? buildFaabMarket({
+        teams,
+        waiverBudget: league.waiverBudget,
+        ledger: elimination,
+        rawWeeks: store.loadRawThrough(league.season, week),
+        teamsByRosterId: new Map(teams.map((team) => [team.rosterId, team])),
+      })
+    : null;
+
   const snapshotPath = store.saveSnapshot(league.season, week, {
     week,
     season: league.season,
@@ -194,6 +236,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
     // absent key cannot be printed, a null one invites a guess.
     ...(elimination ? { elimination } : {}),
     ...(danger ? { danger } : {}),
+    ...(faab ? { faab } : {}),
     analysis,
   });
 
@@ -203,6 +246,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
     played,
     ...(elimination ? { elimination } : {}),
     ...(danger ? { danger } : {}),
+    ...(faab ? { faab } : {}),
     rawPath,
     snapshotPath,
   };

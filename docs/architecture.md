@@ -53,6 +53,7 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/analysis/week.mjs` | Week facts and award candidates |
 | `src/analysis/elimination.mjs` | Who is still alive in a guillotine league, and who was chopped when |
 | `src/analysis/danger.mjs` | The chop line, survival margin and rolling floor for a guillotine league |
+| `src/analysis/faab.mjs` | Remaining FAAB per survivor and the player pool each chop released, for a guillotine league |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
 | `src/store.mjs` | Snapshots, rankings, predictions, movement, grading |
 | `src/promptContext.mjs` | Assembles the model's facts and instructions |
@@ -274,6 +275,57 @@ the snapshot for a format with no eliminations, the same "absent key, not
 null" rule the `elimination` key follows. `readDangerBoard` in
 `src/pipeline.mjs` mirrors `readEliminationLedger`: it rebuilds the board from
 weeks already on disk and fetches nothing, for `doctor`-style checks.
+
+#### The FAAB market
+
+The waiver market IS the story in a guillotine league — every chop dumps a
+full roster of talent onto the wire at once, unlike the trickle of cuts an
+ordinary league sees. `src/analysis/faab.mjs` answers two questions:
+
+- **`faabBalances`** — what each surviving team has left of the league's FAAB
+  budget, and what it has spent so far. `league.waiverBudget` and
+  `team.waiverBudgetUsed` (`src/sleeper/normalize.mjs`) are already exactly
+  these facts; the only work here is the subtraction, and restricting the
+  result to `ledger.survivors` the same way `weekDanger` restricts contenders
+  — an eliminated team has no more waivers left to win. A league that never
+  set a budget reports `remaining: null` rather than a subtraction against
+  nothing.
+- **`releasedPool`** — the player pool one elimination dumped onto the wire,
+  attributed to the team that was chopped. Sleeper keeps no history of a past
+  roster (the same limitation `elimination.mjs` documents), so this cannot be
+  reconstructed by diffing today's now-empty roster against anything. What
+  *does* survive is that week's own matchup entry — Sleeper scores a week
+  against the roster as it stood when the week was played, before a
+  commissioner force-drops it afterward — and its raw `players` array
+  (`src/store.mjs`'s raw bundle, saved the moment the week was fetched) is the
+  full squad, bench included. A week whose raw bundle was never saved reports
+  the gap explicitly (`note`), rather than an empty pool that would look the
+  same as "this roster released nothing".
+- **`buildFaabMarket`** combines both, and attaches any winning FAAB bid
+  already placed on a released player: `waiverBidsFor` in
+  `src/sleeper/normalize.mjs` reads the same raw transaction fields
+  `normalizeTransactions` reads (`status`, `adds`, `settings.waiver_bid`)
+  rather than a second parser, matching a bid to one specific player id
+  instead of turning it into a prose line. A released player can be claimed
+  any week from the chop onward, not only the week it happened, so every
+  later raw bundle's transactions are searched, not just the chop week's own.
+
+`captureWeek` computes the FAAB market from the elimination ledger it just
+built, using `store.loadRawThrough` to pick up every earlier week's raw
+bundle already on disk (including the one just saved for the current week —
+no second fetch), and writes it into the snapshot as `faab`, absent rather
+than `null` for a format with no eliminations, the same rule `elimination`
+and `danger` both follow. `readFaabMarket` in `src/pipeline.mjs` mirrors
+`readEliminationLedger`/`readDangerBoard`: it rebuilds the market from weeks
+already on disk and fetches nothing.
+
+`faabMarketView` in `src/promptContext.mjs` is where a released player id
+becomes a line a model can read — `src/analysis/faab.mjs` deals only in ids
+and numbers, the same split `rosterView` already makes for a team's own
+roster — and reaches `context.faabMarket` the same way `eliminationLedger`
+reaches `context.standings`: as a plain parameter `src/cli.mjs` passes
+through from `captureWeek`'s own result, so nothing downstream builds a
+second copy.
 
 **Bye-week exposure is not part of this module.** The originating task assumed
 Sleeper's player records carry a bye week; they do not — the full cached
