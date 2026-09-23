@@ -17,4 +17,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Refuse head-to-head editions for guillotine leagues](./refuse-head-to-head-editions-for.md) | pending |
-| [Strip matchup-shaped facts from guillotine context](./strip-matchup-shaped-facts-from.md) | pending |
+| [Strip matchup-shaped facts from guillotine context](./strip-matchup-shaped-facts-from.md) | completed |
