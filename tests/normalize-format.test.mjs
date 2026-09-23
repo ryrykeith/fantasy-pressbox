@@ -55,6 +55,19 @@ test('a declared type wins, and what Sleeper thought is still on the record', ()
   assert.equal(league.format.detectedType, 'dynasty');
 });
 
+test('a declared redraft league overrides a detected dynasty league', () => {
+  // The acceptance case this task is named for: Sleeper's own settings say
+  // dynasty (type 2), but the operator declared redraft, and the declaration
+  // must win rather than the detection.
+  const league = normalizeLeague(sleeperLeague({ settings: { type: 2, num_teams: 12 } }), {
+    declaredFormatType: 'redraft',
+  });
+  assert.equal(league.format.type, 'redraft');
+  assert.equal(league.format.source, 'declared');
+  assert.equal(league.format.declaredType, 'redraft');
+  assert.equal(league.format.detectedType, 'dynasty');
+});
+
 test('scoring modifiers are orthogonal to the type', () => {
   // A guillotine league can be superflex and TE premium at the same time.
   const league = normalizeLeague(
