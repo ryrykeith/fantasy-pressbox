@@ -79,12 +79,12 @@ test('scoring modifiers are orthogonal to the type', () => {
   );
 
   assert.equal(league.format.type, 'guillotine');
-  assert.deepEqual(league.format.scoring, {
-    superflex: true,
-    pointsPerReception: 1,
-    tePremium: 0.5,
-    passingTouchdown: 6,
-  });
+  // The profile itself is covered in tests/scoring-profile.test.mjs; what
+  // matters here is only that declaring a format changes none of it.
+  assert.equal(league.format.scoring.superflex, true);
+  assert.equal(league.format.scoring.reception.base, 1);
+  assert.equal(league.format.scoring.reception.byPosition.TE.bonus, 0.5);
+  assert.equal(league.format.scoring.passing.touchdown, 6);
 });
 
 test('two starting quarterbacks are superflex by another name', () => {
@@ -100,12 +100,10 @@ test('a single-quarterback league is not superflex', () => {
 
 test('scoring defaults are explicit rather than undefined', () => {
   const league = normalizeLeague(sleeperLeague({ scoring_settings: {} }));
-  assert.deepEqual(league.format.scoring, {
-    superflex: false,
-    pointsPerReception: 0,
-    tePremium: 0,
-    passingTouchdown: null,
-  });
+  assert.equal(league.format.scoring.superflex, false);
+  assert.equal(league.format.scoring.reception.base, 0);
+  assert.equal(league.format.scoring.reception.byPosition.TE.bonus, 0);
+  assert.equal(league.format.scoring.passing.touchdown, null);
 });
 
 test('an invalid declared type reaching normalize is still refused', () => {

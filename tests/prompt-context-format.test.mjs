@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildContext } from '../src/promptContext.mjs';
+import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
 
 /** Minimal config: just enough of the editorial/rankings shape buildContext reads. */
 function testConfig() {
@@ -35,7 +36,9 @@ function testLeague(formatType, source = 'detected') {
       source,
       declaredType: source === 'declared' ? formatType : null,
       detectedType: formatType,
-      scoring: { superflex: false, pointsPerReception: 1, tePremium: 0, passingTouchdown: 4 },
+      // Derived rather than hand-written, so this fixture cannot drift out of
+      // the shape a real normalized league actually has.
+      scoring: deriveScoringProfile({ rec: 1, pass_td: 4 }),
     },
   };
 }

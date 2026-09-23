@@ -19,7 +19,8 @@ Judge teams on:
 - quarterback room, weighted heavily when `league.format.scoring.superflex` is true
 - dynasty asset value and age curve
 - positional depth and what one injury would do
-- tight end value when `league.format.scoring.tePremium` is set
+- tight end value when `league.format.scoring.reception.premiumPositions` includes
+  TE; `reception.byPosition` gives what a catch is worth at each position
 - roster construction and flexibility
 - whether this team can win now, later, or is pretending both
 

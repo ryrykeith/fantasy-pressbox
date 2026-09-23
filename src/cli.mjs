@@ -115,9 +115,10 @@ async function commandDoctor(config) {
     say(`                     Set LEAGUE_FORMAT in .env if that is wrong ` +
         `(${UNDETECTABLE_FORMAT_TYPES.join(', ')} can only be declared)`);
   }
-  const { superflex, pointsPerReception, tePremium } = league.format.scoring;
+  const { superflex, reception } = league.format.scoring;
+  const tePremium = reception.byPosition.TE.bonus;
   say(`  Scoring            ${superflex ? 'Superflex' : 'Single QB'}, ` +
-      `${pointsPerReception} PPR` +
+      `${reception.base} PPR` +
       `${tePremium ? `, TE premium +${tePremium}` : ''}`);
   say(`  Current week       ${week} (from ${source})`);
 
