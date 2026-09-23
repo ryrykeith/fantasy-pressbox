@@ -16,10 +16,10 @@ only works if it is honestly ignorant.
 Judge teams on:
 
 - starting lineup quality in this league's exact format
-- quarterback room, weighted heavily when `league.format.superflex` is true
+- quarterback room, weighted heavily when `league.format.scoring.superflex` is true
 - dynasty asset value and age curve
 - positional depth and what one injury would do
-- tight end value when `league.format.tePremium` is set
+- tight end value when `league.format.scoring.tePremium` is set
 - roster construction and flexibility
 - whether this team can win now, later, or is pretending both
 

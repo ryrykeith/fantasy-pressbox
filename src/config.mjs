@@ -16,6 +16,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseYaml } from './lib/yaml.mjs';
 import { applyEnvFile } from './lib/env.mjs';
+import { parseDeclaredFormatType } from './format.mjs';
 
 export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -106,6 +107,9 @@ export function loadConfig({ envPath = join(ROOT, '.env') } = {}) {
     season: env.SLEEPER_SEASON ? String(env.SLEEPER_SEASON).trim() : null,
     week: env.FANTASY_WEEK ? Number.parseInt(env.FANTASY_WEEK, 10) : null,
     leagueDisplayName: env.LEAGUE_DISPLAY_NAME || null,
+    // What kind of league this is, if the operator said. Null means "work it
+    // out from Sleeper"; a misspelling throws here, before any command runs.
+    leagueFormat: parseDeclaredFormatType(env.LEAGUE_FORMAT),
     ai: {
       provider: (env.AI_PROVIDER || '').trim().toLowerCase() || null,
       anthropicKey: (env.ANTHROPIC_API_KEY || '').trim(),

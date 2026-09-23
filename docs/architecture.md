@@ -46,6 +46,7 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/lib/yaml.mjs` | A small YAML reader, so `config/` needs no dependency |
 | `src/lib/env.mjs` | `.env` parsing, so secrets need no dependency |
 | `src/config.mjs` | Merges flags, env, `config/*.yml` and defaults |
+| `src/format.mjs` | The league format taxonomy: valid types, declaration parsing, resolution |
 | `src/sleeper/client.mjs` | HTTP only. Retries, friendly errors, player-file cache |
 | `src/sleeper/normalize.mjs` | Sleeper shapes → league concepts |
 | `src/analysis/lineup.mjs` | Optimal lineup solving |
@@ -60,11 +61,39 @@ wrong, the analysis was wrong, or the writing was wrong.
 ## Domain concepts
 
 `League`, `Team`, `Player`, `Matchup`, `Transaction`, `WeeklySnapshot`,
-`Ranking`, `Prediction`, `Award`.
+`Ranking`, `Prediction`, `Award`, `Format`.
 
 Sleeper-specific fields normalize into these rather than leaking through the
 application. `roster_id` and `fpts_decimal` are not concepts; they are one
 provider's storage details.
+
+### Format
+
+What kind of league this is — `dynasty`, `redraft` or `guillotine` — as opposed
+to how it scores. The two are orthogonal and are modelled separately:
+
+```json
+{
+  "type": "guillotine",
+  "source": "declared",
+  "declaredType": "guillotine",
+  "detectedType": "redraft",
+  "scoring": { "superflex": true, "pointsPerReception": 1, "tePremium": 0.5, "passingTouchdown": 6 }
+}
+```
+
+Format has to be **declared as well as detected**. Sleeper reports enough to
+recognise dynasty (`settings.type == 2`, or a taxi squad) and redraft, but a
+guillotine league is run by manual commissioner action — the API still
+describes an ordinary head-to-head league. So a declaration always wins,
+detection is the fallback, and `source` records which happened so `doctor` can
+tell the user whether the tool was told or guessed.
+
+A misspelled declaration is refused at config load, listing the valid values.
+Silently defaulting would mean the wrong coverage with nothing to show for it.
+
+The taxonomy lives in `src/format.mjs` and knows no provider's field names;
+detection from Sleeper is `detectFormatType` in `src/sleeper/normalize.mjs`.
 
 ## State
 

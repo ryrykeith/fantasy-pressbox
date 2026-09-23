@@ -6,6 +6,7 @@
  * stop here. Nothing downstream should have to know that a team's score is
  * stored as two integers.
  */
+import { parseDeclaredFormatType, resolveFormatType } from '../format.mjs';
 
 const BENCH_SLOTS = new Set(['BN', 'IR', 'TAXI']);
 
@@ -14,10 +15,37 @@ function points(whole, decimal) {
   return Number(((whole ?? 0) + (decimal ?? 0) / 100).toFixed(2));
 }
 
-export function normalizeLeague(league) {
+/**
+ * The format Sleeper's own settings imply.
+ *
+ * `settings.type` is 2 for a dynasty league, and a taxi squad only exists in
+ * one — either is enough. Everything else is reported as redraft, which is the
+ * honest reading: Sleeper has no field that distinguishes a guillotine league
+ * from an ordinary head-to-head one, because the commissioner eliminates teams
+ * by hand. Detection therefore never returns guillotine; declaring it is the
+ * only way in. See src/format.mjs.
+ *
+ * Total by design: every league Sleeper can describe gets a type back.
+ */
+export function detectFormatType(league) {
+  const settings = league.settings || {};
+  const dynasty = (settings.type ?? null) === 2 || Number(settings.taxi_slots ?? 0) > 0;
+  return dynasty ? 'dynasty' : 'redraft';
+}
+
+/**
+ * @param league raw Sleeper league payload
+ * @param declaredFormatType what the operator declared, if anything; it wins
+ *        over detection, and a misspelling throws rather than being ignored
+ */
+export function normalizeLeague(league, { declaredFormatType = null } = {}) {
   const startingSlots = (league.roster_positions || []).filter((slot) => !BENCH_SLOTS.has(slot));
   const scoring = league.scoring_settings || {};
   const settings = league.settings || {};
+
+  const declared = parseDeclaredFormatType(declaredFormatType);
+  const detectedType = detectFormatType(league);
+  const resolved = resolveFormatType({ declared, detected: detectedType });
 
   return {
     id: league.league_id,
@@ -40,12 +68,22 @@ export function normalizeLeague(league) {
     playoffWeekStart: settings.playoff_week_start ?? null,
     tradeDeadline: settings.trade_deadline ?? null,
     waiverBudget: settings.waiver_budget ?? null,
+    // What kind of league this is, and how points are scored in it, are two
+    // different questions: a guillotine league can be superflex and TE premium
+    // at the same time. Keeping the modifiers in their own sub-object stops
+    // downstream code from branching on a scoring rule when it means a format.
     format: {
-      superflex: startingSlots.includes('SUPER_FLEX') || startingSlots.filter((s) => s === 'QB').length > 1,
-      pointsPerReception: scoring.rec ?? 0,
-      tePremium: scoring.bonus_rec_te ?? 0,
-      passingTouchdown: scoring.pass_td ?? null,
-      dynasty: (league.settings?.type ?? null) === 2 || Boolean(settings.taxi_slots),
+      type: resolved.type,
+      source: resolved.source,
+      declaredType: declared,
+      detectedType,
+      scoring: {
+        superflex:
+          startingSlots.includes('SUPER_FLEX') || startingSlots.filter((s) => s === 'QB').length > 1,
+        pointsPerReception: scoring.rec ?? 0,
+        tePremium: scoring.bonus_rec_te ?? 0,
+        passingTouchdown: scoring.pass_td ?? null,
+      },
     },
     scoring,
   };
