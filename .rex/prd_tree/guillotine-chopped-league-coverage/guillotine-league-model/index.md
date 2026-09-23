@@ -17,6 +17,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Build the elimination ledger](./build-the-elimination-ledger.md) | completed |
-| [Chopping-block and danger analysis](./chopping-block-and-danger-analysis.md) | pending |
+| [Bye-week exposure per team](./bye-week-exposure-per-team.md) | pending |
+| [Chopping-block and danger analysis](./chopping-block-and-danger-analysis.md) | deferred |
 | [Cumulative-points survival standings](./cumulative-points-survival-standings.md) | completed |
 | [FAAB pool and market state](./faab-pool-and-market-state.md) | pending |
