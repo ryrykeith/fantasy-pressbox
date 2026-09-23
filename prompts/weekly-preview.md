@@ -10,6 +10,12 @@ If `unavailable` names `previousWeek`, no games have been played yet. Write the
 previews from rosters, records and league format alone, and do not refer to any
 past performance.
 
+`league.positionalValue` names the ways this league's scoring changes what a
+position is worth. Each entry states the fact and the instruction that follows
+from it. Apply every one of them when you say who has the edge in a matchup and
+when you make a pick — an advantage at a position this league pays extra for is
+a reason, not a detail. An empty list means nothing here is unusual.
+
 ## Structure
 
 One post per item, separated by `%%%`, numbered in the header:

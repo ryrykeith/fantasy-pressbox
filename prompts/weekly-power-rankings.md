@@ -12,9 +12,16 @@ and rise. A team can win with 105 and fall. Standings are an input, not the
 output.
 
 Weigh the factors in `editorial.rankingWeights`. Those weights are the house
-model — respect their relative sizes. In a Superflex league, quarterback
-quality is worth more than the raw weight suggests, because the scarcity
-compounds.
+model — respect their relative sizes.
+
+## Positional value
+
+`league.positionalValue` names the ways this league's scoring changes what a
+position is worth. Each entry states the fact and the instruction that follows
+from it. Apply every one of them, and let them override the raw weights where
+the two disagree — the weights describe a generic league, that list describes
+this one. An empty list means nothing here is unusual and no position needs
+adjusting.
 
 ## Movement
 

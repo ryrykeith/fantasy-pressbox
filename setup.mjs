@@ -321,6 +321,10 @@ async function main() {
   heading('5. Saving');
   const values = {
     SLEEPER_LEAGUE_ID: leagueId,
+    // Setup does not ask about format yet, but it must not throw away an
+    // answer already given: a guillotine league can only be declared, so
+    // blanking this would silently turn it back into a head-to-head one.
+    LEAGUE_FORMAT: existing.LEAGUE_FORMAT ?? '',
     AI_PROVIDER: provider,
     ANTHROPIC_API_KEY: anthropicKey,
     OPENAI_API_KEY: openaiKey,

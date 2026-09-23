@@ -8,6 +8,7 @@
     "fantasy-pressbox": "./src/cli.mjs"
   },
   "scripts": {
+    "test": "node --test \"tests/*.test.mjs\"",
     "setup": "node setup.mjs",
     "start": "node src/cli.mjs",
     "fetch": "node src/cli.mjs fetch",

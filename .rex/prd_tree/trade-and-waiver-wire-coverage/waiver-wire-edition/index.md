@@ -4,7 +4,8 @@ level: "feature"
 title: "Waiver wire edition"
 status: "pending"
 priority: "medium"
-blockedBy: ["55083474-f16c-40dc-8354-c37881d64ff0"]
+blockedBy:
+  - "55083474-f16c-40dc-8354-c37881d64ff0"
 acceptanceCriteria: []
 description: "Pickup commentary as its own section or edition."
 lastModified: "2026-09-23T05:43:10.293Z"

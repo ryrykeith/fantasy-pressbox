@@ -22,7 +22,7 @@ export async function openLeague(config, { refreshPlayers = false } = {}) {
   ]);
   const players = await client.players({ refresh: refreshPlayers });
 
-  const league = normalizeLeague(rawLeague);
+  const league = normalizeLeague(rawLeague, { declaredFormatType: config.leagueFormat });
   const teams = normalizeTeams({ rosters, users });
 
   return {

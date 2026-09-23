@@ -4,7 +4,8 @@ level: "feature"
 title: "Trade report edition"
 status: "pending"
 priority: "high"
-blockedBy: ["55083474-f16c-40dc-8354-c37881d64ff0"]
+blockedBy:
+  - "55083474-f16c-40dc-8354-c37881d64ff0"
 acceptanceCriteria: []
 description: "A dedicated edition that grades trades."
 lastModified: "2026-09-23T05:43:08.646Z"

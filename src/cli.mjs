@@ -8,7 +8,9 @@
  */
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadConfig, rankEmoji, ROOT } from './config.mjs';
+import { loadConfig, rankEmoji, resolveRankingWeights, ROOT } from './config.mjs';
+import { describeFormat, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
+import { describeScoringSummary, describeUnmodelledScoring } from './scoringReport.mjs';
 import { openLeague, resolveWeek, captureWeek } from './pipeline.mjs';
 import { normalizeTransactions, normalizeFutureDraftCapital } from './sleeper/normalize.mjs';
 import { buildContext, buildPrompt, systemPromptOnly, taskPromptOnly, describePlayer } from './promptContext.mjs';
@@ -102,6 +104,15 @@ async function commandDoctor(config) {
     });
   say(`  Prompt files       ${missingPrompts.length ? `✗ empty or missing: ${missingPrompts.join(', ')}` : '✓'}`);
 
+  // Every set in config/rankings.yml was already checked to sum to 1.0 when
+  // config was loaded — loadConfig throws before doctor gets this far if one
+  // does not, naming the offending set and its actual sum. Reaching here means
+  // that check already passed for all of them.
+  const definedWeightSets = Object.keys(config.rankings.weights ?? {});
+  say(
+    `  Ranking weights    ✓ ${definedWeightSets.length ? `${definedWeightSets.join(', ')} each sum to 1.0` : 'no sets defined'}`,
+  );
+
   if (!config.leagueId) return 1;
 
   say('\n  Contacting Sleeper...');
@@ -109,9 +120,19 @@ async function commandDoctor(config) {
   const { week, source } = await resolveWeek({ client, league, config });
   say(`  League             ${league.name} (${league.season})`);
   say(`  Teams              ${teams.length}`);
-  say(`  Format             ${league.format.superflex ? 'Superflex' : 'Single QB'}, ` +
-      `${league.format.pointsPerReception} PPR` +
-      `${league.format.tePremium ? `, TE premium +${league.format.tePremium}` : ''}`);
+  say(`  Format             ${describeFormat(league.format)}`);
+  if (league.format.source === 'detected') {
+    say(`                     Set LEAGUE_FORMAT in .env if that is wrong ` +
+        `(${UNDETECTABLE_FORMAT_TYPES.join(', ')} can only be declared)`);
+  }
+  try {
+    const weights = resolveRankingWeights(config.rankings, league.format.type);
+    say(`  Weights for league ✓ using the ${league.format.type} set (${Object.keys(weights).length} factors)`);
+  } catch (error) {
+    say(`  Weights for league ✗ ${error.message}`);
+  }
+  for (const line of describeScoringSummary(league.format.scoring)) say(`  ${line}`);
+  for (const line of describeUnmodelledScoring(league.format.scoring)) say(`  ${line}`);
   say(`  Current week       ${week} (from ${source})`);
 
   reportRankEmoji(config, teams.length);
