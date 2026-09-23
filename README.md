@@ -565,6 +565,33 @@ recaps alike.
 - `weekly.max_normal_movement` — how far a team normally moves in one week.
   One Sunday is a small sample, and the rankings should act like it.
 
+### `config/guillotine.yml` — who has been chopped
+
+Only read when `LEAGUE_FORMAT` is `guillotine`. It holds one thing: the
+elimination ledger, a list of which week chopped which team.
+
+```yaml
+eliminations:
+  1: "Bye Week Blues"
+  2: "Faab Hoarders"
+```
+
+You have to write this down because Sleeper will not tell anyone. There is no
+elimination field — your commissioner runs the format by hand, removing the
+chopped team's owner and dumping its players on the waiver wire. Fantasy
+Pressbox *can* work out who went by reading the week's scores and then checking
+whether that roster has since been emptied, and it does exactly that when you
+have not filled a week in. But both halves of that depend on your commissioner
+having done the manual work, on time. A commissioner who is a day late leaves
+the tool looking at a league that contradicts itself.
+
+So: a week you have written down is settled. A week you have not is reported as
+**not resolved**, naming the team that scored lowest, rather than guessed at. If
+the two ever disagree, `doctor` says so and names both — it will not quietly
+pick one.
+
+Run `node src/cli.mjs doctor` after editing to see the ledger it read.
+
 ### `prompts/` — what it writes
 
 One Markdown file per edition, plus `system.md`, which defines the voice and

@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { parseYaml } from './lib/yaml.mjs';
 import { applyEnvFile } from './lib/env.mjs';
 import { parseDeclaredFormatType } from './format.mjs';
+import { parseDeclaredEliminations } from './analysis/elimination.mjs';
 
 export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -74,6 +75,16 @@ const DEFAULT_RANKINGS = {
   weights: DEFAULT_RANKING_WEIGHTS,
   weekly: { max_normal_movement: 3, allow_exceptional_movement: true },
 };
+
+/**
+ * The guillotine settings, before an operator has written any.
+ *
+ * `eliminations` is the declared week -> team ledger described in
+ * src/analysis/elimination.mjs: the reliable answer to who has been chopped,
+ * as opposed to the one derived from roster state. Empty by default, because
+ * there is nothing this tool could honestly put there.
+ */
+const DEFAULT_GUILLOTINE = { eliminations: {} };
 
 /** Per-format weight maps: a partial override in rankings.yml replaces the whole set, never merges into it. */
 const RANKING_WEIGHT_REPLACE_KEYS = ['weights.dynasty', 'weights.redraft'];
@@ -201,6 +212,7 @@ function bool(value, fallback) {
 export function loadConfig({
   envPath = join(ROOT, '.env'),
   rankingsPath = join(ROOT, 'config', 'rankings.yml'),
+  guillotinePath = join(ROOT, 'config', 'guillotine.yml'),
 } = {}) {
   applyEnvFile(envPath);
   const env = process.env;
@@ -214,6 +226,14 @@ export function loadConfig({
   // Every set the file defines is checked, not only the one this league uses
   // — see the comment on validateRankingWeights.
   validateRankingWeights(rankings.weights);
+
+  // Read and checked here even for a league that is not guillotine, for the
+  // same reason: a typo in a ledger nobody is running today is still a typo,
+  // and finding it at config load is finding it before any command runs.
+  const guillotine = readYamlFile(guillotinePath, DEFAULT_GUILLOTINE, {
+    replaceKeys: ['eliminations'],
+  });
+  const eliminations = parseDeclaredEliminations(guillotine.eliminations);
 
   // .env may override the two editorial knobs a beginner is most likely to want.
   if (env.PRESSBOX_TONE) editorial.tone = env.PRESSBOX_TONE;
@@ -241,6 +261,10 @@ export function loadConfig({
     debug: bool(env.DEBUG, false),
     editorial,
     rankings,
+    // Settings that only mean anything in a guillotine league. Kept in their
+    // own sub-object so nothing reaches for `config.eliminations` in a format
+    // where no team is ever eliminated.
+    guillotine: { eliminations },
   };
 }
 

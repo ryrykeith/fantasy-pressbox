@@ -1,0 +1,37 @@
+# ============================================================================
+# Guillotine settings — only read when LEAGUE_FORMAT is `guillotine`.
+#
+# In a guillotine league there are no matchups. Every team scores on its own
+# each week and the LOWEST scorer is eliminated permanently, until one is left.
+# ============================================================================
+
+# The elimination ledger: which week chopped which team.
+#
+# WHY THIS FILE EXISTS
+# Sleeper has no elimination field, and no plans for one — commissioners run
+# the format by hand, removing the chopped team's owner and force-dropping its
+# players to the waiver wire. Fantasy Pressbox can work out who was chopped by
+# reading the week's scores and then checking whether that roster has since
+# been emptied, but both halves of that depend on a human having done manual
+# work promptly and correctly. A commissioner who is a day late leaves the tool
+# looking at a league that contradicts itself.
+#
+# Writing the weeks down here removes all of that doubt. A declared week always
+# wins over a derived one, and this is the path `doctor` will nudge you toward.
+#
+# HOW TO WRITE IT
+# One line per week: the week number, then the team as Sleeper shows it. A
+# roster id works too, if your league renames teams mid-season.
+#
+#   eliminations:
+#     1: "Bye Week Blues"
+#     2: "Faab Hoarders"
+#     3: 7                  # roster id, for a team that has been renamed
+#
+# A week you have not filled in yet is simply absent — leave it out rather than
+# guessing. An absent week is reported as "not resolved"; a wrong one quietly
+# poisons every week after it, because the survivors are wrong from then on.
+#
+# Run `node src/cli.mjs doctor` after editing to see the ledger it produced.
+eliminations:
+  # 1: "Bye Week Blues"

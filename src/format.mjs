@@ -56,6 +56,22 @@ export function hasMatchups(format) {
   return !FORMATS_WITHOUT_MATCHUPS.includes(format?.type);
 }
 
+/**
+ * Formats where teams are removed from the league during the season.
+ *
+ * In every other format the set of teams is fixed from the draft to the final
+ * week, so "who is still in this league" is not a question anything needs to
+ * ask. In a guillotine league it is the only question that matters, and it has
+ * to be worked out (src/analysis/elimination.mjs) rather than read off a
+ * field, because no provider reports it.
+ */
+export const FORMATS_WITH_ELIMINATION = ['guillotine'];
+
+/** Are teams knocked out of this format as the season goes on? */
+export function hasEliminations(format) {
+  return FORMATS_WITH_ELIMINATION.includes(format?.type);
+}
+
 /** Where a resolved format came from. */
 export const FORMAT_SOURCES = ['declared', 'detected'];
 

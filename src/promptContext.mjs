@@ -13,7 +13,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, resolveRankingWeights } from './config.mjs';
-import { hasMatchups } from './format.mjs';
+import { hasMatchups, hasEliminations } from './format.mjs';
 
 const TASK_PROMPTS = {
   'preseason-rankings': 'preseason-power-rankings.md',
@@ -64,15 +64,26 @@ function describeBench(entry) {
   return `${entry.position ?? '?'} ${entry.name}${where} ${entry.points}`;
 }
 
-/** Slimmed team view: enough to judge a roster, small enough to send. */
-function rosterView(team, players) {
+/**
+ * Slimmed team view: enough to judge a roster, small enough to send.
+ *
+ * `record` is a head-to-head fact — wins are won against somebody — so a format
+ * that plays no matchups does not get one, and cannot cite one. Same rule
+ * `teamWeekView` already applies to a single week's record, applied here to the
+ * season's.
+ */
+function rosterView(team, players, { includeRecord = true } = {}) {
   const describe = (id) => describePlayer(id, players[id]);
   const taxi = new Set(team.taxiIds || []);
   const reserve = new Set(team.reserveIds || []);
   return {
     team: team.name,
     manager: team.manager,
-    record: `${team.record.wins}-${team.record.losses}${team.record.ties ? `-${team.record.ties}` : ''}`,
+    ...(includeRecord
+      ? {
+          record: `${team.record.wins}-${team.record.losses}${team.record.ties ? `-${team.record.ties}` : ''}`,
+        }
+      : {}),
     pointsFor: team.seasonPointsFor,
     pointsAgainst: team.seasonPointsAgainst,
     potentialPoints: team.seasonPotentialPoints,
@@ -259,8 +270,52 @@ function editorialView(config, format) {
 }
 
 /**
+ * Survivor standings for a format where teams are eliminated during the season.
+ *
+ * Win-loss is not a concept here — Sleeper's record comes from matchups nobody
+ * played, and reporting it would hand the model a fact to cite that is really
+ * fiction. The only standing that means anything is cumulative points among
+ * teams still alive, so that is the entire sort key. `pointsAgainst` is left
+ * out for the same reason `record` is: it is an opponent's score, and this
+ * format has no opponents.
+ *
+ * A chopped team is not merely dropped to the bottom — it is removed from this
+ * list entirely and moves to `eliminationHistoryView` instead, so a model
+ * reading standings never sees a team that is no longer in the league.
+ */
+function survivalStandingsView(teams, eliminationLedger) {
+  const eliminatedIds = new Set((eliminationLedger?.history ?? []).map((entry) => entry.rosterId));
+  return teams
+    .filter((team) => !eliminatedIds.has(team.rosterId))
+    .slice()
+    .sort((a, b) => b.seasonPointsFor - a.seasonPointsFor)
+    .map((team) => ({
+      team: team.name,
+      manager: team.manager,
+      pointsFor: team.seasonPointsFor,
+    }));
+}
+
+/**
+ * Every chop so far, in the week it happened — kept apart from the live
+ * standings above so a model can never mistake an eliminated team for one
+ * still alive. An empty list is itself a fact worth stating: nobody chopped
+ * yet, rather than an absent key a model has no way to distinguish from "not
+ * tracked here".
+ */
+function eliminationHistoryView(eliminationLedger) {
+  return (eliminationLedger?.history ?? [])
+    .slice()
+    .sort((a, b) => a.week - b.week)
+    .map((entry) => ({ team: entry.team, week: entry.week }));
+}
+
+/**
  * @param {object} input
  * @param {'preseason-rankings'|'rankings'|'preview'|'recap'|'postseason'} input.task
+ * @param {object|null} input.eliminationLedger built by
+ *        src/analysis/elimination.mjs#buildEliminationLedger; only read for a
+ *        format where teams are eliminated (src/format.mjs#hasEliminations).
  */
 export function buildContext({
   task,
@@ -276,6 +331,7 @@ export function buildContext({
   gradedPredictions = null,
   transactions = null,
   futureDraftCapital = null,
+  eliminationLedger = null,
   format = 'sleeper',
 }) {
   // Sleeper reports pairings for every league, including the formats that never
@@ -309,7 +365,13 @@ export function buildContext({
 
   // Rankings editions judge rosters, so they get the full roster picture.
   if (task === 'preseason-rankings' || task === 'rankings' || task === 'postseason') {
-    context.teams = teams.map((team) => rosterView(team, players));
+    context.teams = teams.map((team) => rosterView(team, players, { includeRecord: headToHead }));
+  } else if (hasEliminations(league.format)) {
+    // A guillotine standing is a shrinking field ranked on points, not a
+    // record — see survivalStandingsView for why record and pointsAgainst are
+    // both left out entirely rather than reported as zero.
+    context.standings = survivalStandingsView(teams, eliminationLedger);
+    context.eliminationHistory = eliminationHistoryView(eliminationLedger);
   } else {
     context.standings = teams
       .slice()
