@@ -8,6 +8,7 @@
  */
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { loadConfig, rankEmoji, resolveRankingWeights, ROOT } from './config.mjs';
 import { describeFormat, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './scoringReport.mjs';
@@ -75,6 +76,37 @@ function requireLeagueId(config) {
   throw new Error(
     'No SLEEPER_LEAGUE_ID found.\n' +
       'Run `npm run setup` to create your .env file, or add the ID to .env by hand.',
+  );
+}
+
+/**
+ * What replaces `preview`/`recap` for a guillotine league.
+ *
+ * Neither edition exists yet — both are tracked under the "Guillotine
+ * editions" feature — but shipping a preview of a game nobody plays is worse
+ * than an honest "not built yet", so this refuses now rather than waiting.
+ */
+const GUILLOTINE_EDITION_FOR = { preview: 'survival-preview', recap: 'chop-recap' };
+
+/**
+ * Refuses a matchup-shaped edition before any work begins, for a guillotine league.
+ *
+ * Guillotine can only ever be DECLARED — Sleeper has no field that reveals it
+ * (see UNDETECTABLE_FORMAT_TYPES in src/format.mjs) — so `config.leagueFormat`
+ * already answers the question with no Sleeper call needed. This is the first
+ * line of defence named in the task; buildPrompt in src/promptContext.mjs
+ * carries a second check against the resolved format, in case some other
+ * caller reaches it without going through here.
+ */
+export function refuseGuillotineMatchupEdition(config, task) {
+  const replacement = GUILLOTINE_EDITION_FOR[task];
+  if (!replacement || config.leagueFormat !== 'guillotine') return;
+  throw new Error(
+    `This is a guillotine league: there are no head-to-head matchups, so \`${task}\` has ` +
+      `nothing to ${task === 'preview' ? 'preview' : 'recap'} — every team just scores on its ` +
+      'own each week and the lowest is eliminated.\n\n' +
+      `Guillotine leagues get a \`${replacement}\` edition instead of \`${task}\`, but it has not ` +
+      'shipped yet. Track it in the PRD under "Guillotine chopped league coverage" → "Guillotine editions".',
   );
 }
 
@@ -196,6 +228,7 @@ async function commandFetch(config, args) {
  */
 async function commandEdition(config, args, task) {
   requireLeagueId(config);
+  refuseGuillotineMatchupEdition(config, task);
   const format = args.format || 'sleeper';
   if (!['sleeper', 'imessage'].includes(format)) {
     throw new Error(`--format must be "sleeper" or "imessage", got "${format}".`);
@@ -508,10 +541,19 @@ async function main() {
   }
 }
 
-main()
-  .then((code) => process.exit(code ?? 0))
-  .catch((error) => {
-    console.error(`\nError: ${error.message}\n`);
-    if (process.env.DEBUG === 'true') console.error(error.stack);
-    process.exit(1);
-  });
+// Guards the auto-run so a test can import this module (to reach exports like
+// refuseGuillotineMatchupEdition) without executing main() and calling
+// process.exit() out from under the test runner. True for every real
+// invocation — `node src/cli.mjs ...`, `npm run preview`, or the installed
+// `fantasy-pressbox` bin — because argv[1] is the same path Node resolved to
+// load this file. argv[1] is absent under `node -e`/a REPL/an embedder; that
+// is never a real run either, so it is treated the same as an import.
+if (typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main()
+    .then((code) => process.exit(code ?? 0))
+    .catch((error) => {
+      console.error(`\nError: ${error.message}\n`);
+      if (process.env.DEBUG === 'true') console.error(error.stack);
+      process.exit(1);
+    });
+}

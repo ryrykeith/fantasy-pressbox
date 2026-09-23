@@ -7,6 +7,7 @@
  * claimed.
  */
 import { normalizePlayer, pairMatchups } from '../sleeper/normalize.mjs';
+import { hasMatchups } from '../format.mjs';
 import { bestLineup, lineupEfficiency } from './lineup.mjs';
 
 /** How many bench performances to carry forward per team. */
@@ -38,12 +39,24 @@ function entriesFor(side, players) {
 
 export function analyzeWeek({ league, teams, matchups, players, week }) {
   const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]));
-  const { games, byes } = pairMatchups(matchups, teamsByRosterId);
+
+  // Sleeper pairs every league into matchups, including the formats that never
+  // play one. Those pairings are discarded here, at the point they are made,
+  // rather than filtered out of each thing built from them later.
+  const headToHead = hasMatchups(league.format);
+  const { games, byes } = headToHead
+    ? pairMatchups(matchups, teamsByRosterId)
+    : { games: [], byes: [] };
   const slots = league.startingSlots;
 
   const teamWeeks = [];
 
-  const buildSide = (side, opponentSide) => {
+  /**
+   * One roster's week. Without an opponent there is no result to record, and
+   * the matchup fields are left out of the record entirely rather than set to
+   * null: an absent key cannot be printed, a null one invites a guess.
+   */
+  const buildSide = (side, opponentSide = null) => {
     const team = teamsByRosterId.get(side.rosterId);
     const { starters, bench } = entriesFor(side, players);
     const optimal = bestLineup({ slots, candidates: [...starters, ...bench] });
@@ -55,18 +68,16 @@ export function analyzeWeek({ league, teams, matchups, players, week }) {
       manager: team?.manager ?? null,
       record: team?.record ?? null,
       points: scored,
-      opponent: opponentSide
-        ? teamsByRosterId.get(opponentSide.rosterId)?.name ?? `Roster ${opponentSide.rosterId}`
-        : null,
-      opponentPoints: opponentSide ? Number((opponentSide.points ?? 0).toFixed(2)) : null,
-      result: opponentSide
-        ? scored > opponentSide.points
-          ? 'W'
-          : scored < opponentSide.points
-            ? 'L'
-            : 'T'
-        : null,
-      margin: opponentSide ? Number(Math.abs(scored - opponentSide.points).toFixed(2)) : null,
+      ...(opponentSide
+        ? {
+            opponent:
+              teamsByRosterId.get(opponentSide.rosterId)?.name ?? `Roster ${opponentSide.rosterId}`,
+            opponentPoints: Number((opponentSide.points ?? 0).toFixed(2)),
+            result:
+              scored > opponentSide.points ? 'W' : scored < opponentSide.points ? 'L' : 'T',
+            margin: Number(Math.abs(scored - opponentSide.points).toFixed(2)),
+          }
+        : {}),
       starters: starters.map((entry, index) => ({
         slot: slots[index] ?? 'FLEX',
         name: entry.player.name,
@@ -112,6 +123,14 @@ export function analyzeWeek({ league, teams, matchups, players, week }) {
     };
   });
 
+  // No games to walk, so the rosters are scored straight from the flat matchup
+  // array: every entry is a team's week, and nobody has an opponent.
+  if (!headToHead) {
+    for (const entry of matchups || []) {
+      buildSide({ rosterId: entry.roster_id, points: entry.points ?? 0, raw: entry });
+    }
+  }
+
   return {
     week,
     season: league.season,
@@ -129,8 +148,9 @@ export function analyzeWeek({ league, teams, matchups, players, week }) {
  * Candidate awards, derived strictly from the week's numbers.
  *
  * A category is omitted when the data does not support it — there is no
- * "closest game" in a week with one game, and no bench pain when nobody's
- * bench outscored a starter.
+ * "closest game" in a week with one game, no bench pain when nobody's bench
+ * outscored a starter, and none of the head-to-head categories at all in a
+ * format where no team plays another.
  */
 function computeAwardFacts(games, teamWeeks) {
   if (teamWeeks.length === 0) return {};
@@ -159,22 +179,31 @@ function computeAwardFacts(games, teamWeeks) {
   const facts = {
     teamOfTheWeek: { team: byPoints[0].team, points: byPoints[0].points },
     lowestScore: { team: byPoints.at(-1).team, points: byPoints.at(-1).points },
-    biggestBlowout: byMargin[0]
-      ? { winner: byMargin[0].winner, loser: byMargin[0].loser, margin: byMargin[0].margin }
+    playerOfTheWeek: topStarter
+      ? { name: topStarter.name, position: topStarter.position, points: topStarter.points, team: topStarter.team }
       : null,
-    closestGame:
+    benchPain,
+  };
+
+  // Awards that only exist because two teams played each other. A format with
+  // no matchups is not offered them at all: "no blowout happened this week" and
+  // "a blowout is not a thing here" are different facts, and only the second one
+  // is safe to leave a model holding.
+  if (games.length) {
+    facts.biggestBlowout = {
+      winner: byMargin[0].winner,
+      loser: byMargin[0].loser,
+      margin: byMargin[0].margin,
+    };
+    facts.closestGame =
       byMargin.length > 1
         ? {
             winner: byMargin.at(-1).winner,
             loser: byMargin.at(-1).loser,
             margin: byMargin.at(-1).margin,
           }
-        : null,
-    playerOfTheWeek: topStarter
-      ? { name: topStarter.name, position: topStarter.position, points: topStarter.points, team: topStarter.team }
-      : null,
-    benchPain,
-  };
+        : null;
+  }
 
   if (byEfficiency.length) {
     facts.managerOfTheWeek = {
