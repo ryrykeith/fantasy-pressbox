@@ -20,4 +20,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Bye-week exposure per team](./bye-week-exposure-per-team.md) | pending |
 | [Chopping-block and danger analysis](./chopping-block-and-danger-analysis.md) | completed |
 | [Cumulative-points survival standings](./cumulative-points-survival-standings.md) | completed |
-| [FAAB pool and market state](./faab-pool-and-market-state.md) | pending |
+| [FAAB pool and market state](./faab-pool-and-market-state.md) | completed |
