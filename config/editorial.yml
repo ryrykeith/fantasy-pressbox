@@ -30,7 +30,11 @@ output:
 #
 # Rules of thumb:
 #   - Have one line per team in your league. 12 teams, 12 lines.
-#   - Too few? The last emoji repeats for the remaining ranks.
+#   - Too few? The last emoji repeats for the remaining ranks. That is why the
+#     default below runs all the way to 18: a guillotine league normally starts
+#     with one team per NFL regular-season week, and a 12-line table gave it the
+#     same emoji six times over. A 12-team league only ever sees the first 12,
+#     which are unchanged.
 #   - Whatever you write here replaces this list completely, so you can make
 #     it shorter, longer, or nothing like the default.
 #   - To drop emoji entirely, set include_emoji: false above.
@@ -52,6 +56,14 @@ ranking_emoji:
   10: "💩"
   11: "💩"
   12: "💩"
+  # Ranks 13-18 only appear in a league that large — most commonly a guillotine
+  # league, which is also the one where the bottom of the table matters most.
+  13: "🗑️"
+  14: "🗑️"
+  15: "⚰️"
+  16: "⚰️"
+  17: "☠️"
+  18: "☠️"
 
 # Which weekly awards may be handed out. An award is skipped when the week's
 # data does not actually support it, even if it is switched on here.

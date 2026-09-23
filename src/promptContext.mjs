@@ -22,6 +22,7 @@ const TASK_PROMPTS = {
   'survival-preview': 'survival-preview.md',
   recap: 'weekly-recap.md',
   'chop-recap': 'chop-recap.md',
+  'survival-rankings': 'survival-rankings.md',
   postseason: 'postseason-power-rankings.md',
 };
 
@@ -43,17 +44,32 @@ export const TASKS = Object.keys(TASK_PROMPTS);
 export const FORWARD_LOOKING_TASKS = ['preview', 'survival-preview'];
 
 /**
+ * Ranking editions written for a league whose field never shrinks.
+ *
+ * All three assume every team that started the season is still in it and can
+ * still hold a rank. That assumption is the whole reason a format where teams
+ * are chopped needs a ranking of its own rather than a variant of these —
+ * buildPrompt refuses all three for such a format, the same second line of
+ * defence every other format-specific edition carries.
+ */
+const FIXED_FIELD_RANKING_TASKS = ['preseason-rankings', 'rankings', 'postseason'];
+
+/**
  * Editions that put the league in order, and are therefore steered by the
  * per-format weight sets in config/rankings.yml.
  *
  * Worth naming rather than repeating, because the list decides three separate
- * things: which editions get the full roster picture, which get future draft
+ * things: which editions get the roster picture, which get future draft
  * capital, and which ask src/config.mjs#resolveRankingWeights for a weight set
  * at all. That last one has teeth — a format with no set of its own is refused
  * outright rather than ranked on somebody else's — so asking for one in an
  * edition that ranks nobody would block it on a decision it never reads.
+ *
+ * Exported because src/cli.mjs needs the same list to decide what `record`
+ * will accept and what shape recordBlock files — one list, so a new ranking
+ * edition cannot be publishable and unrecordable at the same time.
  */
-const RANKING_TASKS = ['preseason-rankings', 'rankings', 'postseason'];
+export const RANKING_TASKS = [...FIXED_FIELD_RANKING_TASKS, 'survival-rankings'];
 
 function readPrompt(file) {
   const path = join(ROOT, 'prompts', file);
@@ -97,25 +113,28 @@ function describeBench(entry) {
 /**
  * Slimmed team view: enough to judge a roster, small enough to send.
  *
- * `record` is a head-to-head fact — wins are won against somebody — so a format
- * that plays no matchups does not get one, and cannot cite one. Same rule
- * `teamWeekView` already applies to a single week's record, applied here to the
- * season's.
+ * `record` and `pointsAgainst` are both opponent-shaped facts — wins are won
+ * against somebody, and points against are somebody else's points — so a format
+ * that plays no matchups gets neither, and cannot cite either. That is the same
+ * rule `survivalStandingsView` applies to a compact standing and `teamWeekView`
+ * applies to a single week, applied here to the season. `pointsFor` and
+ * `potentialPoints` stay: a team's own scoring is a fact in any format, and in
+ * a format with no games it is the only one there is.
  */
-function rosterView(team, players, { includeRecord = true } = {}) {
+function rosterView(team, players, { headToHead = true } = {}) {
   const describe = (id) => describePlayer(id, players[id]);
   const taxi = new Set(team.taxiIds || []);
   const reserve = new Set(team.reserveIds || []);
   return {
     team: team.name,
     manager: team.manager,
-    ...(includeRecord
+    ...(headToHead
       ? {
           record: `${team.record.wins}-${team.record.losses}${team.record.ties ? `-${team.record.ties}` : ''}`,
+          pointsAgainst: team.seasonPointsAgainst,
         }
       : {}),
     pointsFor: team.seasonPointsFor,
-    pointsAgainst: team.seasonPointsAgainst,
     potentialPoints: team.seasonPotentialPoints,
     roster: team.playerIds.filter((id) => !taxi.has(id) && !reserve.has(id)).map(describe),
     taxiSquad: [...taxi].map(describe),
@@ -290,13 +309,14 @@ function editorialView(config, format, task) {
     rankingEmoji: config.editorial.ranking_emoji,
     sleeperMaxChars: config.editorial.output.sleeper_max_chars,
     includeEmoji: config.editorial.output.include_emoji,
-    // Weights are per-format: a redraft league is never judged on the
-    // dynasty set's dynasty_value/future_draft_capital factors. Only an
-    // edition that actually ranks asks for them — prompts/weekly-power-rankings.md
-    // is the sole reader — and only an edition that asks is refused when its
-    // format has no set of its own, which is what lets a guillotine league
-    // publish the editions it does have while its weight set is still being
-    // specified.
+    // Weights are per-format: a redraft league is never judged on the dynasty
+    // set's dynasty_value/future_draft_capital factors, and a guillotine
+    // league is judged on a weekly floor neither of the others weighs at all.
+    // Only an edition that actually ranks asks for them — the ranking prompt
+    // files are the only readers — and only an edition that asks is refused
+    // when its format has no set of its own, which is what lets a league
+    // publish the editions it does have while a weight set it never reads is
+    // still being specified.
     ...(RANKING_TASKS.includes(task)
       ? { rankingWeights: resolveRankingWeights(config.rankings, formatType) }
       : {}),
@@ -304,6 +324,21 @@ function editorialView(config, format, task) {
     bannedPhrases: config.editorial.banned_phrases ?? [],
     awards: awardsView(config.editorial.awards ?? {}, hasMatchups(format)),
   };
+}
+
+/**
+ * The field still in the league, in the order it was given.
+ *
+ * One answer for every view that shows teams in a format where the field
+ * shrinks — the compact standing, and the roster picture a survival ranking
+ * judges. A chopped team is removed rather than sorted to the bottom or marked
+ * somehow: left in a list, it is a team a model can rank, cite or write about
+ * in the present tense, and in this format it is not in the league any more.
+ * Where it does belong is `eliminationHistoryView`, in the week it went.
+ */
+function survivingTeams(teams, eliminationLedger) {
+  const eliminatedIds = new Set((eliminationLedger?.history ?? []).map((entry) => entry.rosterId));
+  return teams.filter((team) => !eliminatedIds.has(team.rosterId));
 }
 
 /**
@@ -321,9 +356,7 @@ function editorialView(config, format, task) {
  * reading standings never sees a team that is no longer in the league.
  */
 function survivalStandingsView(teams, eliminationLedger) {
-  const eliminatedIds = new Set((eliminationLedger?.history ?? []).map((entry) => entry.rosterId));
-  return teams
-    .filter((team) => !eliminatedIds.has(team.rosterId))
+  return survivingTeams(teams, eliminationLedger)
     .slice()
     .sort((a, b) => b.seasonPointsFor - a.seasonPointsFor)
     .map((team) => ({
@@ -487,7 +520,7 @@ function byeExposureView(byeExposure, players) {
 
 /**
  * @param {object} input
- * @param {'preseason-rankings'|'rankings'|'preview'|'survival-preview'|'recap'|'chop-recap'|'postseason'} input.task
+ * @param {'preseason-rankings'|'rankings'|'survival-rankings'|'preview'|'survival-preview'|'recap'|'chop-recap'|'postseason'} input.task
  * @param {object|null} input.eliminationLedger built by
  *        src/analysis/elimination.mjs#buildEliminationLedger; only read for a
  *        format where teams are eliminated (src/format.mjs#hasEliminations).
@@ -549,14 +582,28 @@ export function buildContext({
     week,
   };
 
-  // Rankings editions judge rosters, so they get the full roster picture.
-  if (RANKING_TASKS.includes(task)) {
-    context.teams = teams.map((team) => rosterView(team, players, { includeRecord: headToHead }));
-  } else if (hasEliminations(league.format)) {
+  const ranking = RANKING_TASKS.includes(task);
+  const eliminates = hasEliminations(league.format);
+
+  // Rankings editions judge rosters, so they get the roster picture. In a
+  // format where teams are chopped, that picture is the field still alive:
+  // an eliminated team cannot hold a rank, because a rank is a claim about
+  // this week and it has no more of them. It appears in `eliminationHistory`
+  // below instead, which is the only place it belongs.
+  if (ranking) {
+    context.teams = (eliminates ? survivingTeams(teams, eliminationLedger) : teams).map((team) =>
+      rosterView(team, players, { headToHead }),
+    );
+  }
+
+  if (eliminates) {
     // A guillotine standing is a shrinking field ranked on points, not a
     // record — see survivalStandingsView for why record and pointsAgainst are
-    // both left out entirely rather than reported as zero.
-    context.standings = survivalStandingsView(teams, eliminationLedger);
+    // both left out entirely rather than reported as zero. A ranking edition
+    // does not get one: its `teams` already carries every survivor's points,
+    // and the order it publishes is the whole output, so a second ordering in
+    // the context is an invitation to print that one instead.
+    if (!ranking) context.standings = survivalStandingsView(teams, eliminationLedger);
     // The one number a chop recap's headline needs exactly right, stated
     // outright rather than left for a model to count off `standings` — the
     // same reason `pointsLeftOnBench` is computed here instead of asked for.
@@ -570,10 +617,10 @@ export function buildContext({
     if (faabMarket) context.faabMarket = faabMarketView(faabMarket, players);
     // The chop line and the bye-week cliff. For a forward-looking edition
     // (survival preview) these describe who is in danger in the week about to
-    // be played; for a backward-looking one (chop recap) `beforeWeek` shifts
-    // by one so the same call describes the week that just happened instead
-    // — see dangerBoardView's own docstring for why. Absent before any week
-    // has been captured.
+    // be played; for a backward-looking one (chop recap, survival rankings)
+    // `beforeWeek` shifts by one so the same call describes the week that just
+    // happened instead — see dangerBoardView's own docstring for why. Absent
+    // before any week has been captured.
     if (dangerBoard) {
       context.dangerBoard = dangerBoardView(dangerBoard, {
         beforeWeek: FORWARD_LOOKING_TASKS.includes(task) ? week : week + 1,
@@ -581,7 +628,7 @@ export function buildContext({
       });
     }
     if (byeExposure?.length) context.byeExposure = byeExposureView(byeExposure, players);
-  } else {
+  } else if (!ranking) {
     context.standings = teams
       .slice()
       .sort(
@@ -670,7 +717,10 @@ export function buildContext({
   }
 
   // Ranking editions weigh future draft capital; previews and recaps do not.
-  if (futureDraftCapital && RANKING_TASKS.includes(task)) {
+  // Nor does a format where teams are chopped: a pick for a draft you will not
+  // be in is not a small asset, it is no asset, so it never reaches the
+  // context and describeMissingContext says so outright.
+  if (futureDraftCapital && ranking && !eliminates) {
     context.futureDraftCapital = futureDraftCapital;
   }
 
@@ -743,9 +793,10 @@ function describeMissingContext({ task, context, week }) {
   // behind it, and a league whose earlier weeks were never fetched has
   // nothing on disk to read — and both are exactly the kind of number a model
   // will supply for itself if the absence is left implicit. The instruction
-  // differs by task because a survival preview has no other score to fall
-  // back on (it is forward-looking, so `thisWeek` does not exist at all),
-  // while a chop recap's `thisWeek` is real regardless — only the comparison
+  // differs by which side of the week the edition sits on, not by which
+  // edition it is: a forward-looking one has no other score to fall back on
+  // (`thisWeek` does not exist at all for a week not yet played), while a
+  // backward-looking one's `thisWeek` is real regardless — only the comparison
   // to a chop line is unavailable, not the scores themselves.
   if (ELIMINATION_ONLY_TASKS.includes(task) && !context.dangerBoard?.lastCompletedWeek) {
     missing.push({
@@ -754,14 +805,13 @@ function describeMissingContext({ task, context, week }) {
         week <= 1
           ? 'This is the first week of the season: no week has been completed, so nothing has set a chop line yet.'
           : 'No completed week was available, so there is no chop line on record.',
-      instruction:
-        task === 'chop-recap'
-          ? 'Do not state a chop line or a survival margin, and do not say how close anyone came ' +
-            "to going out. `thisWeek` still has real scores — write from those alone, without " +
-            'comparing them to a chop line that is not on record.'
-          : 'Do not state a chop line, a survival margin, or how near anyone came to being chopped, ' +
-            'and do not cite any score. Write this edition from the field still alive and the ' +
-            'bye-week exposure alone.',
+      instruction: FORWARD_LOOKING_TASKS.includes(task)
+        ? 'Do not state a chop line, a survival margin, or how near anyone came to being chopped, ' +
+          'and do not cite any score. Write this edition from the field still alive and the ' +
+          'bye-week exposure alone.'
+        : 'Do not state a chop line or a survival margin, and do not say how close anyone came ' +
+          "to going out. `thisWeek` still has real scores — write from those alone, without " +
+          'comparing them to a chop line that is not on record.',
     });
   }
 
@@ -791,7 +841,20 @@ function describeMissingContext({ task, context, week }) {
     // thing to begin with: rosters are torn up and re-drafted every season, so
     // "nothing traded" would wrongly imply picks exist and simply haven't
     // moved. The two absences need different instructions, not the same one.
-    if (context.league.format?.type === 'redraft') {
+    if (hasEliminations(context.league.format)) {
+      missing.push({
+        field: 'futureDraftCapital',
+        why:
+          'Teams are eliminated from this league during the season, so a pick for a draft that ' +
+          'has not been held is worth nothing to a team trying to survive the week — it is only ' +
+          'ever collected by somebody who is still here to use it.',
+        instruction:
+          'Draft capital plays no part in this ranking and has been left out of the context ' +
+          'entirely. Do not discuss picks, future picks or long-term assets, and do not rank a ' +
+          'team higher for what it might be worth next year. Judge every roster on what it can ' +
+          'score this week.',
+      });
+    } else if (context.league.format?.type === 'redraft') {
       missing.push({
         field: 'futureDraftCapital',
         why: 'This is a redraft league: rosters are re-drafted every season, so there is no future draft capital.',
@@ -829,10 +892,11 @@ const MATCHUP_ONLY_TASKS = ['preview', 'recap'];
 /**
  * Editions that only mean anything where teams are eliminated during the
  * season. The mirror of MATCHUP_ONLY_TASKS, and refused the same way in both
- * places: a survival preview or a chop recap for a league nobody can be
- * chopped out of would be an edition about a stake that does not exist.
+ * places: a survival preview, a chop recap or a survival ranking for a league
+ * nobody can be chopped out of would be an edition about a stake that does not
+ * exist.
  */
-export const ELIMINATION_ONLY_TASKS = ['survival-preview', 'chop-recap'];
+export const ELIMINATION_ONLY_TASKS = ['survival-preview', 'chop-recap', 'survival-rankings'];
 
 /** The complete text to paste into a chat, or send to an API. */
 export function buildPrompt({ task, context }) {
@@ -860,8 +924,22 @@ export function buildPrompt({ task, context }) {
     throw new Error(
       `Cannot build a ${task} for a ${context.league.format.type} league: nobody is eliminated ` +
         'during the season, so there is no chop line and no team is in danger of going out. ' +
-        'Run `preview` instead. This should already have been refused in src/cli.mjs; if you ' +
-        'are calling buildPrompt directly, add the same guard there.',
+        'Run the ordinary edition for this format instead. This should already have been ' +
+        'refused in src/cli.mjs; if you are calling buildPrompt directly, add the same guard there.',
+    );
+  }
+
+  // And the third pairing: a ranking written for a field that never shrinks,
+  // asked for by a league whose field does. Every one of these prompts tells
+  // the model to rank every team from 1 to N, so building one here would rank
+  // teams that are no longer in the league — and it would do it with the
+  // format's own weight set, which weighs a floor these prompts never mention.
+  if (FIXED_FIELD_RANKING_TASKS.includes(task) && hasEliminations(context.league.format)) {
+    throw new Error(
+      `Cannot build a ${task} for a ${context.league.format.type} league: teams are eliminated ` +
+        'during the season, so there is no fixed field to rank from 1 to N and a chopped team ' +
+        'cannot hold a rank. Run `survival-rankings` instead. This should already have been ' +
+        'refused in src/cli.mjs; if you are calling buildPrompt directly, add the same guard there.',
     );
   }
 

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { refuseGuillotineMatchupEdition } from '../src/cli.mjs';
+import { refuseOrdinaryEditionInGuillotineLeague } from '../src/cli.mjs';
 import { buildContext, buildPrompt } from '../src/promptContext.mjs';
 import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
 
@@ -10,7 +10,7 @@ import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
  * `preview` and `recap` have nothing to describe. Both lines of defence named
  * in the task are covered here —
  *
- * - refuseGuillotineMatchupEdition in src/cli.mjs, which refuses before any
+ * - refuseOrdinaryEditionInGuillotineLeague in src/cli.mjs, which refuses before any
  *   work begins, straight off the declared format (Sleeper can never report
  *   guillotine, so a declaration is the only way it is ever true).
  * - buildPrompt in src/promptContext.mjs, which refuses again from the
@@ -86,7 +86,7 @@ function contextFor(task, formatType) {
 
 test('refuses preview on a declared guillotine league', () => {
   assert.throws(
-    () => refuseGuillotineMatchupEdition(testConfig('guillotine'), 'preview'),
+    () => refuseOrdinaryEditionInGuillotineLeague(testConfig('guillotine'), 'preview'),
     (error) => {
       assert.match(error.message, /guillotine league/i);
       assert.match(error.message, /no head-to-head matchups/i);
@@ -98,7 +98,7 @@ test('refuses preview on a declared guillotine league', () => {
 
 test('refuses recap on a declared guillotine league', () => {
   assert.throws(
-    () => refuseGuillotineMatchupEdition(testConfig('guillotine'), 'recap'),
+    () => refuseOrdinaryEditionInGuillotineLeague(testConfig('guillotine'), 'recap'),
     (error) => {
       assert.match(error.message, /guillotine league/i);
       assert.match(error.message, /no head-to-head matchups/i);
@@ -109,16 +109,21 @@ test('refuses recap on a declared guillotine league', () => {
 });
 
 test('does not refuse preview or recap for dynasty, redraft, or an undeclared format', () => {
-  assert.doesNotThrow(() => refuseGuillotineMatchupEdition(testConfig('dynasty'), 'preview'));
-  assert.doesNotThrow(() => refuseGuillotineMatchupEdition(testConfig('redraft'), 'recap'));
-  assert.doesNotThrow(() => refuseGuillotineMatchupEdition(testConfig(null), 'preview'));
+  assert.doesNotThrow(() => refuseOrdinaryEditionInGuillotineLeague(testConfig('dynasty'), 'preview'));
+  assert.doesNotThrow(() => refuseOrdinaryEditionInGuillotineLeague(testConfig('redraft'), 'recap'));
+  assert.doesNotThrow(() => refuseOrdinaryEditionInGuillotineLeague(testConfig(null), 'preview'));
 });
 
-test('does not refuse tasks that are not matchup-shaped, even for a guillotine league', () => {
-  assert.doesNotThrow(() => refuseGuillotineMatchupEdition(testConfig('guillotine'), 'rankings'));
-  assert.doesNotThrow(() =>
-    refuseGuillotineMatchupEdition(testConfig('guillotine'), 'preseason-rankings'),
-  );
+/**
+ * The ranking editions are refused for a guillotine league too, but for a
+ * different reason — a field that shrinks, not a game nobody played. That
+ * pairing is tested in tests/guillotine-rankings.test.mjs; what belongs here
+ * is that this guard leaves alone the tasks neither reason applies to.
+ */
+test('does not refuse the elimination editions themselves in a guillotine league', () => {
+  for (const task of ['survival-preview', 'chop-recap', 'survival-rankings']) {
+    assert.doesNotThrow(() => refuseOrdinaryEditionInGuillotineLeague(testConfig('guillotine'), task));
+  }
 });
 
 /* ------------------------------------------ src/promptContext.mjs: second line */
@@ -133,9 +138,22 @@ test('buildPrompt refuses a recap built from a guillotine context', () => {
   assert.throws(() => buildPrompt({ task: 'recap', context }), /guillotine league/i);
 });
 
-test('buildPrompt still builds a rankings edition from a guillotine context', () => {
-  const context = contextFor('rankings', 'guillotine');
-  assert.doesNotThrow(() => buildPrompt({ task: 'rankings', context }));
+/**
+ * A guillotine league does rank — it just cannot use the ordinary edition,
+ * which tells the model to rank every team from 1 to N in a format where the
+ * field shrinks every week. `survival-rankings` is the one it gets instead.
+ */
+test('buildPrompt builds the survival ranking, not the ordinary one, from a guillotine context', () => {
+  assert.throws(
+    () => buildPrompt({ task: 'rankings', context: contextFor('rankings', 'guillotine') }),
+    /survival-rankings/,
+  );
+  assert.doesNotThrow(() =>
+    buildPrompt({
+      task: 'survival-rankings',
+      context: contextFor('survival-rankings', 'guillotine'),
+    }),
+  );
 });
 
 test('buildPrompt still builds preview and recap for a dynasty context', () => {

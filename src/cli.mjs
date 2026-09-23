@@ -13,10 +13,17 @@ import { loadConfig, rankEmoji, resolveRankingWeights, ROOT } from './config.mjs
 import { describeFormat, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './scoringReport.mjs';
 import { describeEliminationLedger } from './eliminationReport.mjs';
-import { openLeague, resolveWeek, captureWeek, readEliminationLedger } from './pipeline.mjs';
+import {
+  openLeague,
+  resolveWeek,
+  captureWeek,
+  readEliminationLedger,
+  readByeExposure,
+} from './pipeline.mjs';
 import { normalizeTransactions, normalizeFutureDraftCapital } from './sleeper/normalize.mjs';
 import {
   TASKS,
+  RANKING_TASKS,
   ELIMINATION_ONLY_TASKS,
   FORWARD_LOOKING_TASKS,
   buildContext,
@@ -44,6 +51,7 @@ Commands
   recap                         Build the weekly recap and awards
   chop-recap                    Build the weekly chop recap and awards (guillotine leagues)
   rankings                      Build the weekly power rankings
+  survival-rankings             Build the weekly survival rankings (guillotine leagues)
   preseason-rankings            Build preseason rankings (ignores all results)
   record <file>                 File a finished edition you pasted back from a chat
   check <file>                  Check a file of finished posts against the length limit
@@ -64,6 +72,7 @@ Examples
   node src/cli.mjs record output/week2.txt --task preview
   node src/cli.mjs survival-preview --week 3
   node src/cli.mjs chop-recap --week 3
+  node src/cli.mjs survival-rankings --week 3
 `;
 
 function parseArgs(argv) {
@@ -94,7 +103,7 @@ function requireLeagueId(config) {
 }
 
 /**
- * What replaces `preview`/`recap` for a guillotine league.
+ * What replaces each ordinary edition for a guillotine league.
  *
  * These ship one at a time, so the refusal below asks TASKS whether the
  * replacement it is about to name actually exists rather than carrying its own
@@ -102,43 +111,92 @@ function requireLeagueId(config) {
  * lands, instead of going stale and sending someone to a command that is not
  * there — or, worse, telling them to paste a prompt that has already shipped.
  */
-const GUILLOTINE_EDITION_FOR = { preview: 'survival-preview', recap: 'chop-recap' };
+const GUILLOTINE_EDITION_FOR = {
+  preview: 'survival-preview',
+  recap: 'chop-recap',
+  rankings: 'survival-rankings',
+};
+
+/**
+ * Every ordinary edition a guillotine league cannot run, and why not.
+ *
+ * This map is the list — a task named here is refused, a task not named here
+ * is allowed — and GUILLOTINE_EDITION_FOR above says which of them has a
+ * guillotine replacement to be sent to. Keeping the reason and the membership
+ * in one place is what stops a task being refused with no explanation, or
+ * explained and never refused.
+ *
+ * The reasons are genuinely different and a single message covering all of
+ * them would be vague about every one. `preview`/`recap` are about a game
+ * nobody played. The three ranking editions each assume a field that does not
+ * shrink — and the last two of those used to be refused for free, because
+ * `resolveRankingWeights` threw for a format with no weight set and every
+ * ranking edition asks for one. Shipping `weights.guillotine` turned that loud
+ * failure into a silent success for them, so they are named here instead: the
+ * refusal is now a decision rather than a side effect of a missing config key.
+ */
+const GUILLOTINE_REFUSAL_BECAUSE = {
+  preview:
+    'there are no head-to-head matchups, so there is nothing to preview — every team just ' +
+    'scores on its own each week and the lowest is eliminated',
+  recap:
+    'there are no head-to-head matchups, so there is nothing to recap — every team just ' +
+    'scores on its own each week and the lowest is eliminated',
+  rankings:
+    'a power ranking here is a ranking of the teams still alive, judged on the floor that ' +
+    'keeps them alive — not on the asset quality the ordinary edition weighs',
+  'preseason-rankings':
+    'this format is ranked on a weekly floor, bye exposure and FAAB ammunition, none of which ' +
+    'exists before a single week has been played',
+  postseason:
+    'there is no postseason in this format — the season ends the week one team is left, and ' +
+    'the last survival ranking is the final word',
+};
 
 /**
  * The other direction: which ordinary edition a guillotine-only one replaces.
  *
  * Derived from GUILLOTINE_EDITION_FOR rather than written out a second time,
  * so the two guards below can never name different commands for the same
- * pair — `refuseGuillotineMatchupEdition` sends a guillotine league one way,
- * `refuseSurvivalEditionWithoutEliminations` sends everyone else back.
+ * pair — `refuseOrdinaryEditionInGuillotineLeague` sends a guillotine league
+ * one way, `refuseSurvivalEditionWithoutEliminations` sends everyone else back.
  */
 const ORDINARY_EDITION_FOR = Object.fromEntries(
   Object.entries(GUILLOTINE_EDITION_FOR).map(([ordinary, guillotine]) => [guillotine, ordinary]),
 );
 
 /**
- * Refuses a matchup-shaped edition before any work begins, for a guillotine league.
+ * Refuses an ordinary edition before any work begins, for a guillotine league.
  *
  * Guillotine can only ever be DECLARED — Sleeper has no field that reveals it
  * (see UNDETECTABLE_FORMAT_TYPES in src/format.mjs) — so `config.leagueFormat`
  * already answers the question with no Sleeper call needed. This is the first
- * line of defence named in the task; buildPrompt in src/promptContext.mjs
- * carries a second check against the resolved format, in case some other
- * caller reaches it without going through here.
+ * line of defence; buildPrompt in src/promptContext.mjs carries a second check
+ * against the resolved format, in case some other caller reaches it without
+ * going through here.
  */
-export function refuseGuillotineMatchupEdition(config, task) {
-  const replacement = GUILLOTINE_EDITION_FOR[task];
-  if (!replacement || config.leagueFormat !== 'guillotine') return;
+export function refuseOrdinaryEditionInGuillotineLeague(config, task) {
+  if (config.leagueFormat !== 'guillotine') return;
 
-  const shipped = TASKS.includes(replacement);
+  const because = GUILLOTINE_REFUSAL_BECAUSE[task];
+  if (!because) return;
+
+  // A refused edition either has a guillotine replacement to be sent to, or it
+  // has none at all. The only ones with none are ranking editions, so the
+  // ranking this format does have is what they point at — read off the map
+  // rather than written out, so renaming the command renames the advice.
+  const replacement = GUILLOTINE_EDITION_FOR[task];
+
   throw new Error(
-    `This is a guillotine league: there are no head-to-head matchups, so \`${task}\` has ` +
-      `nothing to ${task === 'preview' ? 'preview' : 'recap'} — every team just scores on its ` +
-      'own each week and the lowest is eliminated.\n\n' +
-      (shipped
-        ? `Run \`${replacement}\` instead: node src/cli.mjs ${replacement}`
-        : `Guillotine leagues get a \`${replacement}\` edition instead of \`${task}\`, but it has not ` +
-          'shipped yet. Track it in the PRD under "Guillotine chopped league coverage" → "Guillotine editions".'),
+    `This is a guillotine league: ${because}.\n\n` +
+      (!replacement
+        ? `There is no guillotine \`${task}\` edition. The ranking this format does have is ` +
+          `\`${GUILLOTINE_EDITION_FOR.rankings}\`, written about a week that has been played: ` +
+          `node src/cli.mjs ${GUILLOTINE_EDITION_FOR.rankings}`
+        : TASKS.includes(replacement)
+          ? `Run \`${replacement}\` instead: node src/cli.mjs ${replacement}`
+          : `Guillotine leagues get a \`${replacement}\` edition instead of \`${task}\`, but it has not ` +
+            'shipped yet. Track it in the PRD under "Guillotine chopped league coverage" → "Guillotine editions".'),
   );
 }
 
@@ -150,10 +208,10 @@ export function refuseGuillotineMatchupEdition(config, task) {
  * So an undeclared league is definitively not one, `config.leagueFormat`
  * settles it outright, and no Sleeper call is needed to find out.
  *
- * Covers both directions ELIMINATION_ONLY_TASKS names — the forward-looking
- * survival preview and the backward-looking chop recap — with one message,
- * naming whichever ordinary edition (ORDINARY_EDITION_FOR) actually replaces
- * the one that was asked for.
+ * Covers every edition ELIMINATION_ONLY_TASKS names — the forward-looking
+ * survival preview, the backward-looking chop recap and the survival
+ * rankings — with one message, naming whichever ordinary edition
+ * (ORDINARY_EDITION_FOR) actually replaces the one that was asked for.
  */
 export function refuseSurvivalEditionWithoutEliminations(config, task) {
   if (!ELIMINATION_ONLY_TASKS.includes(task) || config.leagueFormat === 'guillotine') return;
@@ -293,7 +351,7 @@ async function commandFetch(config, args) {
  */
 async function commandEdition(config, args, task) {
   requireLeagueId(config);
-  refuseGuillotineMatchupEdition(config, task);
+  refuseOrdinaryEditionInGuillotineLeague(config, task);
   refuseSurvivalEditionWithoutEliminations(config, task);
   const format = args.format || 'sleeper';
   if (!['sleeper', 'imessage'].includes(format)) {
@@ -368,18 +426,31 @@ async function commandEdition(config, args, task) {
         warn(`Note: week ${week} already has scores. This week's chop line is not final and is not used.`);
       }
     } else {
-      // recap, rankings, postseason share this path with chop-recap. The only
-      // difference is chop-recap also reads the danger board — the chop line
-      // and survival margin for the week that just finished, which a plain
-      // recap has no format-fact to report. buildContext's dangerBoardView
-      // shifts `beforeWeek` by one for a backward-looking task, so the same
-      // captured danger board describes this week's own chop rather than the
-      // one before it.
+      // recap, rankings, postseason share this path with chop-recap and
+      // survival-rankings. The only difference is that the two guillotine
+      // editions also read the danger board — the chop line and survival
+      // margin for the week that just finished, which a plain recap has no
+      // format-fact to report. buildContext's dangerBoardView shifts
+      // `beforeWeek` by one for a backward-looking task, so the same captured
+      // danger board describes this week's own chop rather than the one
+      // before it.
       if (!captured.played) {
         warn(`Week ${week} has no scores yet. Re-run once the games are final.`);
       }
       weekAnalysis = captured.analysis;
       if (task === 'chop-recap') dangerBoard = captured.danger ?? null;
+      if (task === 'survival-rankings') {
+        dangerBoard = captured.danger ?? null;
+        // Bye exposure is a weighted factor in this format, so the ranking
+        // needs it — but reading `captured.byeExposure` would be wrong here.
+        // captureWeek computes exposure from the week it captured, which for a
+        // backward-looking edition is a week already played: its byes are
+        // history, and they would push a genuinely upcoming week off the end
+        // of the report. The risk this edition ranks on starts the week after
+        // the one it is about, so it is rebuilt from that week instead. Reads
+        // only what is already on disk and fetches nothing.
+        byeExposure = readByeExposure({ ...ctx, throughWeek: week, fromWeek: week + 1 });
+      }
       const saved = store.loadPredictions(league.season, week);
       gradedPredictions = gradePredictions(saved?.predictions, captured.analysis, {
         eliminationLedger,
@@ -490,7 +561,12 @@ export function recordBlock({ store, league, week, task, block, previousRankings
     return true;
   }
 
-  if (task === 'rankings' || task === 'preseason-rankings' || task === 'postseason') {
+  // Every edition that ranks files the same way, so a new one cannot be
+  // publishable and unrecordable at the same time. A survival ranking is
+  // filed under the same `week-N` label an ordinary one uses, which is what
+  // lets the next week's edition measure movement against it.
+  if (RANKING_TASKS.includes(task)) {
+    const seasonLong = task === 'preseason-rankings' || task === 'postseason';
     const label =
       task === 'preseason-rankings' ? 'preseason' : task === 'postseason' ? 'final' : `week-${week}`;
     const ranked = withMovement(
@@ -503,7 +579,7 @@ export function recordBlock({ store, league, week, task, block, previousRankings
     const path = store.saveRankings(league.season, label, {
       season: String(league.season),
       label,
-      week: task === 'rankings' ? week : null,
+      week: seasonLong ? null : week,
       publishedAt: new Date().toISOString(),
       rankings: ranked,
     });
@@ -547,7 +623,7 @@ async function commandRecord(config, args) {
   if (!existsSync(file)) throw new Error(`No such file: ${file}`);
 
   const task = args.task;
-  const recordable = ['preview', 'survival-preview', 'rankings', 'preseason-rankings', 'postseason'];
+  const recordable = ['preview', 'survival-preview', ...RANKING_TASKS];
   if (!recordable.includes(task ?? '')) {
     throw new Error(`Pass --task followed by one of: ${recordable.join(', ')}.`);
   }
@@ -661,6 +737,8 @@ async function main() {
       return commandEdition(config, args, 'chop-recap');
     case 'rankings':
       return commandEdition(config, args, 'rankings');
+    case 'survival-rankings':
+      return commandEdition(config, args, 'survival-rankings');
     case 'preseason-rankings':
       return commandEdition(config, args, 'preseason-rankings');
     case 'record':
@@ -675,7 +753,7 @@ async function main() {
 }
 
 // Guards the auto-run so a test can import this module (to reach exports like
-// refuseGuillotineMatchupEdition) without executing main() and calling
+// refuseOrdinaryEditionInGuillotineLeague) without executing main() and calling
 // process.exit() out from under the test runner. True for every real
 // invocation — `node src/cli.mjs ...`, `npm run preview`, or the installed
 // `fantasy-pressbox` bin — because argv[1] is the same path Node resolved to

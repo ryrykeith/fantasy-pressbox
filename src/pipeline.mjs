@@ -155,13 +155,31 @@ export function readFaabMarket({ store, league, teams, config = null, throughWee
 
 /**
  * How many rostered starters each survivor is about to lose to a bye
- * (src/analysis/byeExposure.mjs), for the next few weeks starting at
- * `throughWeek`. Fetches nothing — `league.players` is already fetched once
- * per run by `openLeague`, and the bye-week table is a committed config file,
- * not something this reads over the network. Null for a format where nobody
- * is ever eliminated, the same rule `readDangerBoard`/`readFaabMarket` follow.
+ * (src/analysis/byeExposure.mjs), for the next few weeks. Fetches nothing —
+ * `league.players` is already fetched once per run by `openLeague`, and the
+ * bye-week table is a committed config file, not something this reads over the
+ * network. Null for a format where nobody is ever eliminated, the same rule
+ * `readDangerBoard`/`readFaabMarket` follow.
+ *
+ * `throughWeek` and `fromWeek` are separate questions and only look like the
+ * same one. `throughWeek` is how far the elimination ledger knows — which
+ * teams are still alive to be exposed at all. `fromWeek` is the first week to
+ * report exposure for, and for a backward-looking edition it is the week
+ * *after* the last one played: that week's byes already happened, and counting
+ * them would both report history as risk and push a genuinely upcoming week
+ * off the end of the report. It defaults to `throughWeek`, which is right for
+ * a forward-looking caller asking about the week it is previewing.
  */
-export function readByeExposure({ store, league, teams, players, config = null, throughWeek, weekCount }) {
+export function readByeExposure({
+  store,
+  league,
+  teams,
+  players,
+  config = null,
+  throughWeek,
+  fromWeek = throughWeek,
+  weekCount,
+}) {
   if (!hasEliminations(league.format)) return null;
   const weeks = storedWeekScores(store, league.season, throughWeek);
   const ledger = buildEliminationLedger({
@@ -175,7 +193,7 @@ export function readByeExposure({ store, league, teams, players, config = null, 
     teams,
     players,
     byeWeeks: loadByeWeekTable({ season: league.season }),
-    fromWeek: throughWeek,
+    fromWeek,
     weekCount,
     ledger,
     source: byeWeekTableSource(league.season),
