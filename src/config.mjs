@@ -45,8 +45,10 @@ const DEFAULT_EDITORIAL = {
  * league coverage). Silently ranking a guillotine league on the dynasty set
  * would be worse than wrong (survival depends on weekly floor, not asset
  * quality) with nothing to say so, so `resolveRankingWeights` refuses instead
- * of guessing. A guillotine league cannot run any edition until that epic adds
- * its own set.
+ * of guessing. That refusal reaches only the editions that actually rank —
+ * src/promptContext.mjs asks for a set for those and no others — so a
+ * guillotine league can publish its survival preview while its weight set is
+ * still being specified, and is refused only if it asks for a ranking.
  */
 const DEFAULT_RANKING_WEIGHTS = {
   dynasty: {

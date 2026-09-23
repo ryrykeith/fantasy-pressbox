@@ -18,8 +18,10 @@
 # asset quality (survival is about weekly floor), so neither set below is
 # right for it. That set is specified alongside the guillotine format's own
 # edition work — see Epic: Guillotine league coverage. Until it lands, a
-# guillotine league fails loudly instead of silently borrowing the dynasty
-# set — see resolveRankingWeights in src/config.mjs.
+# guillotine RANKING fails loudly instead of silently borrowing the dynasty
+# set — see resolveRankingWeights in src/config.mjs. The survival preview is
+# unaffected: it judges floors rather than ranking rosters, so it never asks
+# for a weight set.
 weights:
   dynasty:
     starting_lineup: 0.30        # how good the week-to-week starting ten is

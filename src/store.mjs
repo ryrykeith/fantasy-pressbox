@@ -148,38 +148,104 @@ export function movementLabel(movement) {
   return '—';
 }
 
+/** One called game: who won, and how close the projected score was. */
+function gradeMatchupPrediction(prediction, resultByTeam) {
+  const a = resultByTeam.get(prediction.team_a);
+  const b = resultByTeam.get(prediction.team_b);
+  if (!a || !b) return { ...prediction, graded: false, reason: 'team not found in results' };
+  const actualWinner =
+    a.points === b.points ? null : a.points > b.points ? prediction.team_a : prediction.team_b;
+  const scoreError =
+    prediction.predicted_score_a !== undefined && prediction.predicted_score_b !== undefined
+      ? Number(
+          (
+            Math.abs(prediction.predicted_score_a - a.points) +
+            Math.abs(prediction.predicted_score_b - b.points)
+          ).toFixed(2),
+        )
+      : null;
+  return {
+    ...prediction,
+    graded: true,
+    actual_winner: actualWinner,
+    actual_score_a: a.points,
+    actual_score_b: b.points,
+    correct: actualWinner !== null && actualWinner === prediction.predicted_winner,
+    total_score_error: scoreError,
+  };
+}
+
+/**
+ * One called chop: the shape a survival preview predicts in.
+ *
+ * A format with no games has nothing to pick a winner of, so the called shot
+ * is who goes out instead. What actually happened is not a score comparison —
+ * it is whatever the elimination ledger settled on for that week, which is the
+ * only thing in this project entitled to say a team was chopped.
+ *
+ * A week the ledger has not settled is left UNGRADED, never scored wrong. That
+ * is the state of every guillotine league every Monday: the scores are in but
+ * the commissioner has not processed the chop, or two teams tied for lowest and
+ * there is no lowest scorer to speak of. Marking those wrong would invent a
+ * result, which is the one thing this project refuses to do — and it would also
+ * punish a correct call for a commissioner's timing. `chop_source` travels with
+ * a graded result so a reader can tell a declaration from a derivation.
+ */
+function gradeChopPrediction(prediction, { week, eliminationLedger }) {
+  if (!eliminationLedger) {
+    return {
+      ...prediction,
+      graded: false,
+      reason: 'no elimination ledger was supplied, so who went cannot be checked',
+    };
+  }
+
+  const chop = (eliminationLedger.history ?? []).find((entry) => entry.week === week) ?? null;
+  if (!chop) {
+    const record = (eliminationLedger.weeks ?? []).find((entry) => entry.week === week) ?? null;
+    return {
+      ...prediction,
+      graded: false,
+      reason: record?.note
+        ? `week ${week} is unresolved — ${record.note}`
+        : `no elimination is recorded for week ${week} yet`,
+    };
+  }
+
+  return {
+    ...prediction,
+    graded: true,
+    actual_chop: chop.team,
+    chop_source: chop.source,
+    correct: chop.team === prediction.predicted_chop,
+  };
+}
+
 /**
  * Grades last week's predictions against what actually happened.
  * Used so a recap can admit, in print, that it was wrong.
+ *
+ * Two prediction shapes are scored, told apart by their own fields rather than
+ * by the league's format: a called game (`predicted_winner`) and a called chop
+ * (`predicted_chop`). A format decides which shape gets *recorded*; by the time
+ * a prediction is being graded it already says which it is, and reading that
+ * off the record keeps a season that changed format — or a mixed file — from
+ * being graded against the wrong rule.
+ *
+ * @param predictions      whatever was recorded for the week
+ * @param weekAnalysis     that week's analysis (src/analysis/week.mjs)
+ * @param eliminationLedger the ledger for the same week, required to grade a
+ *                          called chop; absent means those go ungraded
  */
-export function gradePredictions(predictions, weekAnalysis) {
+export function gradePredictions(predictions, weekAnalysis, { eliminationLedger = null } = {}) {
   if (!predictions?.length) return null;
   const resultByTeam = new Map(weekAnalysis.teamWeeks.map((t) => [t.team, t]));
 
-  const graded = predictions.map((prediction) => {
-    const a = resultByTeam.get(prediction.team_a);
-    const b = resultByTeam.get(prediction.team_b);
-    if (!a || !b) return { ...prediction, graded: false, reason: 'team not found in results' };
-    const actualWinner = a.points === b.points ? null : a.points > b.points ? prediction.team_a : prediction.team_b;
-    const scoreError =
-      prediction.predicted_score_a !== undefined && prediction.predicted_score_b !== undefined
-        ? Number(
-            (
-              Math.abs(prediction.predicted_score_a - a.points) +
-              Math.abs(prediction.predicted_score_b - b.points)
-            ).toFixed(2),
-          )
-        : null;
-    return {
-      ...prediction,
-      graded: true,
-      actual_winner: actualWinner,
-      actual_score_a: a.points,
-      actual_score_b: b.points,
-      correct: actualWinner !== null && actualWinner === prediction.predicted_winner,
-      total_score_error: scoreError,
-    };
-  });
+  const graded = predictions.map((prediction) =>
+    prediction?.predicted_chop === undefined
+      ? gradeMatchupPrediction(prediction, resultByTeam)
+      : gradeChopPrediction(prediction, { week: weekAnalysis.week, eliminationLedger }),
+  );
 
   const scored = graded.filter((g) => g.graded);
   const correct = scored.filter((g) => g.correct).length;
