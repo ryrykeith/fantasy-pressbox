@@ -51,6 +51,8 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/sleeper/normalize.mjs` | Sleeper shapes → league concepts |
 | `src/analysis/lineup.mjs` | Optimal lineup solving |
 | `src/analysis/week.mjs` | Week facts and award candidates |
+| `src/analysis/elimination.mjs` | Who is still alive in a guillotine league, and who was chopped when |
+| `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
 | `src/store.mjs` | Snapshots, rankings, predictions, movement, grading |
 | `src/promptContext.mjs` | Assembles the model's facts and instructions |
 | `src/generate.mjs` | Optional Anthropic / OpenAI call |
@@ -155,6 +157,55 @@ Both name the edition that will eventually replace the one refused
 under the "Guillotine editions" feature. `rankings` is unaffected: a power
 ranking judges rosters, not games, so it has something to say for any format
 once its own weight set exists.
+
+#### The elimination ledger
+
+In every other format the set of teams is fixed from the draft to the final
+week. In a guillotine league it shrinks, and "who is still in this league" is
+the question every edition is built on — get it wrong and the publication
+reports on teams that are not in the league any more.
+
+Sleeper has no elimination field. Commissioners run the format by hand: each
+week they remove the chopped team's owner and force-drop its players to the
+waiver pool. So `buildEliminationLedger` in `src/analysis/elimination.mjs`
+works from two unreliable signals and one reliable declaration:
+
+| | Where it comes from | Why it can be wrong |
+|---|---|---|
+| **derived** | the lowest scorer among the teams still alive that week, *confirmed* by that roster now being ownerless or unable to field a lineup | both halves need a human to have done manual work promptly and correctly |
+| **declared** | `eliminations:` in `config/guillotine.yml`, a week → team map the operator maintains | nothing about it goes stale |
+
+Three rules follow, and they are the whole design:
+
+- **A declaration always wins.** It is the only signal that does not depend on
+  a commissioner's timing. `doctor` prints the ledger it produced and, when
+  there is no declared one, says plainly that every week in it was a
+  derivation.
+- **A derivation that contradicts a declaration is reported, never swallowed.**
+  The two disagreeing means one of them is wrong, and nothing in the numbers
+  says which. The warning names both teams and the week.
+- **A week nothing settles is `unresolved`, with its candidate named.** That is
+  the state of every guillotine league every Monday, and it is not an error. An
+  edition that says "we do not know yet who was chopped" is recoverable; one
+  that names the wrong team is not, because in this format the error compounds
+  — every later week is then judged against the wrong field.
+
+A tie for lowest is also `unresolved`: the lowest scorer is not a fact when two
+teams share the score. Before any week has been played the chop signature is
+not read at all, because every roster is empty in the preseason and reading it
+then would eliminate the entire league in week 1.
+
+`captureWeek` writes the ledger into the week's snapshot beside the scores. The
+field a week was judged against is as much a part of that week's record as the
+points are, and it obeys the same rule: **history is not rewritten.** For a
+format where nobody is eliminated the `elimination` key is *absent* from the
+snapshot rather than `null` — the same reasoning as the matchup fields above.
+`hasEliminations(format)` in `src/format.mjs` is the single answer to whether
+the question applies, so no module repeats a `=== 'guillotine'` check.
+
+The ledger stores the full roster plus the ordered history rather than a
+survivor list per week; `survivorsAt(ledger, week)` answers for any week from
+those two, without writing eighteen names out eighteen times in every snapshot.
 
 ### Scoring profile
 

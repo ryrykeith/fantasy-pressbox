@@ -12,7 +12,8 @@ import { pathToFileURL } from 'node:url';
 import { loadConfig, rankEmoji, resolveRankingWeights, ROOT } from './config.mjs';
 import { describeFormat, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './scoringReport.mjs';
-import { openLeague, resolveWeek, captureWeek } from './pipeline.mjs';
+import { describeEliminationLedger } from './eliminationReport.mjs';
+import { openLeague, resolveWeek, captureWeek, readEliminationLedger } from './pipeline.mjs';
 import { normalizeTransactions, normalizeFutureDraftCapital } from './sleeper/normalize.mjs';
 import { buildContext, buildPrompt, systemPromptOnly, taskPromptOnly, describePlayer } from './promptContext.mjs';
 import { generate, describeProvider, detectProvider } from './generate.mjs';
@@ -148,7 +149,8 @@ async function commandDoctor(config) {
   if (!config.leagueId) return 1;
 
   say('\n  Contacting Sleeper...');
-  const { league, teams, client } = await openLeague(config);
+  const ctx = await openLeague(config);
+  const { league, teams, client } = ctx;
   const { week, source } = await resolveWeek({ client, league, config });
   say(`  League             ${league.name} (${league.season})`);
   say(`  Teams              ${teams.length}`);
@@ -166,6 +168,13 @@ async function commandDoctor(config) {
   for (const line of describeScoringSummary(league.format.scoring)) say(`  ${line}`);
   for (const line of describeUnmodelledScoring(league.format.scoring)) say(`  ${line}`);
   say(`  Current week       ${week} (from ${source})`);
+
+  // Who is still in the league, for the formats where that changes. Built from
+  // the weeks already fetched, so doctor stays a cheap check — a league with no
+  // saved weeks yet simply has nothing to report.
+  for (const line of describeEliminationLedger(readEliminationLedger({ ...ctx, throughWeek: week }))) {
+    say(`  ${line}`);
+  }
 
   reportRankEmoji(config, teams.length);
 
