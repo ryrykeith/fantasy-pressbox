@@ -1,0 +1,57 @@
+# ============================================================================
+# NFL bye weeks for the 2026 season.
+#
+# GENERATED — do not edit by hand. Rebuild with:
+#   node scripts/fetch-bye-weeks.mjs 2026
+#
+# A bye week is the absence of a game, not a field anyone publishes. Sleeper
+# has no bye or schedule endpoint at all, so this table is derived from the
+# NFL schedule: for each week, the teams with no game are on bye.
+#
+# Team codes are SLEEPER's, so they match what normalizePlayer returns. The
+# generator maps ESPN's spellings across (notably WSH -> WAS).
+#
+# Static once the schedule is released. Regenerate when the 2027
+# schedule is published, and commit the result.
+# ============================================================================
+
+season: 2026
+
+bye_weeks:
+  ARI: 14
+  ATL: 11
+  BAL: 13
+  BUF: 7
+  CAR: 5
+  CHI: 10
+  CIN: 6
+  CLE: 11
+  DAL: 14
+  DEN: 10
+  DET: 6
+  GB: 11
+  HOU: 8
+  IND: 13
+  JAX: 7
+  KC: 5
+  LAC: 7
+  LAR: 11
+  LV: 13
+  MIA: 6
+  MIN: 6
+  NE: 11
+  NO: 8
+  NYG: 8
+  NYJ: 13
+  PHI: 10
+  PIT: 9
+  SEA: 11
+  SF: 8
+  TB: 10
+  TEN: 9
+  WAS: 7
+
+# Abbreviations Sleeper still reports that no longer field a team. Resolved to
+# the franchise's current code so a stale player id cannot fail an edition.
+aliases:
+  OAK: LV

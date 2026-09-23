@@ -8,6 +8,9 @@
 import { createClient } from './sleeper/client.mjs';
 import { normalizeLeague, normalizeTeams } from './sleeper/normalize.mjs';
 import { analyzeWeek } from './analysis/week.mjs';
+import { buildEliminationLedger } from './analysis/elimination.mjs';
+import { buildDangerBoard } from './analysis/danger.mjs';
+import { hasEliminations } from './format.mjs';
 import { createStore } from './store.mjs';
 
 export async function openLeague(config, { refreshPlayers = false } = {}) {
@@ -31,6 +34,11 @@ export async function openLeague(config, { refreshPlayers = false } = {}) {
     league,
     teams,
     players,
+    // The settings the league was opened with travel with it. Every step below
+    // is called as `step({ ...ctx, ... })`, and some of them — the elimination
+    // ledger's declared source, for one — need a setting rather than a fact
+    // about the league.
+    config,
     tradedPicks: tradedPicks ?? [],
     raw: { league: rawLeague, users, rosters },
   };
@@ -65,8 +73,59 @@ export async function resolveWeek({ client, league, config, requested, offset = 
   return { week: Math.max(1, current + offset), source: 'Sleeper (current week)' };
 }
 
+/** Every week already written down, reduced to the scores the ledger reads. */
+function storedWeekScores(store, season, throughWeek) {
+  return store.loadSnapshotsThrough(season, throughWeek).map((snapshot) => ({
+    week: snapshot.week,
+    played: snapshot.played,
+    scores: (snapshot.analysis?.teamWeeks ?? []).map((entry) => ({
+      rosterId: entry.rosterId,
+      points: entry.points,
+    })),
+  }));
+}
+
+/**
+ * The elimination ledger as far as the weeks already on disk can tell it.
+ *
+ * Fetches nothing. Doctor uses this to show a commissioner what the tool
+ * currently believes about who is still alive, and a check that downloads a
+ * season of matchups first is a check nobody runs. Null for a format where
+ * nobody is ever eliminated.
+ */
+export function readEliminationLedger({ store, league, teams, config = null, throughWeek }) {
+  if (!hasEliminations(league.format)) return null;
+  return buildEliminationLedger({
+    teams,
+    startingSlots: league.startingSlots,
+    declared: config?.guillotine?.eliminations ?? [],
+    weeks: storedWeekScores(store, league.season, throughWeek),
+    throughWeek,
+  });
+}
+
+/**
+ * The chop-line and floor picture (src/analysis/danger.mjs) as far as the
+ * weeks already on disk can tell it. Fetches nothing, and reads its own
+ * elimination ledger from the same stored weeks rather than trusting a
+ * caller's to still match `throughWeek`. Null for a format where nobody is
+ * ever eliminated — there is no chop line to report.
+ */
+export function readDangerBoard({ store, league, teams, config = null, throughWeek }) {
+  if (!hasEliminations(league.format)) return null;
+  const weeks = storedWeekScores(store, league.season, throughWeek);
+  const ledger = buildEliminationLedger({
+    teams,
+    startingSlots: league.startingSlots,
+    declared: config?.guillotine?.eliminations ?? [],
+    weeks,
+    throughWeek,
+  });
+  return buildDangerBoard({ teams, weeks, ledger });
+}
+
 /** Fetch one week, save the raw bundle and the analyzed snapshot. */
-export async function captureWeek({ client, store, league, teams, players, week }) {
+export async function captureWeek({ client, store, league, teams, players, week, config = null }) {
   const [matchups, transactions] = await Promise.all([
     client.matchups(week),
     client.transactions(week),
@@ -83,6 +142,43 @@ export async function captureWeek({ client, store, league, teams, players, week 
   const analysis = analyzeWeek({ league, teams, matchups, players, week });
   const played = analysis.teamWeeks.some((entry) => entry.points > 0);
 
+  // Who is still in the league, and how close each survivor is to joining
+  // them, for the formats where that changes. Built from the weeks already
+  // written down plus this one — shared between the elimination ledger and
+  // the danger board so both read the identical weekly scores — and written
+  // into the snapshot beside them: the field a week was judged against is as
+  // much a part of that week's record as the scores are, and history is not
+  // rewritten here.
+  const weeksThroughNow = hasEliminations(league.format)
+    ? [
+        ...storedWeekScores(store, league.season, week - 1),
+        {
+          week,
+          played,
+          scores: analysis.teamWeeks.map((entry) => ({
+            rosterId: entry.rosterId,
+            points: entry.points,
+          })),
+        },
+      ]
+    : null;
+
+  const elimination = weeksThroughNow
+    ? buildEliminationLedger({
+        teams,
+        startingSlots: league.startingSlots,
+        declared: config?.guillotine?.eliminations ?? [],
+        weeks: weeksThroughNow,
+        throughWeek: week,
+      })
+    : null;
+
+  // The chop line, this week's survival margin, and every team's rolling
+  // floor (src/analysis/danger.mjs) — computed against the elimination
+  // ledger just built above, so a roster already chopped this week never
+  // sets or clears the chop line for the teams still alive.
+  const danger = weeksThroughNow ? buildDangerBoard({ teams, weeks: weeksThroughNow, ledger: elimination }) : null;
+
   const snapshotPath = store.saveSnapshot(league.season, week, {
     week,
     season: league.season,
@@ -94,8 +190,20 @@ export async function captureWeek({ client, store, league, teams, players, week 
       record: team.record,
       seasonPointsFor: team.seasonPointsFor,
     })),
+    // Absent rather than null in a format where nobody is ever eliminated: an
+    // absent key cannot be printed, a null one invites a guess.
+    ...(elimination ? { elimination } : {}),
+    ...(danger ? { danger } : {}),
     analysis,
   });
 
-  return { analysis, transactions, played, rawPath, snapshotPath };
+  return {
+    analysis,
+    transactions,
+    played,
+    ...(elimination ? { elimination } : {}),
+    ...(danger ? { danger } : {}),
+    rawPath,
+    snapshotPath,
+  };
 }
