@@ -161,6 +161,42 @@ test('the non-default list is ordered so two runs of the same league read the sa
   );
 });
 
+test('a changed setting the profile has a field for is not repeated as unmodelled', () => {
+  // rec, the reception bonuses and pass_td/pass_yd/pass_int already surface as
+  // fields on the profile itself — listing them again under "not modelled"
+  // would be noise, not a warning.
+  const profile = deriveScoringProfile({
+    ...defaults(),
+    rec: 1,
+    bonus_rec_te: 0.5,
+    pass_td: 6,
+    pass_yd: 0.05,
+    pass_int: 0,
+  });
+
+  assert.deepEqual(profile.notModelled, []);
+});
+
+test('a changed setting with no field on the profile is reported as not modelled', () => {
+  const profile = deriveScoringProfile({ ...defaults(), bonus_rec_first_down: 0.5, idp_tkl: 1 });
+
+  assert.deepEqual(profile.notModelled, [
+    { key: 'bonus_rec_first_down', value: 0.5, default: null },
+    { key: 'idp_tkl', value: 1, default: null },
+  ]);
+});
+
+test('not-modelled settings are a subset of non-default ones, never the reverse', () => {
+  const profile = deriveScoringProfile({
+    ...defaults(),
+    rec: 1, // modelled
+    fum_lost: -1, // not modelled
+  });
+
+  assert.deepEqual(profile.nonDefault.map((entry) => entry.key), ['fum_lost', 'rec']);
+  assert.deepEqual(profile.notModelled.map((entry) => entry.key), ['fum_lost']);
+});
+
 test('missing scoring settings entirely does not throw', () => {
   const profile = deriveScoringProfile();
   assert.equal(profile.isDefault, true);

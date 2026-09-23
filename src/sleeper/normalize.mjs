@@ -91,6 +91,23 @@ export const SLEEPER_DEFAULT_SCORING = {
 /** The positions whose receptions Sleeper can score at a different rate. */
 const RECEPTION_BONUS_KEYS = { RB: 'bonus_rec_rb', WR: 'bonus_rec_wr', TE: 'bonus_rec_te' };
 
+/**
+ * The raw Sleeper keys that actually feed a field of the derived profile.
+ *
+ * Doctor and the prompts reason about reception rate, positional bonuses,
+ * passing touchdown value and passing yardage/interceptions — nothing else.
+ * A league that changes a key outside this set (return yardage, first-down
+ * bonuses, IDP tackle scoring) has scoring this tool does not act on at all,
+ * which is exactly what `notModelled` below exists to surface.
+ */
+const MODELLED_SCORING_KEYS = new Set([
+  'rec',
+  'pass_td',
+  'pass_yd',
+  'pass_int',
+  ...Object.values(RECEPTION_BONUS_KEYS),
+]);
+
 /** What managers call a per-reception value when they describe their league. */
 function receptionTier(base) {
   if (base === 0) return 'standard';
@@ -159,6 +176,7 @@ export function deriveScoringProfile(scoringSettings = {}, { startingSlots = [] 
   const pointsPerYard = scoring.pass_yd ?? null;
 
   const nonDefault = nonDefaultScoring(scoring);
+  const notModelled = nonDefault.filter((entry) => !MODELLED_SCORING_KEYS.has(entry.key));
 
   return {
     superflex:
@@ -176,6 +194,10 @@ export function deriveScoringProfile(scoringSettings = {}, { startingSlots = [] 
       interception: scoring.pass_int ?? null,
     },
     nonDefault,
+    // Non-default settings this tool has no field for, anywhere in the
+    // profile above — reported so doctor can list them instead of hiding
+    // scoring the rest of the publication silently ignores.
+    notModelled,
     isDefault: nonDefault.length === 0,
   };
 }

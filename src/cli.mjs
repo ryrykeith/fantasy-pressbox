@@ -10,6 +10,7 @@ import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig, rankEmoji, ROOT } from './config.mjs';
 import { describeFormat, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
+import { describeScoringSummary, describeUnmodelledScoring } from './scoringReport.mjs';
 import { openLeague, resolveWeek, captureWeek } from './pipeline.mjs';
 import { normalizeTransactions, normalizeFutureDraftCapital } from './sleeper/normalize.mjs';
 import { buildContext, buildPrompt, systemPromptOnly, taskPromptOnly, describePlayer } from './promptContext.mjs';
@@ -115,11 +116,8 @@ async function commandDoctor(config) {
     say(`                     Set LEAGUE_FORMAT in .env if that is wrong ` +
         `(${UNDETECTABLE_FORMAT_TYPES.join(', ')} can only be declared)`);
   }
-  const { superflex, reception } = league.format.scoring;
-  const tePremium = reception.byPosition.TE.bonus;
-  say(`  Scoring            ${superflex ? 'Superflex' : 'Single QB'}, ` +
-      `${reception.base} PPR` +
-      `${tePremium ? `, TE premium +${tePremium}` : ''}`);
+  for (const line of describeScoringSummary(league.format.scoring)) say(`  ${line}`);
+  for (const line of describeUnmodelledScoring(league.format.scoring)) say(`  ${line}`);
   say(`  Current week       ${week} (from ${source})`);
 
   reportRankEmoji(config, teams.length);
