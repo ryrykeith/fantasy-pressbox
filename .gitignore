@@ -29,3 +29,5 @@ ndx-export/
 .hench/session-cache.json
 .hench-commit-msg.txt
 .rex/.backups/
+.run-logs/
+claude_commands.log

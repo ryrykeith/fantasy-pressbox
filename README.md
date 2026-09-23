@@ -446,6 +446,14 @@ overrides. Never commit this file; `.gitignore` already prevents it.
 
 `.env.example` documents every available setting.
 
+**`LEAGUE_FORMAT`** is worth knowing about: it says what kind of league yours is
+— `dynasty`, `redraft` or `guillotine`. Leave it empty and the tool works it out
+from Sleeper, which can tell dynasty from redraft on its own. It cannot tell a
+**guillotine** league, because that format is run by the commissioner by hand and
+Sleeper still reports an ordinary head-to-head league — so declare that one
+yourself. `node src/cli.mjs doctor` prints what the tool decided and whether it
+was told or guessed.
+
 ### `config/editorial.yml` — how it sounds
 
 Plain text you can edit in any text editor. Change a value, save, run again.
@@ -669,6 +677,9 @@ The design rules live in [`AGENTS.md`](AGENTS.md) and [`docs/`](docs/):
   voice, awards, receipts
 - [`docs/prompt-design.md`](docs/prompt-design.md) — how a prompt is assembled
 - [`docs/sleeper-data.md`](docs/sleeper-data.md) — endpoints and data shapes
+
+`npm test` runs the suite in `tests/` with Node's built-in test runner. No test
+framework is installed, and none should be.
 
 The short version:
 

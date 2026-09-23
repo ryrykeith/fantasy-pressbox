@@ -12,7 +12,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT } from './config.mjs';
+import { ROOT, resolveRankingWeights } from './config.mjs';
 
 const TASK_PROMPTS = {
   'preseason-rankings': 'preseason-power-rankings.md',
@@ -103,14 +103,125 @@ function gameView(game) {
   };
 }
 
-function editorialView(config) {
+/** The plain-English name of a position, for prose the model will echo. */
+const POSITION_LABEL = { RB: 'running back', WR: 'wide receiver', TE: 'tight end' };
+
+/**
+ * The kind of player a reception premium actually rewards at each position.
+ *
+ * "An every-down tight end" and "a pass-catching running back" are the players
+ * a premium makes valuable; "a high-volume TE" is a description of a statistic.
+ * The first tells a model what to look for on a roster, the second does not.
+ */
+const PREMIUM_PLAYER_PHRASE = {
+  RB: 'a pass-catching running back',
+  WR: 'a high-target wide receiver',
+  TE: 'an every-down tight end',
+};
+
+/**
+ * Fantasy football's ordinary passing touchdown.
+ *
+ * Not a Sleeper detail — it is the value nearly every league uses, and the
+ * number a manager has in mind when they call six-point passing touchdowns
+ * unusual. Kept here rather than imported from the Sleeper defaults table so
+ * that provider field names stay behind src/sleeper/.
+ */
+const ORDINARY_PASSING_TOUCHDOWN = 4;
+
+/**
+ * What this league's scoring does to the value of a position.
+ *
+ * The scoring profile is facts: a tight end catch is worth 1.5 here. On its own
+ * that changes nothing — a model handed the number reports the number and goes
+ * on ranking tight ends as ordinary flex pieces. What changes an edition is the
+ * sentence saying what the number means for a ranking, so every entry carries
+ * the fact and the instruction together, the same way `unavailable` does.
+ *
+ * Derived rather than written into the prompt files because an instruction
+ * about TE premium is noise in a league that does not have one, and a prompt
+ * file cannot leave itself out. Only settings that differ upward from the
+ * ordinary case produce an entry; a league on Sleeper's defaults gets none,
+ * and its prompt says nothing about premiums it does not have.
+ *
+ * The instructions are deliberately about relative positional value rather
+ * than arithmetic. Told a tight end catch is worth 1.5, a model will try to do
+ * sums with it. Told an every-down tight end is a structural advantage, it
+ * ranks the roster that has one above the roster that does not — which is the
+ * judgement a power ranking is actually made of.
+ */
+function describePositionalValue(scoring) {
+  if (!scoring) return [];
+
+  const entries = [];
+
+  if (scoring.superflex) {
+    entries.push({
+      factor: 'superflex',
+      why: 'This league starts more than one quarterback, so startable quarterbacks are scarce.',
+      instruction:
+        'Treat quarterback quality as worth more than the raw ranking weight suggests — the ' +
+        'scarcity compounds. A team starting two quarterbacks it trusts holds a structural ' +
+        'advantage over one streaming the second, even when the rest of the rosters look level.',
+    });
+  }
+
+  const passingTouchdown = scoring.passing?.touchdown ?? null;
+  if (passingTouchdown !== null && passingTouchdown > ORDINARY_PASSING_TOUCHDOWN) {
+    entries.push({
+      factor: 'passingTouchdown',
+      why: `A passing touchdown is worth ${passingTouchdown} here, not the ordinary ${ORDINARY_PASSING_TOUCHDOWN}.`,
+      instruction:
+        'Quarterbacks score more relative to every other position than they usually do. A genuine ' +
+        'difference-maker at quarterback separates teams further than the ranking weight implies, ' +
+        'and a quarterback throwing three touchdowns is a bigger share of a winning score here.',
+    });
+  }
+
+  const reception = scoring.reception ?? {};
+  const base = reception.base ?? 0;
+
+  if (base >= 1) {
+    entries.push({
+      factor: 'receptionTier',
+      why: `Every reception is worth ${base}, so target volume is scoring in its own right.`,
+      instruction:
+        'Rate target earners and high-floor pass catchers above boom-or-bust yardage producers, ' +
+        'and treat a running back who catches passes as materially more valuable than one who ' +
+        'only runs.',
+    });
+  }
+
+  for (const position of reception.premiumPositions ?? []) {
+    const { perCatch, bonus } = reception.byPosition?.[position] ?? {};
+    if (!bonus) continue;
+    const label = POSITION_LABEL[position] ?? position;
+    const player = PREMIUM_PLAYER_PHRASE[position] ?? `a high-volume ${label}`;
+    entries.push({
+      factor: `receptionPremium:${position}`,
+      why:
+        `A ${label} catch is worth ${perCatch} in this league — ${bonus} more than the ${base} ` +
+        'every other position is paid for the same catch.',
+      instruction:
+        `Treat ${player} as a genuine positional advantage and rank it as one, not as an ` +
+        `ordinary flex piece. A roster holding one is ahead of a roster without, and a ${label} ` +
+        'out-producing the one across the matchup is often where the week was decided.',
+    });
+  }
+
+  return entries;
+}
+
+function editorialView(config, formatType) {
   return {
     tone: config.editorial.tone,
     roastIntensity: config.editorial.roast_intensity,
     rankingEmoji: config.editorial.ranking_emoji,
     sleeperMaxChars: config.editorial.output.sleeper_max_chars,
     includeEmoji: config.editorial.output.include_emoji,
-    rankingWeights: config.rankings.weights,
+    // Weights are per-format: a redraft league is never judged on the
+    // dynasty set's dynasty_value/future_draft_capital factors.
+    rankingWeights: resolveRankingWeights(config.rankings, formatType),
     movementGuidance: config.rankings.weekly,
     bannedPhrases: config.editorial.banned_phrases ?? [],
     awards: config.editorial.awards ?? {},
@@ -150,10 +261,14 @@ export function buildContext({
       benchSlots: league.benchSlots,
       taxiSlots: league.taxiSlots,
       format: league.format,
+      // Every edition, not just the rankings: a premium that decides who to
+      // rank first also decides who is favoured in a preview and who explains
+      // a recap. Empty for a league that scores ordinarily.
+      positionalValue: describePositionalValue(league.format?.scoring),
       playoffTeams: league.playoffTeams,
       playoffWeekStart: league.playoffWeekStart,
     },
-    editorial: editorialView(config),
+    editorial: editorialView(config, league.format?.type),
     week,
   };
 
@@ -293,14 +408,30 @@ function describeMissingContext({ task, context, week }) {
   }
 
   if (isRanking && !context.futureDraftCapital) {
-    missing.push({
-      field: 'futureDraftCapital',
-      why: 'No picks have been traded for any draft that has not yet been held.',
-      instruction:
-        'Every team holds its own future picks and nothing else. Do not discuss ' +
-        'draft capital as a point of difference between teams, and do not mention ' +
-        'picks for drafts that have already happened.',
-    });
+    // A dynasty league with nothing traded still has future picks — they are
+    // just untraded, which is the ordinary case. A redraft league has no such
+    // thing to begin with: rosters are torn up and re-drafted every season, so
+    // "nothing traded" would wrongly imply picks exist and simply haven't
+    // moved. The two absences need different instructions, not the same one.
+    if (context.league.format?.type === 'redraft') {
+      missing.push({
+        field: 'futureDraftCapital',
+        why: 'This is a redraft league: rosters are re-drafted every season, so there is no future draft capital.',
+        instruction:
+          'Draft capital is not a concept in this league and does not exist. Do not ' +
+          'discuss draft picks, future picks, or "assets" of that kind at all — judge ' +
+          'every roster only on the players currently on it.',
+      });
+    } else {
+      missing.push({
+        field: 'futureDraftCapital',
+        why: 'No picks have been traded for any draft that has not yet been held.',
+        instruction:
+          'Every team holds its own future picks and nothing else. Do not discuss ' +
+          'draft capital as a point of difference between teams, and do not mention ' +
+          'picks for drafts that have already happened.',
+      });
+    }
   }
 
   if (!context.transactions) {
