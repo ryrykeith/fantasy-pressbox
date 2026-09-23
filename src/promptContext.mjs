@@ -293,14 +293,30 @@ function describeMissingContext({ task, context, week }) {
   }
 
   if (isRanking && !context.futureDraftCapital) {
-    missing.push({
-      field: 'futureDraftCapital',
-      why: 'No picks have been traded for any draft that has not yet been held.',
-      instruction:
-        'Every team holds its own future picks and nothing else. Do not discuss ' +
-        'draft capital as a point of difference between teams, and do not mention ' +
-        'picks for drafts that have already happened.',
-    });
+    // A dynasty league with nothing traded still has future picks — they are
+    // just untraded, which is the ordinary case. A redraft league has no such
+    // thing to begin with: rosters are torn up and re-drafted every season, so
+    // "nothing traded" would wrongly imply picks exist and simply haven't
+    // moved. The two absences need different instructions, not the same one.
+    if (context.league.format?.type === 'redraft') {
+      missing.push({
+        field: 'futureDraftCapital',
+        why: 'This is a redraft league: rosters are re-drafted every season, so there is no future draft capital.',
+        instruction:
+          'Draft capital is not a concept in this league and does not exist. Do not ' +
+          'discuss draft picks, future picks, or "assets" of that kind at all — judge ' +
+          'every roster only on the players currently on it.',
+      });
+    } else {
+      missing.push({
+        field: 'futureDraftCapital',
+        why: 'No picks have been traded for any draft that has not yet been held.',
+        instruction:
+          'Every team holds its own future picks and nothing else. Do not discuss ' +
+          'draft capital as a point of difference between teams, and do not mention ' +
+          'picks for drafts that have already happened.',
+      });
+    }
   }
 
   if (!context.transactions) {

@@ -16,4 +16,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 |-------|--------|
 | [Define the format taxonomy and config schema](./define-the-format-taxonomy-and-config.md) | completed |
 | [Resolve declared format over Sleeper detection](./resolve-declared-format-over-sleeper.md) | completed |
-| [Thread resolved format into prompt context and the unavailable list](./thread-resolved-format-into-prompt.md) | pending |
+| [Thread resolved format into prompt context and the unavailable list](./thread-resolved-format-into-prompt.md) | in_progress |
