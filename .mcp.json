@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "rex": {
+      "command": "ndx",
+      "args": [
+        "rex",
+        "mcp",
+        "."
+      ]
+    },
+    "sourcevision": {
+      "command": "ndx",
+      "args": [
+        "sv",
+        "mcp",
+        "."
+      ]
+    }
+  }
+}

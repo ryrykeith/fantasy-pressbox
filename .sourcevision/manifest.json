@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0.0",
+  "toolVersion": "0.1.0",
+  "analyzedAt": "2026-09-23T05:20:11.176Z",
+  "gitSha": "d38e50134cbb7abbd16a39b54380a9ce6e8b2cda",
+  "gitBranch": "main",
+  "targetPath": "/Users/ryankeith/pet-projects/fantasy-pressbox",
+  "modules": {
+    "inventory": {
+      "status": "complete",
+      "startedAt": "2026-09-23T05:20:11.012Z",
+      "completedAt": "2026-09-23T05:20:11.027Z"
+    },
+    "imports": {
+      "status": "complete",
+      "startedAt": "2026-09-23T05:20:11.028Z",
+      "completedAt": "2026-09-23T05:20:11.086Z"
+    },
+    "classifications": {
+      "status": "complete",
+      "startedAt": "2026-09-23T05:20:11.086Z",
+      "completedAt": "2026-09-23T05:20:11.095Z"
+    },
+    "zones": {
+      "status": "complete",
+      "startedAt": "2026-09-23T05:20:11.095Z",
+      "completedAt": "2026-09-23T05:20:11.112Z"
+    },
+    "components": {
+      "status": "complete",
+      "startedAt": "2026-09-23T05:20:11.113Z",
+      "completedAt": "2026-09-23T05:20:11.120Z"
+    },
+    "callgraph": {
+      "status": "complete",
+      "startedAt": "2026-09-23T05:20:11.121Z",
+      "completedAt": "2026-09-23T05:20:11.176Z"
+    }
+  },
+  "language": "typescript",
+  "languages": [
+    "typescript"
+  ],
+  "zoneOutputs": true
+}

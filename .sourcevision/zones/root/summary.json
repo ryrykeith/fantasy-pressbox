@@ -1,0 +1,20 @@
+{
+  "id": "root",
+  "name": "Root",
+  "description": "1 files, primarily JavaScript",
+  "files": [
+    "setup.mjs"
+  ],
+  "entryPoints": [],
+  "cohesion": 1,
+  "coupling": 0,
+  "fileCount": 1,
+  "lineCount": 384,
+  "riskMetrics": {
+    "cohesion": 1,
+    "coupling": 0,
+    "riskScore": 0,
+    "riskLevel": "healthy",
+    "failsThreshold": false
+  }
+}

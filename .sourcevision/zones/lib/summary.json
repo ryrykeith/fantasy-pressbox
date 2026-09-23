@@ -1,0 +1,24 @@
+{
+  "id": "lib",
+  "name": "Lib",
+  "description": "2 files, primarily JavaScript",
+  "files": [
+    "src/lib/env.mjs",
+    "src/lib/yaml.mjs"
+  ],
+  "entryPoints": [
+    "src/lib/env.mjs",
+    "src/lib/yaml.mjs"
+  ],
+  "cohesion": 0,
+  "coupling": 1,
+  "fileCount": 2,
+  "lineCount": 175,
+  "riskMetrics": {
+    "cohesion": 0,
+    "coupling": 1,
+    "riskScore": 1,
+    "riskLevel": "catastrophic",
+    "failsThreshold": true
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "id": "src",
+  "name": "Src",
+  "description": "8 files, primarily JavaScript",
+  "files": [
+    "src/cli.mjs",
+    "src/config.mjs",
+    "src/generate.mjs",
+    "src/pipeline.mjs",
+    "src/promptContext.mjs",
+    "src/sleeper/client.mjs",
+    "src/store.mjs",
+    "src/validate.mjs"
+  ],
+  "entryPoints": [],
+  "cohesion": 0.78,
+  "coupling": 0.22,
+  "fileCount": 8,
+  "lineCount": 1539,
+  "riskMetrics": {
+    "cohesion": 0.78,
+    "coupling": 0.22,
+    "riskScore": 0.21999999999999997,
+    "riskLevel": "healthy",
+    "failsThreshold": false
+  }
+}
