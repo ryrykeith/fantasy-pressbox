@@ -17,6 +17,6 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Chop recap edition](./chop-recap-edition.md) | pending |
+| [Chop recap edition](./chop-recap-edition.md) | completed |
 | [Guillotine power rankings edition](./guillotine-power-rankings-edition.md) | pending |
 | [Survival preview edition](./survival-preview-edition.md) | in_progress |
