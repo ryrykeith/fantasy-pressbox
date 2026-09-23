@@ -207,6 +207,37 @@ The ledger stores the full roster plus the ordered history rather than a
 survivor list per week; `survivorsAt(ledger, week)` answers for any week from
 those two, without writing eighteen names out eighteen times in every snapshot.
 
+#### Survivor standings, not win-loss standings
+
+`buildContext` in `src/promptContext.mjs` has a season-long team view for two
+different purposes — `context.teams`, the full roster picture rankings
+editions judge, and `context.standings`, a compact leaderboard — and both are
+format-aware for the same reason the week view is: a guillotine league's
+Sleeper-reported win-loss record comes from matchups nobody played, so it is
+not a fact, and nothing downstream may cite it.
+
+- `rosterView` (feeding `context.teams`) omits `record` whenever
+  `hasMatchups(format)` is false — the same `includeRecord` treatment
+  `teamWeekView` already applies to a single week's record, applied here to
+  the season's.
+- For `hasEliminations(format)` (currently just guillotine), `context.standings`
+  is built by `survivalStandingsView` instead of the ordinary wins-then-points
+  sort: teams still alive, ranked purely by `seasonPointsFor`. Neither `record`
+  nor `pointsAgainst` appears — both are opponent-shaped facts, and this format
+  has no opponents.
+- A chopped team is not sorted to the bottom of `context.standings`; it is
+  removed from it entirely. `eliminationHistoryView` builds a separate
+  `context.eliminationHistory` list — `{ team, week }` per chop, in week order
+  — from the same `eliminationLedger.history` the elimination ledger produces,
+  so a model can never mistake a team that is no longer in the league for one
+  still competing. It is present as `[]` rather than absent when nobody has
+  been chopped yet: an empty list is a fact ("nobody chopped so far"), while an
+  absent key would be indistinguishable from "not tracked in this edition".
+
+`eliminationLedger` reaches `buildContext` as a plain parameter — `src/cli.mjs`
+passes through the same ledger `captureWeek` already attached to the week's
+snapshot, so nothing downstream builds its own copy.
+
 ### Scoring profile
 
 `format.scoring` is built by `deriveScoringProfile` in

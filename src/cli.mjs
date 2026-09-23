@@ -265,11 +265,16 @@ async function commandEdition(config, args, task) {
   let priorWeekAnalysis = null;
   let transactions = null;
   let gradedPredictions = null;
+  // Who is still alive, for the formats where that changes. Not built for
+  // preseason-rankings — the season has not started, so nobody has been
+  // chopped and captureWeek is never called to compute it.
+  let eliminationLedger = null;
 
   if (task === 'preseason-rankings') {
     say('Preseason edition: regular-season results are deliberately excluded.');
   } else {
     const captured = await captureWeek({ ...ctx, week });
+    eliminationLedger = captured.elimination ?? null;
     transactions = normalizeTransactions(captured.transactions, {
       teamsByRosterId,
       players,
@@ -321,6 +326,7 @@ async function commandEdition(config, args, task) {
     gradedPredictions,
     transactions,
     futureDraftCapital,
+    eliminationLedger,
     format,
   });
 
