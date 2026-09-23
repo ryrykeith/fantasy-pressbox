@@ -11,8 +11,10 @@ import { analyzeWeek } from './analysis/week.mjs';
 import { buildEliminationLedger } from './analysis/elimination.mjs';
 import { buildDangerBoard } from './analysis/danger.mjs';
 import { buildFaabMarket } from './analysis/faab.mjs';
+import { byeWeekTableSource, upcomingByeExposure } from './analysis/byeExposure.mjs';
 import { hasEliminations } from './format.mjs';
 import { createStore } from './store.mjs';
+import { loadByeWeekTable } from './config.mjs';
 
 export async function openLeague(config, { refreshPlayers = false } = {}) {
   const client = createClient({ leagueId: config.leagueId, dataDir: config.dataDir });
@@ -151,6 +153,35 @@ export function readFaabMarket({ store, league, teams, config = null, throughWee
   });
 }
 
+/**
+ * How many rostered starters each survivor is about to lose to a bye
+ * (src/analysis/byeExposure.mjs), for the next few weeks starting at
+ * `throughWeek`. Fetches nothing — `league.players` is already fetched once
+ * per run by `openLeague`, and the bye-week table is a committed config file,
+ * not something this reads over the network. Null for a format where nobody
+ * is ever eliminated, the same rule `readDangerBoard`/`readFaabMarket` follow.
+ */
+export function readByeExposure({ store, league, teams, players, config = null, throughWeek, weekCount }) {
+  if (!hasEliminations(league.format)) return null;
+  const weeks = storedWeekScores(store, league.season, throughWeek);
+  const ledger = buildEliminationLedger({
+    teams,
+    startingSlots: league.startingSlots,
+    declared: config?.guillotine?.eliminations ?? [],
+    weeks,
+    throughWeek,
+  });
+  return upcomingByeExposure({
+    teams,
+    players,
+    byeWeeks: loadByeWeekTable({ season: league.season }),
+    fromWeek: throughWeek,
+    weekCount,
+    ledger,
+    source: byeWeekTableSource(league.season),
+  });
+}
+
 /** Fetch one week, save the raw bundle and the analyzed snapshot. */
 export async function captureWeek({ client, store, league, teams, players, week, config = null }) {
   const [matchups, transactions] = await Promise.all([
@@ -221,6 +252,22 @@ export async function captureWeek({ client, store, league, teams, players, week,
       })
     : null;
 
+  // How many rostered starters each survivor is about to lose to an NFL bye,
+  // for the next few weeks starting at this one (src/analysis/byeExposure.mjs).
+  // Reads the season's committed config/bye-weeks.<season>.yml table rather
+  // than anything fetched above; the elimination ledger just built restricts
+  // this to teams still alive, the same convention `danger` and `faab` follow.
+  const byeExposure = elimination
+    ? upcomingByeExposure({
+        teams,
+        players,
+        byeWeeks: loadByeWeekTable({ season: league.season }),
+        fromWeek: week,
+        ledger: elimination,
+        source: byeWeekTableSource(league.season),
+      })
+    : null;
+
   const snapshotPath = store.saveSnapshot(league.season, week, {
     week,
     season: league.season,
@@ -237,6 +284,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
     ...(elimination ? { elimination } : {}),
     ...(danger ? { danger } : {}),
     ...(faab ? { faab } : {}),
+    ...(byeExposure ? { byeExposure } : {}),
     analysis,
   });
 
@@ -247,6 +295,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
     ...(elimination ? { elimination } : {}),
     ...(danger ? { danger } : {}),
     ...(faab ? { faab } : {}),
+    ...(byeExposure ? { byeExposure } : {}),
     rawPath,
     snapshotPath,
   };
