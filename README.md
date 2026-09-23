@@ -393,6 +393,7 @@ Run them all from inside the project folder.
 | `node src/cli.mjs recap` | Build last week's recap and awards. |
 | `node src/cli.mjs chop-recap` | Build last week's chop recap and awards. Guillotine leagues only — it replaces `recap`. |
 | `node src/cli.mjs rankings` | Build the power rankings. |
+| `node src/cli.mjs survival-rankings` | Build the power rankings for a guillotine league — the teams still alive, ranked on the floor that keeps them there. Guillotine leagues only; it replaces `rankings`. |
 | `node src/cli.mjs preseason-rankings` | Build preseason rankings, ignoring all results. |
 | `node src/cli.mjs fetch` | Just download and save a week of league data. |
 | `node src/cli.mjs record <file> --task <name>` | File a finished edition you pasted back from a chat. |
@@ -514,6 +515,7 @@ It prints your finished table against your real number of teams:
 | If you… | Then… |
 |---|---|
 | Have more teams than emoji | The last emoji repeats, and `doctor` warns you |
+| Have an 18-team league | The default already runs to 18 — guillotine leagues usually start that big, so nothing repeats |
 | Have fewer teams than emoji | The extras are simply never used |
 | Write your own list | It **replaces** the default completely — no leftovers mixed in |
 | Want no emoji at all | Set `include_emoji: false` and the whole scheme switches off |
@@ -545,14 +547,14 @@ ranking_emoji:
   1: "🏈"
 ```
 
-A 14-team league — just keep going:
+Bigger than 18 — just keep going:
 
 ```yaml
 ranking_emoji:
   1: "🥇"
   # ...
-  13: "💀"
-  14: "💀"
+  19: "💀"
+  20: "💀"
 ```
 
 Because the emoji are read from config rather than written into the prompt,
@@ -562,8 +564,15 @@ recaps alike.
 ### `config/rankings.yml` — how teams are judged
 
 - `weights` — how much starting lineup, dynasty value, depth, quarterback
-  play, draft capital, flexibility and contender status each count. They
-  should add up to `1.0`.
+  play, draft capital, flexibility and contender status each count. There is
+  one set per league format, and each set should add up to `1.0`. The
+  `guillotine` set is a different list on purpose: in that format you do not
+  need the most points, only to not be last, so it weighs a team's weekly
+  **floor**, its bye-week exposure and its remaining FAAB — and weighs dynasty
+  value and draft capital at nothing at all.
+- If you override a set, write out every line it needs. A partial set replaces
+  the whole thing rather than merging into the default, so five lines means
+  five.
 - `weekly.max_normal_movement` — how far a team normally moves in one week.
   One Sunday is a small sample, and the rankings should act like it.
 

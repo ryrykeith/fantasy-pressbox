@@ -26,9 +26,18 @@ const DEFAULT_EDITORIAL = {
   tone: 'humorous',
   roast_intensity: 'medium',
   output: { sleeper_max_chars: 900, include_emoji: true },
+  // Eighteen entries, not twelve: a guillotine league normally starts with one
+  // team per NFL regular-season week, and `rankEmoji` below repeats the last
+  // entry past the end of the table — so a twelve-entry table gave an 18-team
+  // league the same emoji six times over and the bottom stopped meaning
+  // anything. The first twelve are unchanged, so a 12-team league prints
+  // exactly what it always did. Kept in step with config/editorial.yml, which
+  // is what a real run actually reads; this is only the fallback for a missing
+  // file.
   ranking_emoji: {
     1: '🥇', 2: '🥈', 3: '🥉', 4: '🔥', 5: '😤', 6: '👀',
     7: '🤨', 8: '🎲', 9: '🫠', 10: '💩', 11: '💩', 12: '💩',
+    13: '🗑️', 14: '🗑️', 15: '⚰️', 16: '⚰️', 17: '☠️', 18: '☠️',
   },
 };
 
@@ -40,15 +49,13 @@ const DEFAULT_EDITORIAL = {
  * dynasty set to a redraft league spent 35% of the ranking on assets
  * (dynasty_value, future_draft_capital) that a redraft league does not have.
  *
- * There is no fallback for a format without its own set — currently just
- * `guillotine`, whose real set is specified by its own epic (Epic: Guillotine
- * league coverage). Silently ranking a guillotine league on the dynasty set
- * would be worse than wrong (survival depends on weekly floor, not asset
- * quality) with nothing to say so, so `resolveRankingWeights` refuses instead
- * of guessing. That refusal reaches only the editions that actually rank —
- * src/promptContext.mjs asks for a set for those and no others — so a
- * guillotine league can publish its survival preview while its weight set is
- * still being specified, and is refused only if it asks for a ranking.
+ * There is no fallback for a format without its own set. Every format the
+ * publication understands now has one, but `resolveRankingWeights` still
+ * refuses rather than borrowing another format's: silently ranking one league
+ * on another's criteria is worse than wrong, because nothing says so.
+ *
+ * That refusal reaches only the editions that actually rank —
+ * src/promptContext.mjs asks for a set for those and no others.
  */
 const DEFAULT_RANKING_WEIGHTS = {
   dynasty: {
@@ -72,6 +79,31 @@ const DEFAULT_RANKING_WEIGHTS = {
     roster_flexibility: 0.05,
     contender_viability: 0.15,
   },
+  guillotine: {
+    // The format inverts the usual advice, and so does the weight set. You do
+    // not need the most points, only to not be last, so the number that keeps
+    // a roster alive is the one it falls to on a bad week — not the one it
+    // reaches on a good one. `weekly_floor` is therefore the heaviest factor
+    // in any set here, and there is no `contender_viability`: the only way to
+    // contend is to still be in the league.
+    weekly_floor: 0.4,
+    starting_lineup: 0.25,
+    // A bye cluster is a genuine elimination risk in this format rather than a
+    // week to shrug off, which is why it is weighed at all — no other set has
+    // it.
+    bye_exposure: 0.15,
+    // Ammunition, not cash. Every chop dumps a whole roster onto the wire, and
+    // the pools get better as the season goes on, so a survivor with budget
+    // left is a survivor who can still improve.
+    faab_remaining: 0.1,
+    // Injury survivability specifically: one hole in a starting lineup is how
+    // a floor collapses in the week that ends you.
+    depth: 0.1,
+    // No dynasty_value and no future_draft_capital, and not because they are
+    // small — because they are nothing. A chopped team's season is over, so a
+    // pick for a draft it will not be in and a player it will not get to
+    // start are both worth exactly zero this week.
+  },
 };
 
 const DEFAULT_RANKINGS = {
@@ -90,7 +122,7 @@ const DEFAULT_RANKINGS = {
 const DEFAULT_GUILLOTINE = { eliminations: {} };
 
 /** Per-format weight maps: a partial override in rankings.yml replaces the whole set, never merges into it. */
-const RANKING_WEIGHT_REPLACE_KEYS = ['weights.dynasty', 'weights.redraft'];
+const RANKING_WEIGHT_REPLACE_KEYS = ['weights.dynasty', 'weights.redraft', 'weights.guillotine'];
 
 /** How far a weight set's sum may drift from 1.0 before it is treated as wrong, to absorb float rounding. */
 const WEIGHT_SUM_TOLERANCE = 1e-6;
@@ -125,10 +157,11 @@ export function validateRankingWeights(weights) {
  * Picks the weight set for a resolved league format.
  *
  * There is no fallback to another format's set. A format with no set of its
- * own in config/rankings.yml (today, only `guillotine` — see the comment on
- * `DEFAULT_RANKING_WEIGHTS`) is a loud error naming the missing key, because
+ * own in config/rankings.yml is a loud error naming the missing key, because
  * silently reusing another format's weights would rank that league on
- * criteria that do not apply to it, with nothing saying so.
+ * criteria that do not apply to it, with nothing saying so. That is the case
+ * an operator who trims a set out of the file lands in, and the case a newly
+ * added format lands in before its own set is written.
  */
 export function resolveRankingWeights(rankings, formatType) {
   const weights = rankings?.weights?.[formatType];

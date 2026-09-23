@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
-  refuseGuillotineMatchupEdition,
+  refuseOrdinaryEditionInGuillotineLeague,
   refuseSurvivalEditionWithoutEliminations,
 } from '../src/cli.mjs';
 import { TASKS, ELIMINATION_ONLY_TASKS, buildContext, buildPrompt } from '../src/promptContext.mjs';
@@ -271,7 +271,7 @@ test('the CLI allows a chop recap in a declared guillotine league', () => {
 
 test('the CLI refuses recap on a declared guillotine league, and names chop-recap as the replacement', () => {
   assert.throws(
-    () => refuseGuillotineMatchupEdition(testConfig('guillotine'), 'recap'),
+    () => refuseOrdinaryEditionInGuillotineLeague(testConfig('guillotine'), 'recap'),
     (error) => {
       assert.match(error.message, /`chop-recap`/);
       assert.doesNotMatch(error.message, /not shipped/i, 'chop-recap has shipped');
@@ -291,8 +291,11 @@ test('buildPrompt refuses a chop recap built from a head-to-head context', () =>
   }
 });
 
-test('survival-preview and chop-recap are exactly the elimination-only tasks', () => {
-  assert.deepEqual(ELIMINATION_ONLY_TASKS, ['survival-preview', 'chop-recap']);
+test('chop-recap is one of the elimination-only tasks', () => {
+  assert.ok(ELIMINATION_ONLY_TASKS.includes('chop-recap'));
+  assert.ok(ELIMINATION_ONLY_TASKS.includes('survival-preview'));
+  // The full list is pinned in tests/guillotine-rankings.test.mjs, which is
+  // where the third member was added.
 });
 
 /* ------------------------------------------------------------------ the chop line */

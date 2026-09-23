@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
-  refuseGuillotineMatchupEdition,
+  refuseOrdinaryEditionInGuillotineLeague,
   refuseSurvivalEditionWithoutEliminations,
   recordBlock,
 } from '../src/cli.mjs';
@@ -269,14 +269,15 @@ test('buildPrompt refuses a survival preview built from a head-to-head context',
   }
 });
 
-test('survival-preview and chop-recap are the elimination-only tasks, and preview/recap are still refused for guillotine', () => {
-  assert.deepEqual(ELIMINATION_ONLY_TASKS, ['survival-preview', 'chop-recap']);
+test('survival-preview is an elimination-only task, and preview/recap are still refused for guillotine', () => {
+  assert.ok(ELIMINATION_ONLY_TASKS.includes('survival-preview'));
+  assert.ok(ELIMINATION_ONLY_TASKS.includes('chop-recap'));
   assert.throws(
-    () => refuseGuillotineMatchupEdition(testConfig('guillotine'), 'preview'),
+    () => refuseOrdinaryEditionInGuillotineLeague(testConfig('guillotine'), 'preview'),
     /`survival-preview`/,
   );
   assert.throws(
-    () => refuseGuillotineMatchupEdition(testConfig('guillotine'), 'recap'),
+    () => refuseOrdinaryEditionInGuillotineLeague(testConfig('guillotine'), 'recap'),
     /`chop-recap`/,
   );
 });
@@ -291,7 +292,7 @@ test('survival-preview and chop-recap are the elimination-only tasks, and previe
 test('both the preview and recap refusals point at commands that now exist', () => {
   for (const [task, replacement] of [['preview', 'survival-preview'], ['recap', 'chop-recap']]) {
     assert.throws(
-      () => refuseGuillotineMatchupEdition(testConfig('guillotine'), task),
+      () => refuseOrdinaryEditionInGuillotineLeague(testConfig('guillotine'), task),
       (error) => {
         assert.doesNotMatch(error.message, /not shipped|has not shipped yet/i);
         assert.match(error.message, new RegExp(`\`${replacement}\``));
