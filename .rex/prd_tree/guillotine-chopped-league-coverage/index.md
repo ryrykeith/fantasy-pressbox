@@ -15,4 +15,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 |-------|--------|
 | [Guard rails against head-to-head output in non-matchup leagues](./guard-rails-against-head-to-head/index.md) | completed |
 | [Guillotine editions](./guillotine-editions/index.md) | pending |
-| [Guillotine league model](./guillotine-league-model/index.md) | pending |
+| [Guillotine league model](./guillotine-league-model/index.md) | completed |

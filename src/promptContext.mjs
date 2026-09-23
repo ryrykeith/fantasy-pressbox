@@ -311,11 +311,53 @@ function eliminationHistoryView(eliminationLedger) {
 }
 
 /**
+ * The waiver market for a guillotine league: what each survivor has left to
+ * spend, and the player pool each chop dumped onto the wire for them to
+ * spend it on.
+ *
+ * src/analysis/faab.mjs deals only in player ids and numbers; turning a
+ * released player id into a line a model can read is this file's job, the
+ * same split rosterView already makes for a team's own roster. A pool whose
+ * matchup data was never fetched carries `note` instead of a player list —
+ * see src/analysis/faab.mjs#releasedPool — and that note is passed through
+ * unchanged rather than papered over, so an editor knows to go fetch it.
+ */
+function faabMarketView(faabMarket, players) {
+  const describe = (id) => describePlayer(id, players[id]);
+  return {
+    leagueBudget: faabMarket.budget,
+    balances: faabMarket.balances.map((entry) => ({
+      team: entry.team,
+      spent: entry.spent,
+      remaining: entry.remaining,
+    })),
+    releasedPools: faabMarket.releasedPools.map((pool) => ({
+      week: pool.week,
+      releasedBy: pool.team,
+      ...(pool.note ? { note: pool.note } : {}),
+      players: pool.playerIds.map(
+        (id) => `${describe(id)} — ${pool.playerPoints?.[id] ?? 0} pts that week`,
+      ),
+      ...(pool.bids?.length
+        ? {
+            bids: pool.bids.map(
+              (bid) => `${bid.wonBy} won ${describe(bid.playerId)} for $${bid.amount} (week ${bid.week})`,
+            ),
+          }
+        : {}),
+    })),
+  };
+}
+
+/**
  * @param {object} input
  * @param {'preseason-rankings'|'rankings'|'preview'|'recap'|'postseason'} input.task
  * @param {object|null} input.eliminationLedger built by
  *        src/analysis/elimination.mjs#buildEliminationLedger; only read for a
  *        format where teams are eliminated (src/format.mjs#hasEliminations).
+ * @param {object|null} input.faabMarket built by
+ *        src/analysis/faab.mjs#buildFaabMarket; only read alongside
+ *        eliminationLedger, for the same formats.
  */
 export function buildContext({
   task,
@@ -332,6 +374,7 @@ export function buildContext({
   transactions = null,
   futureDraftCapital = null,
   eliminationLedger = null,
+  faabMarket = null,
   format = 'sleeper',
 }) {
   // Sleeper reports pairings for every league, including the formats that never
@@ -372,6 +415,10 @@ export function buildContext({
     // both left out entirely rather than reported as zero.
     context.standings = survivalStandingsView(teams, eliminationLedger);
     context.eliminationHistory = eliminationHistoryView(eliminationLedger);
+    // Null before the season's first capture (no ledger has run yet) or in a
+    // league with no waiver budget configured at all — either way, absent
+    // rather than a market report with nothing in it.
+    if (faabMarket) context.faabMarket = faabMarketView(faabMarket, players);
   } else {
     context.standings = teams
       .slice()

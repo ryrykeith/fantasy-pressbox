@@ -421,6 +421,38 @@ export function normalizeTransactions(transactions, { teamsByRosterId, players, 
     .filter((entry) => entry.moves.length > 0);
 }
 
+/**
+ * Winning FAAB bids on a specific set of players, out of raw transactions.
+ *
+ * Reads exactly the same raw fields normalizeTransactions already reads
+ * (`status`, `adds`, `settings.waiver_bid`) rather than a second transaction
+ * parser — this exists alongside it, not instead of it, because the FAAB
+ * market (src/analysis/faab.mjs) needs a bid matched to one specific player
+ * id, and normalizeTransactions' `moves` are prose lines built for reading,
+ * not for matching against.
+ *
+ * A transaction only counts if it both completed and carried a bid: an
+ * ordinary free-agent add has no `waiver_bid` at all and is silently not a
+ * bid, the same way normalizeTransactions treats a missing bid as `null`
+ * rather than zero.
+ */
+export function waiverBidsFor(transactions, playerIds, { teamsByRosterId }) {
+  const wanted = new Set(playerIds);
+  const name = (rosterId) => teamsByRosterId.get(rosterId)?.name ?? `Roster ${rosterId}`;
+
+  const bids = [];
+  for (const entry of transactions || []) {
+    if (entry.status !== 'complete') continue;
+    const amount = entry.settings?.waiver_bid;
+    if (amount === undefined || amount === null) continue;
+    for (const [playerId, rosterId] of Object.entries(entry.adds || {})) {
+      if (!wanted.has(playerId)) continue;
+      bids.push({ playerId, week: entry.leg ?? null, amount, wonBy: name(rosterId) });
+    }
+  }
+  return bids.sort((a, b) => (a.week ?? 0) - (b.week ?? 0));
+}
+
 const ORDINALS = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'];
 const ordinal = (round) => ORDINALS[round] ?? `round ${round}`;
 

@@ -18,6 +18,7 @@ import { parseYaml } from './lib/yaml.mjs';
 import { applyEnvFile } from './lib/env.mjs';
 import { parseDeclaredFormatType } from './format.mjs';
 import { parseDeclaredEliminations } from './analysis/elimination.mjs';
+import { byeWeekTableSource, parseByeWeekTable } from './analysis/byeExposure.mjs';
 
 export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -266,6 +267,41 @@ export function loadConfig({
     // where no team is ever eliminated.
     guillotine: { eliminations },
   };
+}
+
+/**
+ * Reads and validates a season's bye-week table (src/analysis/byeExposure.mjs).
+ *
+ * Unlike every other config/*.yml this file reads, there is no honest fallback
+ * for a missing one: "no table found" cannot default to "nobody has a bye",
+ * the same reasoning `resolveRankingWeights` already applies to a format with
+ * no weight set. A season without its table yet is refused loudly, naming the
+ * generator that produces it, rather than reporting confident zeroes for
+ * every survivor.
+ *
+ * Season-specific rather than part of `loadConfig()` because the season is
+ * only reliably known once a league has actually been opened
+ * (`league.season` in src/pipeline.mjs) — `config.season` here is only ever
+ * an operator's optional override of what Sleeper already says.
+ */
+export function loadByeWeekTable({ season, configDir = join(ROOT, 'config') } = {}) {
+  const source = byeWeekTableSource(season);
+  const path = join(configDir, `bye-weeks.${season}.yml`);
+  if (!existsSync(path)) {
+    throw new Error(
+      `No bye-week table for season ${season} (expected ${source}).\n` +
+        `Generate it with: node scripts/fetch-bye-weeks.mjs ${season}`,
+    );
+  }
+
+  let parsed;
+  try {
+    parsed = parseYaml(readFileSync(path, 'utf8'));
+  } catch (error) {
+    throw new Error(`Could not read ${path}: ${error.message}`);
+  }
+
+  return parseByeWeekTable(parsed, { season, source });
 }
 
 /** The emoji that precedes a team at a given rank, e.g. 1 -> 🥇. */
