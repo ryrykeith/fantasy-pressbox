@@ -21,6 +21,14 @@ So this edition must do three jobs at once:
 3. **Look forward.** Say who is set up for next season and who is about to
    discover that their window closed.
 
+## Positional value
+
+`league.positionalValue` names the ways this league's scoring changes what a
+position is worth. Each entry states the fact and the instruction that follows
+from it. Apply every one of them — both to the final ranking and to the audit,
+where misreading what this league pays a position is one of the ways an earlier
+edition got a team wrong. An empty list means nothing here is unusual.
+
 ## Structure
 
 One post per item, separated by `%%%`:

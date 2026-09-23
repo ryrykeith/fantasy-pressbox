@@ -2,6 +2,12 @@
 
 The week is over and the scores in `thisWeek` are final. This is the autopsy.
 
+`league.positionalValue` names the ways this league's scoring changes what a
+position is worth. Each entry states the fact and the instruction that follows
+from it. Apply every one of them when you explain why a result happened — a
+position this league pays extra for is often the reason a score looks the way
+it does. An empty list means nothing here is unusual.
+
 ## Structure
 
 One post per item, separated by `%%%`, numbered in the header:
