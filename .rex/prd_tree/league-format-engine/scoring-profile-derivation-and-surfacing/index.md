@@ -16,4 +16,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 |-------|--------|
 | [Derive a structured scoring profile from scoring_settings](./derive-a-structured-scoring-profile.md) | completed |
 | [Report the scoring profile in doctor](./report-the-scoring-profile-in-doctor.md) | pending |
-| [Surface positional value implications in every edition prompt](./surface-positional-value-implications.md) | pending |
+| [Surface positional value implications in every edition prompt](./surface-positional-value-implications.md) | completed |
