@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "rex": {
-      "command": "fantasy-pressbox",
+      "command": "ndx",
       "args": [
         "rex",
         "mcp",
@@ -9,7 +9,7 @@
       ]
     },
     "sourcevision": {
-      "command": "fantasy-pressbox",
+      "command": "ndx",
       "args": [
         "sv",
         "mcp",

@@ -2,9 +2,9 @@
 # Re-run `ndx init` to regenerate.
 
 [mcp_servers.rex]
-command = "fantasy-pressbox"
+command = "ndx"
 args = ["rex", "mcp", "."]
 
 [mcp_servers.sourcevision]
-command = "fantasy-pressbox"
+command = "ndx"
 args = ["sv", "mcp", "."]

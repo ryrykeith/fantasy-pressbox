@@ -28,3 +28,4 @@ ndx-export/
 .hench/reviews/
 .hench/session-cache.json
 .hench-commit-msg.txt
+.rex/.backups/
