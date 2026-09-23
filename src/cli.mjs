@@ -18,6 +18,7 @@ import { normalizeTransactions, normalizeFutureDraftCapital } from './sleeper/no
 import {
   TASKS,
   ELIMINATION_ONLY_TASKS,
+  FORWARD_LOOKING_TASKS,
   buildContext,
   buildPrompt,
   systemPromptOnly,
@@ -41,6 +42,7 @@ Commands
   preview                       Build the weekly matchup previews
   survival-preview              Build the weekly survival preview (guillotine leagues)
   recap                         Build the weekly recap and awards
+  chop-recap                    Build the weekly chop recap and awards (guillotine leagues)
   rankings                      Build the weekly power rankings
   preseason-rankings            Build preseason rankings (ignores all results)
   record <file>                 File a finished edition you pasted back from a chat
@@ -61,6 +63,7 @@ Examples
   node src/cli.mjs recap --format imessage --generate
   node src/cli.mjs record output/week2.txt --task preview
   node src/cli.mjs survival-preview --week 3
+  node src/cli.mjs chop-recap --week 3
 `;
 
 function parseArgs(argv) {
@@ -102,6 +105,18 @@ function requireLeagueId(config) {
 const GUILLOTINE_EDITION_FOR = { preview: 'survival-preview', recap: 'chop-recap' };
 
 /**
+ * The other direction: which ordinary edition a guillotine-only one replaces.
+ *
+ * Derived from GUILLOTINE_EDITION_FOR rather than written out a second time,
+ * so the two guards below can never name different commands for the same
+ * pair — `refuseGuillotineMatchupEdition` sends a guillotine league one way,
+ * `refuseSurvivalEditionWithoutEliminations` sends everyone else back.
+ */
+const ORDINARY_EDITION_FOR = Object.fromEntries(
+  Object.entries(GUILLOTINE_EDITION_FOR).map(([ordinary, guillotine]) => [guillotine, ordinary]),
+);
+
+/**
  * Refuses a matchup-shaped edition before any work begins, for a guillotine league.
  *
  * Guillotine can only ever be DECLARED — Sleeper has no field that reveals it
@@ -134,13 +149,19 @@ export function refuseGuillotineMatchupEdition(config, task) {
  * the only format anyone is chopped out of, and it can only ever be declared.
  * So an undeclared league is definitively not one, `config.leagueFormat`
  * settles it outright, and no Sleeper call is needed to find out.
+ *
+ * Covers both directions ELIMINATION_ONLY_TASKS names — the forward-looking
+ * survival preview and the backward-looking chop recap — with one message,
+ * naming whichever ordinary edition (ORDINARY_EDITION_FOR) actually replaces
+ * the one that was asked for.
  */
 export function refuseSurvivalEditionWithoutEliminations(config, task) {
   if (!ELIMINATION_ONLY_TASKS.includes(task) || config.leagueFormat === 'guillotine') return;
+  const replacement = ORDINARY_EDITION_FOR[task] ?? 'preview';
   throw new Error(
-    `\`${task}\` is a guillotine edition: it previews who is about to be chopped, and in this ` +
-      'league nobody is eliminated during the season — every team plays all the way to the end.\n\n' +
-      'Run `preview` instead: node src/cli.mjs preview\n\n' +
+    `\`${task}\` is a guillotine edition: nobody is eliminated during the season in this league ` +
+      '— every team plays all the way to the end.\n\n' +
+      `Run \`${replacement}\` instead: node src/cli.mjs ${replacement}\n\n` +
       'If this really is a guillotine league, say so with LEAGUE_FORMAT=guillotine in .env. ' +
       'Sleeper cannot report that format, so it has to be declared.',
   );
@@ -266,9 +287,6 @@ async function commandFetch(config, args) {
   return 0;
 }
 
-/** Editions about a week that has not been played yet. */
-const FORWARD_LOOKING_TASKS = ['preview', 'survival-preview'];
-
 /**
  * Previews, recaps and rankings differ only in which week they are about and
  * which history they need, so they share one path.
@@ -350,10 +368,18 @@ async function commandEdition(config, args, task) {
         warn(`Note: week ${week} already has scores. This week's chop line is not final and is not used.`);
       }
     } else {
+      // recap, rankings, postseason share this path with chop-recap. The only
+      // difference is chop-recap also reads the danger board — the chop line
+      // and survival margin for the week that just finished, which a plain
+      // recap has no format-fact to report. buildContext's dangerBoardView
+      // shifts `beforeWeek` by one for a backward-looking task, so the same
+      // captured danger board describes this week's own chop rather than the
+      // one before it.
       if (!captured.played) {
         warn(`Week ${week} has no scores yet. Re-run once the games are final.`);
       }
       weekAnalysis = captured.analysis;
+      if (task === 'chop-recap') dangerBoard = captured.danger ?? null;
       const saved = store.loadPredictions(league.season, week);
       gradedPredictions = gradePredictions(saved?.predictions, captured.analysis, {
         eliminationLedger,
@@ -631,6 +657,8 @@ async function main() {
       return commandEdition(config, args, 'survival-preview');
     case 'recap':
       return commandEdition(config, args, 'recap');
+    case 'chop-recap':
+      return commandEdition(config, args, 'chop-recap');
     case 'rankings':
       return commandEdition(config, args, 'rankings');
     case 'preseason-rankings':
