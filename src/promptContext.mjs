@@ -12,7 +12,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT } from './config.mjs';
+import { ROOT, resolveRankingWeights } from './config.mjs';
 
 const TASK_PROMPTS = {
   'preseason-rankings': 'preseason-power-rankings.md',
@@ -212,14 +212,16 @@ function describePositionalValue(scoring) {
   return entries;
 }
 
-function editorialView(config) {
+function editorialView(config, formatType) {
   return {
     tone: config.editorial.tone,
     roastIntensity: config.editorial.roast_intensity,
     rankingEmoji: config.editorial.ranking_emoji,
     sleeperMaxChars: config.editorial.output.sleeper_max_chars,
     includeEmoji: config.editorial.output.include_emoji,
-    rankingWeights: config.rankings.weights,
+    // Weights are per-format: a redraft league is never judged on the
+    // dynasty set's dynasty_value/future_draft_capital factors.
+    rankingWeights: resolveRankingWeights(config.rankings, formatType),
     movementGuidance: config.rankings.weekly,
     bannedPhrases: config.editorial.banned_phrases ?? [],
     awards: config.editorial.awards ?? {},
@@ -266,7 +268,7 @@ export function buildContext({
       playoffTeams: league.playoffTeams,
       playoffWeekStart: league.playoffWeekStart,
     },
-    editorial: editorialView(config),
+    editorial: editorialView(config, league.format?.type),
     week,
   };
 

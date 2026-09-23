@@ -5,7 +5,7 @@ import { buildContext, buildPrompt, TASKS } from '../src/promptContext.mjs';
 import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
 
 /** Minimal config: just enough of the editorial/rankings shape buildContext reads. */
-function testConfig() {
+function testConfig({ weights = {} } = {}) {
   return {
     leagueDisplayName: null,
     editorial: {
@@ -16,7 +16,7 @@ function testConfig() {
       banned_phrases: [],
       awards: {},
     },
-    rankings: { weights: {}, weekly: {} },
+    rankings: { weights, weekly: {} },
   };
 }
 
@@ -69,6 +69,73 @@ test('context.league.format carries the resolved type and source', () => {
 
   assert.equal(context.league.format.type, 'dynasty');
   assert.equal(context.league.format.source, 'declared');
+});
+
+/* ------------------------------------------------ per-format ranking weights */
+
+const DYNASTY_WEIGHTS = {
+  starting_lineup: 0.3,
+  dynasty_value: 0.25,
+  depth: 0.15,
+  quarterback: 0.1,
+  future_draft_capital: 0.1,
+  roster_flexibility: 0.05,
+  contender_viability: 0.05,
+};
+
+const REDRAFT_WEIGHTS = {
+  starting_lineup: 0.45,
+  depth: 0.25,
+  quarterback: 0.1,
+  roster_flexibility: 0.05,
+  contender_viability: 0.15,
+};
+
+const FORMAT_WEIGHTS = { dynasty: DYNASTY_WEIGHTS, redraft: REDRAFT_WEIGHTS };
+
+test("a redraft league's prompt context carries the redraft weight set", () => {
+  const context = buildContext({
+    task: 'rankings',
+    config: testConfig({ weights: FORMAT_WEIGHTS }),
+    league: testLeague('redraft'),
+    teams: [],
+    players: {},
+    week: 3,
+  });
+
+  assert.deepEqual(context.editorial.rankingWeights, REDRAFT_WEIGHTS);
+});
+
+test("a redraft league's ranking weights never mention draft capital as a factor", () => {
+  const context = buildContext({
+    task: 'rankings',
+    config: testConfig({ weights: FORMAT_WEIGHTS }),
+    league: testLeague('redraft'),
+    teams: [],
+    players: {},
+    week: 3,
+    futureDraftCapital: null,
+  });
+
+  // The weight set itself carries no dynasty asset factor — it is the
+  // "unavailable" entry's job (tested elsewhere) to explain that draft
+  // capital doesn't exist for this format at all, not the weights' job.
+  const weightsJson = JSON.stringify(context.editorial.rankingWeights);
+  assert.doesNotMatch(weightsJson, /dynasty_value/);
+  assert.doesNotMatch(weightsJson, /future_draft_capital/);
+});
+
+test("a dynasty league's prompt context still carries the dynasty weight set", () => {
+  const context = buildContext({
+    task: 'rankings',
+    config: testConfig({ weights: FORMAT_WEIGHTS }),
+    league: testLeague('dynasty'),
+    teams: [],
+    players: {},
+    week: 3,
+  });
+
+  assert.deepEqual(context.editorial.rankingWeights, DYNASTY_WEIGHTS);
 });
 
 test('a redraft league with no traded picks is told draft capital is not a concept', () => {

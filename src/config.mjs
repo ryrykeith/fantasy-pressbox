@@ -30,8 +30,22 @@ const DEFAULT_EDITORIAL = {
   },
 };
 
-const DEFAULT_RANKINGS = {
-  weights: {
+/**
+ * Ranking weights, keyed by resolved league format.
+ *
+ * Every league picks its set from `resolveRankingWeights` below; there is no
+ * combined "one set for everyone" default any more, because applying the
+ * dynasty set to a redraft league spent 35% of the ranking on assets
+ * (dynasty_value, future_draft_capital) that a redraft league does not have.
+ *
+ * `dynasty` doubles as the shared fallback for any format without its own
+ * set — currently just `guillotine`, whose real set is specified by its own
+ * epic (Epic: Guillotine league coverage). Until that lands, a guillotine
+ * league is ranked on the dynasty set purely so a run does not crash; that is
+ * a placeholder, not a considered decision for that format.
+ */
+const DEFAULT_RANKING_WEIGHTS = {
+  dynasty: {
     starting_lineup: 0.3,
     dynasty_value: 0.25,
     depth: 0.15,
@@ -40,28 +54,84 @@ const DEFAULT_RANKINGS = {
     roster_flexibility: 0.05,
     contender_viability: 0.05,
   },
+  redraft: {
+    // No dynasty_value, no future_draft_capital: a redraft roster is torn up
+    // and re-drafted every season, so there is no long-term asset to weigh.
+    // The 0.35 that freed up is redistributed into starting_lineup (+0.15),
+    // depth (+0.10) and contender_viability (+0.10) — the three factors that
+    // matter more once nothing carries over to next year.
+    starting_lineup: 0.45,
+    depth: 0.25,
+    quarterback: 0.1,
+    roster_flexibility: 0.05,
+    contender_viability: 0.15,
+  },
+};
+
+const DEFAULT_RANKINGS = {
+  weights: DEFAULT_RANKING_WEIGHTS,
   weekly: { max_normal_movement: 3, allow_exceptional_movement: true },
 };
+
+/** Per-format weight maps: a partial override in rankings.yml replaces the whole set, never merges into it. */
+const RANKING_WEIGHT_REPLACE_KEYS = ['weights.dynasty', 'weights.redraft'];
+
+/**
+ * Picks the weight set for a resolved league format.
+ *
+ * Falls back to the dynasty set for a format with no set of its own (today,
+ * only `guillotine` — see the comment on `DEFAULT_RANKING_WEIGHTS`), and for
+ * any format the taxonomy has not been told about yet.
+ */
+export function resolveRankingWeights(rankings, formatType) {
+  return rankings?.weights?.[formatType] ?? rankings?.weights?.dynasty ?? {};
+}
+
+/** Reads a dotted path (`"weights.redraft"`) out of a plain object. */
+function getAtPath(obj, segments) {
+  let acc = obj;
+  for (const segment of segments) {
+    if (acc == null || typeof acc !== 'object' || !Object.prototype.hasOwnProperty.call(acc, segment)) {
+      return undefined;
+    }
+    acc = acc[segment];
+  }
+  return acc;
+}
+
+/** Writes a dotted path (`"weights.redraft"`) into a plain object, creating intermediate objects as needed. */
+function setAtPath(obj, segments, value) {
+  let acc = obj;
+  for (const segment of segments.slice(0, -1)) {
+    if (typeof acc[segment] !== 'object' || acc[segment] === null) acc[segment] = {};
+    acc = acc[segment];
+  }
+  acc[segments.at(-1)] = value;
+}
 
 /**
  * Reads a config file over the built-in defaults.
  *
- * `replaceKeys` names the settings where merging would be wrong. A map like
- * `ranking_emoji` is a single table, not a bag of independent values: someone
- * who writes out eight emoji means eight, and silently restoring the missing
- * four from the defaults makes the file look broken. For those keys the file
- * wins outright whenever it mentions them at all.
+ * `replaceKeys` names the settings where merging would be wrong, as a dotted
+ * path (`"ranking_emoji"`, or nested like `"weights.redraft"`). A map like
+ * `ranking_emoji` — or a per-format weight set — is a single table, not a bag
+ * of independent values: someone who writes out eight emoji, or five weights,
+ * means that many, and silently restoring the rest from the defaults makes
+ * the file look broken (or, for weights, produces a set that does not sum to
+ * 1.0). For those keys the file wins outright whenever it mentions them at
+ * all.
  */
-function readYamlFile(path, fallback, { replaceKeys = [] } = {}) {
+export function readYamlFile(path, fallback, { replaceKeys = [] } = {}) {
   if (!existsSync(path)) return fallback;
   try {
     const parsed = parseYaml(readFileSync(path, 'utf8'));
     if (!parsed || typeof parsed !== 'object') return fallback;
     const merged = deepMerge(fallback, parsed);
     for (const key of replaceKeys) {
-      if (Object.prototype.hasOwnProperty.call(parsed, key) && parsed[key] !== null) {
-        merged[key] = parsed[key];
-      }
+      const segments = key.split('.');
+      const value = getAtPath(parsed, segments);
+      if (value === undefined || value === null) continue;
+      setAtPath(merged, segments, value);
     }
     return merged;
   } catch (error) {
@@ -93,7 +163,9 @@ export function loadConfig({ envPath = join(ROOT, '.env') } = {}) {
   const editorial = readYamlFile(join(ROOT, 'config', 'editorial.yml'), DEFAULT_EDITORIAL, {
     replaceKeys: ['ranking_emoji', 'awards', 'banned_phrases'],
   });
-  const rankings = readYamlFile(join(ROOT, 'config', 'rankings.yml'), DEFAULT_RANKINGS);
+  const rankings = readYamlFile(join(ROOT, 'config', 'rankings.yml'), DEFAULT_RANKINGS, {
+    replaceKeys: RANKING_WEIGHT_REPLACE_KEYS,
+  });
 
   // .env may override the two editorial knobs a beginner is most likely to want.
   if (env.PRESSBOX_TONE) editorial.tone = env.PRESSBOX_TONE;
