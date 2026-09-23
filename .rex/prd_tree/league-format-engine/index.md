@@ -13,6 +13,6 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Declared league format taxonomy and resolution](./declared-league-format-taxonomy-and/index.md) | pending |
+| [Declared league format taxonomy and resolution](./declared-league-format-taxonomy-and/index.md) | completed |
 | [Format-scoped ranking weights](./format-scoped-ranking-weights/index.md) | pending |
 | [Scoring profile derivation and surfacing](./scoring-profile-derivation-and-surfacing/index.md) | pending |
