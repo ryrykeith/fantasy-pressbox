@@ -1,0 +1,216 @@
+{
+  "zones": [
+    {
+      "id": "analysis",
+      "name": "Analysis",
+      "description": "3 files, primarily JavaScript",
+      "files": [
+        "src/analysis/lineup.mjs",
+        "src/analysis/week.mjs",
+        "src/sleeper/normalize.mjs"
+      ],
+      "entryPoints": [
+        "src/analysis/week.mjs",
+        "src/sleeper/normalize.mjs"
+      ],
+      "cohesion": 0.57,
+      "coupling": 0.43,
+      "insights": [
+        "[call graph] 42 internal calls, 0 outgoing, 5 incoming (cohesion: 1, coupling: 0)"
+      ],
+      "riskMetrics": {
+        "cohesion": 0.57,
+        "coupling": 0.43,
+        "riskScore": 0.43000000000000005,
+        "riskLevel": "healthy",
+        "failsThreshold": false
+      }
+    },
+    {
+      "id": "docs",
+      "name": "Docs",
+      "description": "1 files, primarily Python",
+      "files": [
+        "docs/legacy/fetch-sleeper-data.py"
+      ],
+      "entryPoints": [],
+      "cohesion": 1,
+      "coupling": 0,
+      "insights": [
+        "High cohesion (1) — files are tightly interconnected"
+      ],
+      "riskMetrics": {
+        "cohesion": 1,
+        "coupling": 0,
+        "riskScore": 0,
+        "riskLevel": "healthy",
+        "failsThreshold": false
+      }
+    },
+    {
+      "id": "lib",
+      "name": "Lib",
+      "description": "2 files, primarily JavaScript",
+      "files": [
+        "src/lib/env.mjs",
+        "src/lib/yaml.mjs"
+      ],
+      "entryPoints": [
+        "src/lib/env.mjs",
+        "src/lib/yaml.mjs"
+      ],
+      "cohesion": 0,
+      "coupling": 1,
+      "insights": [
+        "[call graph] 13 internal calls, 0 outgoing, 3 incoming (cohesion: 1, coupling: 0)"
+      ],
+      "riskMetrics": {
+        "cohesion": 0,
+        "coupling": 1,
+        "riskScore": 1,
+        "riskLevel": "catastrophic",
+        "failsThreshold": true
+      }
+    },
+    {
+      "id": "root",
+      "name": "Root",
+      "description": "1 files, primarily JavaScript",
+      "files": [
+        "setup.mjs"
+      ],
+      "entryPoints": [],
+      "cohesion": 1,
+      "coupling": 0,
+      "insights": [
+        "High cohesion (1) — files are tightly interconnected",
+        "[call graph] 126 internal calls, 1 outgoing, 0 incoming (cohesion: 0.99, coupling: 0.01)"
+      ],
+      "riskMetrics": {
+        "cohesion": 1,
+        "coupling": 0,
+        "riskScore": 0,
+        "riskLevel": "healthy",
+        "failsThreshold": false
+      }
+    },
+    {
+      "id": "src",
+      "name": "Src",
+      "description": "8 files, primarily JavaScript",
+      "files": [
+        "src/cli.mjs",
+        "src/config.mjs",
+        "src/generate.mjs",
+        "src/pipeline.mjs",
+        "src/promptContext.mjs",
+        "src/sleeper/client.mjs",
+        "src/store.mjs",
+        "src/validate.mjs"
+      ],
+      "entryPoints": [],
+      "cohesion": 0.78,
+      "coupling": 0.22,
+      "insights": [
+        "Contains 53% of project files (8/15) — may be too broad, consider splitting",
+        "[call graph] 163 internal calls, 7 outgoing, 0 incoming (cohesion: 0.96, coupling: 0.04)"
+      ],
+      "riskMetrics": {
+        "cohesion": 0.78,
+        "coupling": 0.22,
+        "riskScore": 0.21999999999999997,
+        "riskLevel": "healthy",
+        "failsThreshold": false
+      }
+    }
+  ],
+  "crossings": [
+    {
+      "from": "setup.mjs",
+      "to": "src/lib/env.mjs",
+      "fromZone": "root",
+      "toZone": "lib"
+    },
+    {
+      "from": "src/cli.mjs",
+      "to": "src/sleeper/normalize.mjs",
+      "fromZone": "src",
+      "toZone": "analysis"
+    },
+    {
+      "from": "src/pipeline.mjs",
+      "to": "src/analysis/week.mjs",
+      "fromZone": "src",
+      "toZone": "analysis"
+    },
+    {
+      "from": "src/pipeline.mjs",
+      "to": "src/sleeper/normalize.mjs",
+      "fromZone": "src",
+      "toZone": "analysis"
+    },
+    {
+      "from": "src/config.mjs",
+      "to": "src/lib/env.mjs",
+      "fromZone": "src",
+      "toZone": "lib"
+    },
+    {
+      "from": "src/config.mjs",
+      "to": "src/lib/yaml.mjs",
+      "fromZone": "src",
+      "toZone": "lib"
+    }
+  ],
+  "unzoned": [],
+  "insights": [
+    "Size imbalance: largest zone has 8 files vs smallest with 1 — uneven decomposition",
+    "[call graph] 5 calls: \"src\" → \"analysis\""
+  ],
+  "findings": [
+    {
+      "type": "observation",
+      "pass": 0,
+      "scope": "docs",
+      "text": "High cohesion (1) — files are tightly interconnected",
+      "severity": "info"
+    },
+    {
+      "type": "observation",
+      "pass": 0,
+      "scope": "global",
+      "text": "Size imbalance: largest zone has 8 files vs smallest with 1 — uneven decomposition",
+      "severity": "info"
+    },
+    {
+      "type": "observation",
+      "pass": 0,
+      "scope": "root",
+      "text": "High cohesion (1) — files are tightly interconnected",
+      "severity": "info"
+    },
+    {
+      "type": "observation",
+      "pass": 0,
+      "scope": "src",
+      "text": "Contains 53% of project files (8/15) — may be too broad, consider splitting",
+      "severity": "warning"
+    },
+    {
+      "type": "suggestion",
+      "pass": 0,
+      "scope": "lib",
+      "text": "Zone \"Lib\" (lib) has catastrophic risk (score: 1.00, cohesion: 0.00, coupling: 1.00) — unreliable: zone has only 2 files (minimum 5 for reliable metrics)",
+      "severity": "info"
+    }
+  ],
+  "structureHash": "c1f9f9a3877b4251",
+  "inputFingerprint": "857a0f3332ff87ea",
+  "zoneContentHashes": {
+    "docs": "954ce43c49228064",
+    "root": "d612a510471b0bc5",
+    "analysis": "890bc413aebed76c",
+    "src": "a9759a410ca84178",
+    "lib": "b030ddfbd8280bda"
+  }
+}

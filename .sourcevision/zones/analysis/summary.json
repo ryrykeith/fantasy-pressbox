@@ -1,0 +1,25 @@
+{
+  "id": "analysis",
+  "name": "Analysis",
+  "description": "3 files, primarily JavaScript",
+  "files": [
+    "src/analysis/lineup.mjs",
+    "src/analysis/week.mjs",
+    "src/sleeper/normalize.mjs"
+  ],
+  "entryPoints": [
+    "src/analysis/week.mjs",
+    "src/sleeper/normalize.mjs"
+  ],
+  "cohesion": 0.57,
+  "coupling": 0.43,
+  "fileCount": 3,
+  "lineCount": 584,
+  "riskMetrics": {
+    "cohesion": 0.57,
+    "coupling": 0.43,
+    "riskScore": 0.43000000000000005,
+    "riskLevel": "healthy",
+    "failsThreshold": false
+  }
+}

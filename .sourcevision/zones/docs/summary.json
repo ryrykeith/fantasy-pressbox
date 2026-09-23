@@ -1,0 +1,20 @@
+{
+  "id": "docs",
+  "name": "Docs",
+  "description": "1 files, primarily Python",
+  "files": [
+    "docs/legacy/fetch-sleeper-data.py"
+  ],
+  "entryPoints": [],
+  "cohesion": 1,
+  "coupling": 0,
+  "fileCount": 1,
+  "lineCount": 22,
+  "riskMetrics": {
+    "cohesion": 1,
+    "coupling": 0,
+    "riskScore": 0,
+    "riskLevel": "healthy",
+    "failsThreshold": false
+  }
+}

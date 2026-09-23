@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "rex": {
+      "command": "fantasy-pressbox",
+      "args": [
+        "rex",
+        "mcp",
+        "."
+      ]
+    },
+    "sourcevision": {
+      "command": "fantasy-pressbox",
+      "args": [
+        "sv",
+        "mcp",
+        "."
+      ]
+    }
+  }
+}
