@@ -38,11 +38,13 @@ const DEFAULT_EDITORIAL = {
  * dynasty set to a redraft league spent 35% of the ranking on assets
  * (dynasty_value, future_draft_capital) that a redraft league does not have.
  *
- * `dynasty` doubles as the shared fallback for any format without its own
- * set — currently just `guillotine`, whose real set is specified by its own
- * epic (Epic: Guillotine league coverage). Until that lands, a guillotine
- * league is ranked on the dynasty set purely so a run does not crash; that is
- * a placeholder, not a considered decision for that format.
+ * There is no fallback for a format without its own set — currently just
+ * `guillotine`, whose real set is specified by its own epic (Epic: Guillotine
+ * league coverage). Silently ranking a guillotine league on the dynasty set
+ * would be worse than wrong (survival depends on weekly floor, not asset
+ * quality) with nothing to say so, so `resolveRankingWeights` refuses instead
+ * of guessing. A guillotine league cannot run any edition until that epic adds
+ * its own set.
  */
 const DEFAULT_RANKING_WEIGHTS = {
   dynasty: {
@@ -76,15 +78,55 @@ const DEFAULT_RANKINGS = {
 /** Per-format weight maps: a partial override in rankings.yml replaces the whole set, never merges into it. */
 const RANKING_WEIGHT_REPLACE_KEYS = ['weights.dynasty', 'weights.redraft'];
 
+/** How far a weight set's sum may drift from 1.0 before it is treated as wrong, to absorb float rounding. */
+const WEIGHT_SUM_TOLERANCE = 1e-6;
+
+function sumWeights(weights) {
+  return Object.values(weights).reduce((total, value) => total + Number(value), 0);
+}
+
+/**
+ * Checks every declared weight set adds up to 1.0.
+ *
+ * Weights are guidance given to a model, not a formula it computes, so a set
+ * that does not sum to 1.0 is not caught by any arithmetic downstream — it
+ * just quietly over- or under-weights the ranking forever. This runs once, at
+ * config load, against every set the file defines, not only the one the
+ * current league happens to use: a typo in a set nobody is running today is
+ * still a typo.
+ */
+export function validateRankingWeights(weights) {
+  for (const [formatType, set] of Object.entries(weights ?? {})) {
+    const sum = sumWeights(set);
+    if (Math.abs(sum - 1) > WEIGHT_SUM_TOLERANCE) {
+      throw new Error(
+        `config/rankings.yml weights.${formatType} sums to ${sum}, not 1.0. ` +
+          'Fix the weights (or the keys under it) so they add up to exactly 1.0.',
+      );
+    }
+  }
+}
+
 /**
  * Picks the weight set for a resolved league format.
  *
- * Falls back to the dynasty set for a format with no set of its own (today,
- * only `guillotine` — see the comment on `DEFAULT_RANKING_WEIGHTS`), and for
- * any format the taxonomy has not been told about yet.
+ * There is no fallback to another format's set. A format with no set of its
+ * own in config/rankings.yml (today, only `guillotine` — see the comment on
+ * `DEFAULT_RANKING_WEIGHTS`) is a loud error naming the missing key, because
+ * silently reusing another format's weights would rank that league on
+ * criteria that do not apply to it, with nothing saying so.
  */
 export function resolveRankingWeights(rankings, formatType) {
-  return rankings?.weights?.[formatType] ?? rankings?.weights?.dynasty ?? {};
+  const weights = rankings?.weights?.[formatType];
+  if (weights) return weights;
+
+  const known = Object.keys(rankings?.weights ?? {});
+  throw new Error(
+    `No ranking weight set for format "${formatType}" (missing weights.${formatType} in ` +
+      `config/rankings.yml). ${known.length ? `Sets defined: ${known.join(', ')}.` : 'No sets are defined at all.'} ` +
+      `Add weights.${formatType} to config/rankings.yml — write out every key it needs; a partial ` +
+      'set is not accepted.',
+  );
 }
 
 /** Reads a dotted path (`"weights.redraft"`) out of a plain object. */
@@ -156,16 +198,22 @@ function bool(value, fallback) {
   return /^(1|true|yes|on)$/i.test(String(value));
 }
 
-export function loadConfig({ envPath = join(ROOT, '.env') } = {}) {
+export function loadConfig({
+  envPath = join(ROOT, '.env'),
+  rankingsPath = join(ROOT, 'config', 'rankings.yml'),
+} = {}) {
   applyEnvFile(envPath);
   const env = process.env;
 
   const editorial = readYamlFile(join(ROOT, 'config', 'editorial.yml'), DEFAULT_EDITORIAL, {
     replaceKeys: ['ranking_emoji', 'awards', 'banned_phrases'],
   });
-  const rankings = readYamlFile(join(ROOT, 'config', 'rankings.yml'), DEFAULT_RANKINGS, {
+  const rankings = readYamlFile(rankingsPath, DEFAULT_RANKINGS, {
     replaceKeys: RANKING_WEIGHT_REPLACE_KEYS,
   });
+  // Every set the file defines is checked, not only the one this league uses
+  // — see the comment on validateRankingWeights.
+  validateRankingWeights(rankings.weights);
 
   // .env may override the two editorial knobs a beginner is most likely to want.
   if (env.PRESSBOX_TONE) editorial.tone = env.PRESSBOX_TONE;

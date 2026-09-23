@@ -4,7 +4,11 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { readYamlFile, resolveRankingWeights } from '../src/config.mjs';
+import { loadConfig, readYamlFile, resolveRankingWeights, validateRankingWeights, ROOT } from '../src/config.mjs';
+
+// Point config at a file that does not exist so the developer's own .env plays
+// no part in these tests, same as tests/config-format.test.mjs.
+const NO_ENV_FILE = join(ROOT, 'tests', '.env.does-not-exist');
 
 const DYNASTY_WEIGHTS = {
   starting_lineup: 0.3,
@@ -51,10 +55,84 @@ test('a redraft league gets the redraft set, with no dynasty assets at all', () 
   assert.ok(Math.abs(sum(weights) - 1) < 1e-9, 'redraft weights should sum to 1.0');
 });
 
-test('a format with no set of its own falls back to the dynasty set', () => {
+test('a format with no set of its own is a loud error, not a silent fallback to dynasty', () => {
   // guillotine has no set yet — see Epic: Guillotine league coverage.
-  assert.deepEqual(resolveRankingWeights(DEFAULT_RANKINGS_FIXTURE, 'guillotine'), DYNASTY_WEIGHTS);
-  assert.deepEqual(resolveRankingWeights(DEFAULT_RANKINGS_FIXTURE, undefined), DYNASTY_WEIGHTS);
+  assert.throws(
+    () => resolveRankingWeights(DEFAULT_RANKINGS_FIXTURE, 'guillotine'),
+    (error) => {
+      assert.match(error.message, /weights\.guillotine/);
+      assert.match(error.message, /guillotine/);
+      // Must not just say "missing" — it should point at what does exist too.
+      assert.match(error.message, /dynasty.*redraft/s);
+      return true;
+    },
+  );
+});
+
+test('resolving with no format at all is also a loud error, not a silent fallback', () => {
+  assert.throws(
+    () => resolveRankingWeights(DEFAULT_RANKINGS_FIXTURE, undefined),
+    /No ranking weight set for format "undefined"/,
+  );
+});
+
+/* ------------------------------------------------ validateRankingWeights */
+
+test('weight sets that each sum to 1.0 pass validation silently', () => {
+  assert.doesNotThrow(() => validateRankingWeights(DEFAULT_RANKINGS_FIXTURE.weights));
+});
+
+test('a weight set that does not sum to 1.0 is a loud error naming the set and its actual sum', () => {
+  const broken = {
+    dynasty: DYNASTY_WEIGHTS,
+    redraft: { ...REDRAFT_WEIGHTS, starting_lineup: 0.9 }, // now sums to 1.45
+  };
+  assert.throws(
+    () => validateRankingWeights(broken),
+    (error) => {
+      assert.match(error.message, /weights\.redraft/);
+      assert.match(error.message, /1\.45/);
+      return true;
+    },
+  );
+});
+
+test('a weight set within floating point tolerance of 1.0 is accepted', () => {
+  const almost = { dynasty: { a: 0.1, b: 0.2, c: 0.7000000000000001 } };
+  assert.doesNotThrow(() => validateRankingWeights(almost));
+});
+
+test('an empty weights map has nothing to validate', () => {
+  assert.doesNotThrow(() => validateRankingWeights({}));
+  assert.doesNotThrow(() => validateRankingWeights(undefined));
+});
+
+/* ------------------------------------------------ wired into loadConfig */
+
+test('a mismatched weight set stops the run at config load, naming the set and the sum', () => {
+  withTempYamlFile(
+    'weights:\n  dynasty:\n    starting_lineup: 0.5\n    depth: 0.6\n',
+    (path) => {
+      assert.throws(
+        () => loadConfig({ envPath: NO_ENV_FILE, rankingsPath: path }),
+        (error) => {
+          assert.match(error.message, /weights\.dynasty/);
+          assert.match(error.message, /1\.1/);
+          return true;
+        },
+      );
+    },
+  );
+});
+
+test('a valid rankings.yml loads without complaint', () => {
+  withTempYamlFile(
+    'weights:\n  dynasty:\n    starting_lineup: 0.5\n    depth: 0.5\n',
+    (path) => {
+      const config = loadConfig({ envPath: NO_ENV_FILE, rankingsPath: path });
+      assert.deepEqual(config.rankings.weights.dynasty, { starting_lineup: 0.5, depth: 0.5 });
+    },
+  );
 });
 
 /* ------------------------------------------------ readYamlFile replace semantics */

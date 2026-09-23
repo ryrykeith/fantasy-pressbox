@@ -18,8 +18,8 @@
 # asset quality (survival is about weekly floor), so neither set below is
 # right for it. That set is specified alongside the guillotine format's own
 # edition work — see Epic: Guillotine league coverage. Until it lands, a
-# guillotine league falls back to the dynasty set below purely so a run does
-# not crash.
+# guillotine league fails loudly instead of silently borrowing the dynasty
+# set — see resolveRankingWeights in src/config.mjs.
 weights:
   dynasty:
     starting_lineup: 0.30        # how good the week-to-week starting ten is

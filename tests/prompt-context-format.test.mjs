@@ -4,8 +4,31 @@ import assert from 'node:assert/strict';
 import { buildContext, buildPrompt, TASKS } from '../src/promptContext.mjs';
 import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
 
+const DYNASTY_WEIGHTS = {
+  starting_lineup: 0.3,
+  dynasty_value: 0.25,
+  depth: 0.15,
+  quarterback: 0.1,
+  future_draft_capital: 0.1,
+  roster_flexibility: 0.05,
+  contender_viability: 0.05,
+};
+
+const REDRAFT_WEIGHTS = {
+  starting_lineup: 0.45,
+  depth: 0.25,
+  quarterback: 0.1,
+  roster_flexibility: 0.05,
+  contender_viability: 0.15,
+};
+
+// Both formats every test in this file resolves against. resolveRankingWeights
+// throws for any format missing here, so this must cover every testLeague()
+// format type used below, not just the ones a given test is asserting on.
+const FORMAT_WEIGHTS = { dynasty: DYNASTY_WEIGHTS, redraft: REDRAFT_WEIGHTS };
+
 /** Minimal config: just enough of the editorial/rankings shape buildContext reads. */
-function testConfig({ weights = {} } = {}) {
+function testConfig({ weights = FORMAT_WEIGHTS } = {}) {
   return {
     leagueDisplayName: null,
     editorial: {
@@ -73,30 +96,10 @@ test('context.league.format carries the resolved type and source', () => {
 
 /* ------------------------------------------------ per-format ranking weights */
 
-const DYNASTY_WEIGHTS = {
-  starting_lineup: 0.3,
-  dynasty_value: 0.25,
-  depth: 0.15,
-  quarterback: 0.1,
-  future_draft_capital: 0.1,
-  roster_flexibility: 0.05,
-  contender_viability: 0.05,
-};
-
-const REDRAFT_WEIGHTS = {
-  starting_lineup: 0.45,
-  depth: 0.25,
-  quarterback: 0.1,
-  roster_flexibility: 0.05,
-  contender_viability: 0.15,
-};
-
-const FORMAT_WEIGHTS = { dynasty: DYNASTY_WEIGHTS, redraft: REDRAFT_WEIGHTS };
-
 test("a redraft league's prompt context carries the redraft weight set", () => {
   const context = buildContext({
     task: 'rankings',
-    config: testConfig({ weights: FORMAT_WEIGHTS }),
+    config: testConfig(),
     league: testLeague('redraft'),
     teams: [],
     players: {},
@@ -109,7 +112,7 @@ test("a redraft league's prompt context carries the redraft weight set", () => {
 test("a redraft league's ranking weights never mention draft capital as a factor", () => {
   const context = buildContext({
     task: 'rankings',
-    config: testConfig({ weights: FORMAT_WEIGHTS }),
+    config: testConfig(),
     league: testLeague('redraft'),
     teams: [],
     players: {},
@@ -128,7 +131,7 @@ test("a redraft league's ranking weights never mention draft capital as a factor
 test("a dynasty league's prompt context still carries the dynasty weight set", () => {
   const context = buildContext({
     task: 'rankings',
-    config: testConfig({ weights: FORMAT_WEIGHTS }),
+    config: testConfig(),
     league: testLeague('dynasty'),
     teams: [],
     players: {},
