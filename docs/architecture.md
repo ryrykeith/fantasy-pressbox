@@ -52,6 +52,7 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/analysis/lineup.mjs` | Optimal lineup solving |
 | `src/analysis/week.mjs` | Week facts and award candidates |
 | `src/analysis/elimination.mjs` | Who is still alive in a guillotine league, and who was chopped when |
+| `src/analysis/danger.mjs` | The chop line, survival margin and rolling floor for a guillotine league |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
 | `src/store.mjs` | Snapshots, rankings, predictions, movement, grading |
 | `src/promptContext.mjs` | Assembles the model's facts and instructions |
@@ -237,6 +238,53 @@ not a fact, and nothing downstream may cite it.
 `eliminationLedger` reaches `buildContext` as a plain parameter — `src/cli.mjs`
 passes through the same ledger `captureWeek` already attached to the week's
 snapshot, so nothing downstream builds its own copy.
+
+#### The danger board
+
+Cumulative points (above) say who is winning the season; they say nothing
+about who nearly died *this week*, which is the fact a guillotine edition is
+actually built to report. `src/analysis/danger.mjs` answers that from the same
+weekly scores `elimination.mjs` already reads:
+
+- `weekDanger` takes one week's scores and the elimination ledger (to know who
+  was still alive *entering* that week) and returns the week's scoring order —
+  highest points first, the same convention as `analyzeWeek`'s `scoringOrder`
+  — with each team's `marginAboveChopLine` attached. `chopLine` is the lowest
+  score among that week's contenders; `survivalMargin` is the gap between it
+  and the next-lowest score, i.e. how close the team that survived came to not
+  surviving. A roster Sleeper still returns a score for after it has been
+  chopped cannot pollute either number: the ledger says it was not a
+  contender, so its score is filtered out before the sort. A week with fewer
+  than two contenders (the field already has its champion) reports `null` for
+  both rather than a number that would misstate the guaranteed-safe case as
+  some kind of margin.
+- `rollingFloor` reduces each team's played weeks to its **lowest** and
+  **median** score. Ceiling is not tracked — floor is the number that keeps a
+  roster alive in this format, not the one that wins it a week — and the list
+  is sorted worst-floor-first, the team the coverage should be watching
+  hardest.
+- `buildDangerBoard` combines both across the weeks supplied, skipping weeks
+  that were not played or that resolved to fewer than two contenders.
+
+`captureWeek` computes the elimination ledger and the danger board from the
+identical `weeks` array — the danger board is built *from* the ledger it was
+computed alongside, so a roster chopped this week never sets or clears this
+week's chop line — and writes both into the snapshot. `danger` is absent from
+the snapshot for a format with no eliminations, the same "absent key, not
+null" rule the `elimination` key follows. `readDangerBoard` in
+`src/pipeline.mjs` mirrors `readEliminationLedger`: it rebuilds the board from
+weeks already on disk and fetches nothing, for `doctor`-style checks.
+
+**Bye-week exposure is not part of this module.** The originating task assumed
+Sleeper's player records carry a bye week; they do not — the full cached
+`/players/nfl` dictionary (12,000+ players) has no field resembling one at any
+nesting level, checked directly rather than assumed. Computing it needs either
+an operator-declared bye table (the `config/guillotine.yml` pattern the
+elimination ledger already uses, since Sleeper cannot answer this either) or a
+Sleeper schedule endpoint this codebase does not currently call and which was
+not possible to verify from this environment. Tracked as its own follow-up
+rather than guessed at here — a wrong bye week is exactly the kind of
+uncheckable, confidently-wrong fact this project refuses to print.
 
 ### Scoring profile
 
