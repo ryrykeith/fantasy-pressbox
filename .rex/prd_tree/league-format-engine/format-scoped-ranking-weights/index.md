@@ -14,5 +14,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Restructure rankings.yml into per-format weight sets](./restructure-rankings-yml-into-per.md) | pending |
+| [Restructure rankings.yml into per-format weight sets](./restructure-rankings-yml-into-per.md) | completed |
 | [Validate weight sets and fail loudly on mismatch](./validate-weight-sets-and-fail-loudly.md) | pending |
