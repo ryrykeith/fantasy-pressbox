@@ -41,6 +41,21 @@ export const FORMAT_DESCRIPTIONS = {
  */
 export const UNDETECTABLE_FORMAT_TYPES = ['guillotine'];
 
+/**
+ * Formats in which no team ever plays another.
+ *
+ * Sleeper pairs every league into matchups, including the ones that do not play
+ * them, so this is the taxonomy's answer to "are those pairings real?". It is
+ * asked by the analysis and by the prompt builder, which is why it lives here
+ * rather than as a `=== 'guillotine'` check repeated in both.
+ */
+export const FORMATS_WITHOUT_MATCHUPS = ['guillotine'];
+
+/** Does this format play head-to-head games at all? */
+export function hasMatchups(format) {
+  return !FORMATS_WITHOUT_MATCHUPS.includes(format?.type);
+}
+
 /** Where a resolved format came from. */
 export const FORMAT_SOURCES = ['declared', 'detected'];
 

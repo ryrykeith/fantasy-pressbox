@@ -110,6 +110,29 @@ Silently defaulting would mean the wrong coverage with nothing to show for it.
 The taxonomy lives in `src/format.mjs` and knows no provider's field names;
 detection from Sleeper is `detectFormatType` in `src/sleeper/normalize.mjs`.
 
+#### Formats that play no matchups
+
+Sleeper pairs every league into matchups, including the formats that never play
+one: a guillotine league scores each roster on its own and eliminates the lowest,
+but the API still reports pairings, and those pairings mean nothing.
+
+They are **discarded, not ignored**. `hasMatchups(format)` in `src/format.mjs` is
+the single answer to whether the pairings are real, and two places act on it:
+
+- `analyzeWeek` never pairs them. Each roster's week is scored alone, and the
+  `opponent`, `opponentPoints`, `result` and `margin` fields are absent from the
+  record rather than set to `null` — an absent field cannot be printed, a null
+  one invites a guess. The head-to-head awards (blowout, closest game, highest
+  losing score) are not computed at all.
+- `buildContext` emits no `games`, no `upcomingMatchups` and no win-loss record
+  in a week view, filters the matchup-only awards out of `editorial.awards`, and
+  adds an `unavailable` entry telling the model that matchups are not a concept
+  in this league.
+
+The reasoning is the project's first rule: the JSON context block is
+authoritative, so anything in it may be printed. A matchup that reached it would
+be a false fact with the tool's own authority behind it.
+
 ### Scoring profile
 
 `format.scoring` is built by `deriveScoringProfile` in

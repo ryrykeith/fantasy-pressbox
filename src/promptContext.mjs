@@ -13,6 +13,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, resolveRankingWeights } from './config.mjs';
+import { hasMatchups } from './format.mjs';
 
 const TASK_PROMPTS = {
   'preseason-rankings': 'preseason-power-rankings.md',
@@ -81,25 +82,37 @@ function rosterView(team, players) {
   };
 }
 
+/**
+ * One team's week, flattened into lines instead of nested objects.
+ *
+ * `record` is a head-to-head fact — wins are won against somebody — so a format
+ * that plays no matchups does not get one, and cannot cite one.
+ */
+function teamWeekView(side, { includeRecord = true } = {}) {
+  return {
+    team: side.team,
+    manager: side.manager,
+    points: side.points,
+    ...(includeRecord
+      ? { record: side.record ? `${side.record.wins}-${side.record.losses}` : null }
+      : {}),
+    potentialPoints: side.potentialPoints,
+    lineupEfficiency: side.lineupEfficiency,
+    starters: side.starters.map(describeStarter),
+    bestBenchPerformances: side.benchHighlights.map(describeBench),
+    bestPossibleLineup: side.optimalLineup
+      .filter((slot) => slot.name)
+      .map((slot) => `${slot.slot} ${slot.name} ${slot.points}`),
+  };
+}
+
 /** A played game, flattened into lines instead of nested objects. */
 function gameView(game) {
   return {
     winner: game.winner,
     loser: game.loser,
     margin: game.margin,
-    teams: game.teams.map((side) => ({
-      team: side.team,
-      manager: side.manager,
-      points: side.points,
-      record: side.record ? `${side.record.wins}-${side.record.losses}` : null,
-      potentialPoints: side.potentialPoints,
-      lineupEfficiency: side.lineupEfficiency,
-      starters: side.starters.map(describeStarter),
-      bestBenchPerformances: side.benchHighlights.map(describeBench),
-      bestPossibleLineup: side.optimalLineup
-        .filter((slot) => slot.name)
-        .map((slot) => `${slot.slot} ${slot.name} ${slot.points}`),
-    })),
+    teams: game.teams.map((side) => teamWeekView(side)),
   };
 }
 
@@ -205,14 +218,31 @@ function describePositionalValue(scoring) {
       instruction:
         `Treat ${player} as a genuine positional advantage and rank it as one, not as an ` +
         `ordinary flex piece. A roster holding one is ahead of a roster without, and a ${label} ` +
-        'out-producing the one across the matchup is often where the week was decided.',
+        'out-producing the ones on every other roster is often where a week was decided.',
     });
   }
 
   return entries;
 }
 
-function editorialView(config, formatType) {
+/**
+ * Awards that only exist because two teams played each other.
+ *
+ * Keys are the ones in config/editorial.yml. A league with no matchups is never
+ * shown them switched on: the facts behind them can never arrive, and an award
+ * advertised as available is an invitation to invent the fact it needs.
+ */
+const MATCHUP_ONLY_AWARDS = ['biggest_blowout', 'closest_game', 'highest_losing_score'];
+
+function awardsView(awards, headToHead) {
+  if (headToHead) return awards;
+  return Object.fromEntries(
+    Object.entries(awards).filter(([key]) => !MATCHUP_ONLY_AWARDS.includes(key)),
+  );
+}
+
+function editorialView(config, format) {
+  const formatType = format?.type;
   return {
     tone: config.editorial.tone,
     roastIntensity: config.editorial.roast_intensity,
@@ -224,7 +254,7 @@ function editorialView(config, formatType) {
     rankingWeights: resolveRankingWeights(config.rankings, formatType),
     movementGuidance: config.rankings.weekly,
     bannedPhrases: config.editorial.banned_phrases ?? [],
-    awards: config.editorial.awards ?? {},
+    awards: awardsView(config.editorial.awards ?? {}, hasMatchups(format)),
   };
 }
 
@@ -248,6 +278,11 @@ export function buildContext({
   futureDraftCapital = null,
   format = 'sleeper',
 }) {
+  // Sleeper reports pairings for every league, including the formats that never
+  // play one. Nothing below is allowed to pass one on: a matchup in the context
+  // block is a fact the model is entitled to print.
+  const headToHead = hasMatchups(league.format);
+
   const context = {
     task,
     generatedAt: new Date().toISOString(),
@@ -268,7 +303,7 @@ export function buildContext({
       playoffTeams: league.playoffTeams,
       playoffWeekStart: league.playoffWeekStart,
     },
-    editorial: editorialView(config, league.format?.type),
+    editorial: editorialView(config, league.format),
     week,
   };
 
@@ -306,7 +341,7 @@ export function buildContext({
   // A preview is about games that have not happened. It still needs to know
   // who is playing whom — Sleeper publishes the pairings before kickoff — but
   // it must not be shown scores, which at this point are zeros or partials.
-  if (upcomingAnalysis) {
+  if (upcomingAnalysis && headToHead) {
     context.upcomingMatchups = upcomingAnalysis.games.map((game) => ({
       matchupId: game.matchupId,
       teams: game.teams.map((side) => ({
@@ -320,29 +355,45 @@ export function buildContext({
     }
   }
 
+  // A week is reported as the games it contained, or — where there are none —
+  // as one entry per team. The facts are the same facts either way; only the
+  // thing they hang off changes, because in this format nothing happened
+  // between two teams that could be described.
   if (weekAnalysis) {
     context.thisWeek = {
       week: weekAnalysis.week,
-      games: weekAnalysis.games.map(gameView),
+      ...(headToHead
+        ? { games: weekAnalysis.games.map(gameView) }
+        : {
+            teams: weekAnalysis.teamWeeks.map((side) =>
+              teamWeekView(side, { includeRecord: false }),
+            ),
+          }),
       scoringOrder: weekAnalysis.scoringOrder,
       awardFacts: weekAnalysis.awards,
     };
   }
 
   if (priorWeekAnalysis) {
+    const sideSummary = (side) => ({
+      team: side.team,
+      points: side.points,
+      potentialPoints: side.potentialPoints,
+      lineupEfficiency: side.lineupEfficiency,
+    });
+
     context.previousWeek = {
       week: priorWeekAnalysis.week,
-      games: priorWeekAnalysis.games.map((game) => ({
-        winner: game.winner,
-        loser: game.loser,
-        margin: game.margin,
-        teams: game.teams.map((t) => ({
-          team: t.team,
-          points: t.points,
-          potentialPoints: t.potentialPoints,
-          lineupEfficiency: t.lineupEfficiency,
-        })),
-      })),
+      ...(headToHead
+        ? {
+            games: priorWeekAnalysis.games.map((game) => ({
+              winner: game.winner,
+              loser: game.loser,
+              margin: game.margin,
+              teams: game.teams.map(sideSummary),
+            })),
+          }
+        : { teams: priorWeekAnalysis.teamWeeks.map(sideSummary) }),
       awardFacts: priorWeekAnalysis.awards,
     };
   }
@@ -373,6 +424,26 @@ function describeMissingContext({ task, context, week }) {
   const missing = [];
   const isRanking =
     task === 'rankings' || task === 'preseason-rankings' || task === 'postseason';
+
+  // First in the list, because it is the one absence that changes what an
+  // edition *is*. Every other entry says a fact is missing; this one says a
+  // whole concept does not exist here, and a model that misses it writes an
+  // edition about games nobody played.
+  if (!hasMatchups(context.league.format)) {
+    missing.push({
+      field: 'matchups',
+      why:
+        `This is a ${context.league.format.type} league: every team scores on its own each week ` +
+        'and no team plays another, so there are no games, no opponents and no results. ' +
+        'Sleeper reports pairings for this league anyway; they are meaningless and have been ' +
+        'discarded before reaching you.',
+      instruction:
+        'Matchups are not a concept in this league and no opponent exists. Never describe a game, ' +
+        'a head-to-head result, a winner, a loser, a margin of victory, or who any team played. ' +
+        'Do not pair teams against each other for effect. Every fact about a week is a team\'s own ' +
+        'score, measured against the rest of the league.',
+    });
+  }
 
   if (isRanking && !context.previousRankings) {
     missing.push({
