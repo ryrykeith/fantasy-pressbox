@@ -1,0 +1,6 @@
+{
+  "schema": "rex/v1",
+  "project": "fantasy-pressbox",
+  "adapter": "file",
+  "sourcevision": "auto"
+}

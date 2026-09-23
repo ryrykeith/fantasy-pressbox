@@ -1,0 +1,174 @@
+{
+  "files": [
+    {
+      "path": "docs/legacy/fetch-sleeper-data.py",
+      "size": 651,
+      "language": "Python",
+      "lineCount": 22,
+      "hash": "99fc7ae0fc6ee20cba0f5c75b31850c2629570acacca0f508e30538c89a404f0",
+      "role": "docs",
+      "category": "docs",
+      "lastModified": 1789701109554
+    },
+    {
+      "path": "setup.mjs",
+      "size": 14158,
+      "language": "JavaScript",
+      "lineCount": 384,
+      "hash": "72fe7d7447c848eecda83155625901a9d9c3b814e1c87082b67bfd2afd1bb0ad",
+      "role": "source",
+      "category": "root",
+      "lastModified": 1789701109555
+    },
+    {
+      "path": "src/analysis/lineup.mjs",
+      "size": 3909,
+      "language": "JavaScript",
+      "lineCount": 121,
+      "hash": "8204826b6ae6c2ba288a709ce005e6a46dff7448bb8132665f03947b73d99521",
+      "role": "source",
+      "category": "analysis",
+      "lastModified": 1789701109556
+    },
+    {
+      "path": "src/analysis/week.mjs",
+      "size": 7209,
+      "language": "JavaScript",
+      "lineCount": 199,
+      "hash": "56603e990caae08a36fa4348daf413c95c2e4cfffbf6d5c6e20adfb8edd105e0",
+      "role": "source",
+      "category": "analysis",
+      "lastModified": 1789701109556
+    },
+    {
+      "path": "src/cli.mjs",
+      "size": 18546,
+      "language": "JavaScript",
+      "lineCount": 496,
+      "hash": "020bf6f071f2cf25f14a189fac1ac4f58740bcbede044853a14d22a6f680c1bf",
+      "role": "source",
+      "category": "src",
+      "lastModified": 1789701109556
+    },
+    {
+      "path": "src/config.mjs",
+      "size": 4982,
+      "language": "JavaScript",
+      "lineCount": 139,
+      "hash": "f4db0c84be2d3640c8070b92d5720dcd6ef00441a7768d77d8a448c123e419a3",
+      "role": "source",
+      "category": "src",
+      "lastModified": 1789701109556
+    },
+    {
+      "path": "src/generate.mjs",
+      "size": 3393,
+      "language": "JavaScript",
+      "lineCount": 104,
+      "hash": "ce999b8b5c4fdb423f0ed5d7bc6530f75bb3b1b795af64c43ed2b282c69b232a",
+      "role": "source",
+      "category": "src",
+      "lastModified": 1789701109556
+    },
+    {
+      "path": "src/lib/env.mjs",
+      "size": 1480,
+      "language": "JavaScript",
+      "lineCount": 44,
+      "hash": "543118f0632e2125abcf79153359391d6173f20b9310623585b7fee82e1e37cb",
+      "role": "source",
+      "category": "src-lib",
+      "lastModified": 1789701109556
+    },
+    {
+      "path": "src/lib/yaml.mjs",
+      "size": 4363,
+      "language": "JavaScript",
+      "lineCount": 131,
+      "hash": "c56f7fc1675bbee2effdd461886738eaff4ac01413264df790ac6014d88342a0",
+      "role": "source",
+      "category": "src-lib",
+      "lastModified": 1789701109557
+    },
+    {
+      "path": "src/pipeline.mjs",
+      "size": 3460,
+      "language": "JavaScript",
+      "lineCount": 101,
+      "hash": "882daf68b0a80b93788cfa0f2b4ff53d32b134a42926f64d731b8b6c252e1651",
+      "role": "source",
+      "category": "src",
+      "lastModified": 1789701109557
+    },
+    {
+      "path": "src/promptContext.mjs",
+      "size": 12781,
+      "language": "JavaScript",
+      "lineCount": 368,
+      "hash": "03cab4cbc7ca4ce6a529019f260e4fd0a82788f45f4b2ab9e467859a1c4029c0",
+      "role": "source",
+      "category": "src",
+      "lastModified": 1789701109557
+    },
+    {
+      "path": "src/sleeper/client.mjs",
+      "size": 3604,
+      "language": "JavaScript",
+      "lineCount": 97,
+      "hash": "4b01ca84a0dc3a1fb22ce7c589717758fb4140be44fb95d0ff13e083d2e5ce21",
+      "role": "source",
+      "category": "sleeper",
+      "lastModified": 1789701109557
+    },
+    {
+      "path": "src/sleeper/normalize.mjs",
+      "size": 10192,
+      "language": "JavaScript",
+      "lineCount": 264,
+      "hash": "c3a5c47333997ec5858b16a7078d6241b3254d56ce810f7d808178d232a14724",
+      "role": "source",
+      "category": "sleeper",
+      "lastModified": 1789701109557
+    },
+    {
+      "path": "src/store.mjs",
+      "size": 6204,
+      "language": "JavaScript",
+      "lineCount": 173,
+      "hash": "65dbbab88143822221d53a60ea5154a07c3731ffa89bbc52456a5a4536b234cf",
+      "role": "source",
+      "category": "src",
+      "lastModified": 1789701109557
+    },
+    {
+      "path": "src/validate.mjs",
+      "size": 1969,
+      "language": "JavaScript",
+      "lineCount": 61,
+      "hash": "d70791b8f44ec351861b85b6d83416f60e9aa4c22142831053056fd40d78bd4b",
+      "role": "source",
+      "category": "src",
+      "lastModified": 1789701109557
+    }
+  ],
+  "summary": {
+    "totalFiles": 15,
+    "totalLines": 2704,
+    "byLanguage": {
+      "Python": 1,
+      "JavaScript": 14
+    },
+    "byRole": {
+      "docs": 1,
+      "source": 14
+    },
+    "byCategory": {
+      "docs": 1,
+      "root": 1,
+      "analysis": 2,
+      "src": 7,
+      "src-lib": 2,
+      "sleeper": 2
+    }
+  }
+}

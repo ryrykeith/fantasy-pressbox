@@ -1,0 +1,233 @@
+{
+  "edges": [
+    {
+      "from": "setup.mjs",
+      "to": "src/lib/env.mjs",
+      "type": "static",
+      "symbols": [
+        "loadEnvFile"
+      ],
+      "weight": 1
+    },
+    {
+      "from": "src/analysis/week.mjs",
+      "to": "src/analysis/lineup.mjs",
+      "type": "static",
+      "symbols": [
+        "bestLineup",
+        "lineupEfficiency"
+      ],
+      "weight": 10
+    },
+    {
+      "from": "src/analysis/week.mjs",
+      "to": "src/sleeper/normalize.mjs",
+      "type": "static",
+      "symbols": [
+        "normalizePlayer",
+        "pairMatchups"
+      ],
+      "weight": 3
+    },
+    {
+      "from": "src/cli.mjs",
+      "to": "src/config.mjs",
+      "type": "static",
+      "symbols": [
+        "loadConfig",
+        "rankEmoji",
+        "ROOT"
+      ],
+      "weight": 3
+    },
+    {
+      "from": "src/cli.mjs",
+      "to": "src/generate.mjs",
+      "type": "static",
+      "symbols": [
+        "generate",
+        "describeProvider",
+        "detectProvider"
+      ],
+      "weight": 10
+    },
+    {
+      "from": "src/cli.mjs",
+      "to": "src/pipeline.mjs",
+      "type": "static",
+      "symbols": [
+        "openLeague",
+        "resolveWeek",
+        "captureWeek"
+      ],
+      "weight": 10
+    },
+    {
+      "from": "src/cli.mjs",
+      "to": "src/promptContext.mjs",
+      "type": "static",
+      "symbols": [
+        "buildContext",
+        "buildPrompt",
+        "systemPromptOnly",
+        "taskPromptOnly",
+        "describePlayer"
+      ],
+      "weight": 5
+    },
+    {
+      "from": "src/cli.mjs",
+      "to": "src/sleeper/normalize.mjs",
+      "type": "static",
+      "symbols": [
+        "normalizeTransactions",
+        "normalizeFutureDraftCapital"
+      ],
+      "weight": 2
+    },
+    {
+      "from": "src/cli.mjs",
+      "to": "src/store.mjs",
+      "type": "static",
+      "symbols": [
+        "gradePredictions",
+        "withMovement",
+        "movementLabel"
+      ],
+      "weight": 4
+    },
+    {
+      "from": "src/cli.mjs",
+      "to": "src/validate.mjs",
+      "type": "static",
+      "symbols": [
+        "checkPosts",
+        "extractJsonBlock",
+        "stripJsonBlock"
+      ],
+      "weight": 6
+    },
+    {
+      "from": "src/config.mjs",
+      "to": "src/lib/env.mjs",
+      "type": "static",
+      "symbols": [
+        "applyEnvFile"
+      ],
+      "weight": 1
+    },
+    {
+      "from": "src/config.mjs",
+      "to": "src/lib/yaml.mjs",
+      "type": "static",
+      "symbols": [
+        "parseYaml"
+      ],
+      "weight": 1
+    },
+    {
+      "from": "src/pipeline.mjs",
+      "to": "src/analysis/week.mjs",
+      "type": "static",
+      "symbols": [
+        "analyzeWeek"
+      ],
+      "weight": 1
+    },
+    {
+      "from": "src/pipeline.mjs",
+      "to": "src/sleeper/client.mjs",
+      "type": "static",
+      "symbols": [
+        "createClient"
+      ],
+      "weight": 1
+    },
+    {
+      "from": "src/pipeline.mjs",
+      "to": "src/sleeper/normalize.mjs",
+      "type": "static",
+      "symbols": [
+        "normalizeLeague",
+        "normalizeTeams"
+      ],
+      "weight": 2
+    },
+    {
+      "from": "src/pipeline.mjs",
+      "to": "src/store.mjs",
+      "type": "static",
+      "symbols": [
+        "createStore"
+      ],
+      "weight": 1
+    },
+    {
+      "from": "src/promptContext.mjs",
+      "to": "src/config.mjs",
+      "type": "static",
+      "symbols": [
+        "ROOT"
+      ],
+      "weight": 1
+    }
+  ],
+  "external": [],
+  "summary": {
+    "totalEdges": 17,
+    "totalExternal": 0,
+    "circularCount": 0,
+    "circulars": [],
+    "mostImported": [
+      {
+        "path": "src/sleeper/normalize.mjs",
+        "count": 3
+      },
+      {
+        "path": "src/config.mjs",
+        "count": 2
+      },
+      {
+        "path": "src/lib/env.mjs",
+        "count": 2
+      },
+      {
+        "path": "src/store.mjs",
+        "count": 2
+      },
+      {
+        "path": "src/analysis/lineup.mjs",
+        "count": 1
+      },
+      {
+        "path": "src/analysis/week.mjs",
+        "count": 1
+      },
+      {
+        "path": "src/generate.mjs",
+        "count": 1
+      },
+      {
+        "path": "src/lib/yaml.mjs",
+        "count": 1
+      },
+      {
+        "path": "src/pipeline.mjs",
+        "count": 1
+      },
+      {
+        "path": "src/promptContext.mjs",
+        "count": 1
+      },
+      {
+        "path": "src/sleeper/client.mjs",
+        "count": 1
+      },
+      {
+        "path": "src/validate.mjs",
+        "count": 1
+      }
+    ],
+    "avgImportsPerFile": 2.83
+  }
+}
