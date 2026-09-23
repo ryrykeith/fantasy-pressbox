@@ -53,6 +53,7 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/analysis/week.mjs` | Week facts and award candidates |
 | `src/analysis/elimination.mjs` | Who is still alive in a guillotine league, and who was chopped when |
 | `src/analysis/danger.mjs` | The chop line, survival margin and rolling floor for a guillotine league |
+| `src/analysis/faab.mjs` | Remaining FAAB per survivor and the player pool each chop released, for a guillotine league |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
 | `src/store.mjs` | Snapshots, rankings, predictions, movement, grading |
 | `src/promptContext.mjs` | Assembles the model's facts and instructions |
@@ -275,16 +276,112 @@ null" rule the `elimination` key follows. `readDangerBoard` in
 `src/pipeline.mjs` mirrors `readEliminationLedger`: it rebuilds the board from
 weeks already on disk and fetches nothing, for `doctor`-style checks.
 
-**Bye-week exposure is not part of this module.** The originating task assumed
-Sleeper's player records carry a bye week; they do not — the full cached
-`/players/nfl` dictionary (12,000+ players) has no field resembling one at any
-nesting level, checked directly rather than assumed. Computing it needs either
-an operator-declared bye table (the `config/guillotine.yml` pattern the
-elimination ledger already uses, since Sleeper cannot answer this either) or a
-Sleeper schedule endpoint this codebase does not currently call and which was
-not possible to verify from this environment. Tracked as its own follow-up
-rather than guessed at here — a wrong bye week is exactly the kind of
-uncheckable, confidently-wrong fact this project refuses to print.
+#### The FAAB market
+
+The waiver market IS the story in a guillotine league — every chop dumps a
+full roster of talent onto the wire at once, unlike the trickle of cuts an
+ordinary league sees. `src/analysis/faab.mjs` answers two questions:
+
+- **`faabBalances`** — what each surviving team has left of the league's FAAB
+  budget, and what it has spent so far. `league.waiverBudget` and
+  `team.waiverBudgetUsed` (`src/sleeper/normalize.mjs`) are already exactly
+  these facts; the only work here is the subtraction, and restricting the
+  result to `ledger.survivors` the same way `weekDanger` restricts contenders
+  — an eliminated team has no more waivers left to win. A league that never
+  set a budget reports `remaining: null` rather than a subtraction against
+  nothing.
+- **`releasedPool`** — the player pool one elimination dumped onto the wire,
+  attributed to the team that was chopped. Sleeper keeps no history of a past
+  roster (the same limitation `elimination.mjs` documents), so this cannot be
+  reconstructed by diffing today's now-empty roster against anything. What
+  *does* survive is that week's own matchup entry — Sleeper scores a week
+  against the roster as it stood when the week was played, before a
+  commissioner force-drops it afterward — and its raw `players` array
+  (`src/store.mjs`'s raw bundle, saved the moment the week was fetched) is the
+  full squad, bench included. A week whose raw bundle was never saved reports
+  the gap explicitly (`note`), rather than an empty pool that would look the
+  same as "this roster released nothing".
+- **`buildFaabMarket`** combines both, and attaches any winning FAAB bid
+  already placed on a released player: `waiverBidsFor` in
+  `src/sleeper/normalize.mjs` reads the same raw transaction fields
+  `normalizeTransactions` reads (`status`, `adds`, `settings.waiver_bid`)
+  rather than a second parser, matching a bid to one specific player id
+  instead of turning it into a prose line. A released player can be claimed
+  any week from the chop onward, not only the week it happened, so every
+  later raw bundle's transactions are searched, not just the chop week's own.
+
+`captureWeek` computes the FAAB market from the elimination ledger it just
+built, using `store.loadRawThrough` to pick up every earlier week's raw
+bundle already on disk (including the one just saved for the current week —
+no second fetch), and writes it into the snapshot as `faab`, absent rather
+than `null` for a format with no eliminations, the same rule `elimination`
+and `danger` both follow. `readFaabMarket` in `src/pipeline.mjs` mirrors
+`readEliminationLedger`/`readDangerBoard`: it rebuilds the market from weeks
+already on disk and fetches nothing.
+
+`faabMarketView` in `src/promptContext.mjs` is where a released player id
+becomes a line a model can read — `src/analysis/faab.mjs` deals only in ids
+and numbers, the same split `rosterView` already makes for a team's own
+roster — and reaches `context.faabMarket` the same way `eliminationLedger`
+reaches `context.standings`: as a plain parameter `src/cli.mjs` passes
+through from `captureWeek`'s own result, so nothing downstream builds a
+second copy.
+
+#### Bye-week exposure
+
+A bye week is not a Sleeper field. The full cached `/players/nfl` dictionary
+(12,000+ players) has no field resembling one at any nesting level — checked
+directly rather than assumed — and Sleeper has no schedule or bye-week
+endpoint either. A bye is the *absence* of a game, so the only honest source
+is the real NFL schedule.
+
+`scripts/fetch-bye-weeks.mjs` walks ESPN's public scoreboard endpoint once per
+season (all 18 regular-season weeks) and writes a reviewable, committed
+`config/bye-weeks.<season>.yml`: 32 teams, each with exactly one bye week. It
+refuses to write a table that does not come out to exactly that shape, and it
+resolves the mapping gotchas that would otherwise silently corrupt the count —
+ESPN reports Washington as `WSH` where Sleeper (and this table) says `WAS`,
+and Sleeper still carries the retired `OAK` code on old players, aliased here
+to `LV`. Nothing at runtime calls ESPN: the table is 32 static rows that do
+not change once the schedule is published, so putting a third-party API on
+the critical path of every edition would buy nothing and risk everything.
+
+`src/analysis/byeExposure.mjs` reads that committed table, never the network:
+
+- **`parseByeWeekTable`** validates a parsed table and folds it into one
+  `team -> week` lookup, with every alias resolved into the same lookup the
+  real teams live in — looking up `OAK` and looking up `LV` return the
+  identical week, so nothing downstream special-cases a stale code. It mirrors
+  `parseDeclaredEliminations` (`src/analysis/elimination.mjs`): every
+  complaint is about a hand-edited or broken-generator file, so every one of
+  them stops the run rather than silently reporting a partial table — a team
+  that looks like it never has a bye is exactly the kind of wrong fact this
+  project refuses to print. `src/config.mjs#loadByeWeekTable` is the one place
+  that turns a season number into a file path and calls it; there is no
+  fallback default the way `config/guillotine.yml` has one, because "no table
+  found" cannot honestly default to "nobody has a bye" — a season without its
+  table yet is refused loudly, naming `scripts/fetch-bye-weeks.mjs` as the
+  fix, the same way `resolveRankingWeights` refuses a format with no weight
+  set rather than guessing.
+- **`byeWeekFor`** looks up one starter's NFL team. An abbreviation the table
+  does not recognise — a gap, not a real "no bye" — is refused rather than
+  read as zero exposure, for the same reason the table's own generator
+  refuses to ship a partial one.
+- **`upcomingByeExposure`** is the forward-looking report itself: for each
+  team still alive (`ledger.survivors`, the same convention `weekDanger` and
+  `faabBalances` already follow), how many of its *current* rostered starters
+  (`team.starterIds`, not the full roster) land on a bye in each of the next
+  few weeks. It reads the roster's current starters rather than a played
+  week's Sleeper matchup entry — this is a report about weeks that have not
+  happened yet, so there is no per-week starter list to read.
+
+`src/pipeline.mjs#captureWeek` computes it alongside `danger` and `faab`, from
+the identical elimination ledger, and writes it into the snapshot as
+`byeExposure` — absent rather than `null` for a format with no eliminations,
+the same rule every guillotine-only key in the snapshot follows.
+`readByeExposure` mirrors `readDangerBoard`/`readFaabMarket`: it rebuilds the
+report from weeks already on disk and fetches nothing over the network (the
+bye-week table is a local file read, not a fetch).
 
 ### Scoring profile
 

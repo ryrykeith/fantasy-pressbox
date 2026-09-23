@@ -102,15 +102,16 @@ function team(rosterId, name, seasonPointsFor) {
   };
 }
 
-function contextFor(formatType, { task = 'recap', eliminationLedger = null } = {}) {
+function contextFor(formatType, { task = 'recap', eliminationLedger = null, faabMarket = null, players = {} } = {}) {
   return buildContext({
     task,
     config: testConfig(),
     league: testLeague(formatType),
     teams: testTeams(),
-    players: {},
+    players,
     week: 3,
     eliminationLedger,
+    faabMarket,
   });
 }
 
@@ -225,4 +226,61 @@ test('every guillotine task keeps rosters and standings free of a win-loss recor
     const facts = JSON.stringify(context.teams ?? context.standings);
     assert.doesNotMatch(facts, /"record"/, `${task} leaked a win-loss record`);
   }
+});
+
+/* --------------------------------------------------------------- FAAB market */
+
+const FAAB_PLAYERS = {
+  rb2: { full_name: 'Rex Carter', position: 'RB', team: 'DAL' },
+};
+
+test('a guillotine context with a FAAB market carries balances and released pools, players resolved to lines', () => {
+  const faabMarket = {
+    budget: 100,
+    balances: [{ rosterId: 1, team: 'Chopping Block', spent: 30, remaining: 70 }],
+    releasedPools: [
+      {
+        week: 2,
+        team: 'Bye Week Blues',
+        rosterId: 4,
+        playerIds: ['rb2'],
+        playerPoints: { rb2: 12.5 },
+        bids: [{ playerId: 'rb2', week: 3, amount: 9, wonBy: 'Chopping Block' }],
+      },
+    ],
+  };
+  const context = contextFor('guillotine', { faabMarket, players: FAAB_PLAYERS });
+
+  assert.equal(context.faabMarket.leagueBudget, 100);
+  assert.deepEqual(context.faabMarket.balances, [{ team: 'Chopping Block', spent: 30, remaining: 70 }]);
+  assert.equal(context.faabMarket.releasedPools[0].week, 2);
+  assert.equal(context.faabMarket.releasedPools[0].releasedBy, 'Bye Week Blues');
+  assert.match(context.faabMarket.releasedPools[0].players[0], /Rex Carter/);
+  assert.match(context.faabMarket.releasedPools[0].players[0], /12\.5 pts/);
+  assert.match(context.faabMarket.releasedPools[0].bids[0], /Chopping Block won/);
+  assert.match(context.faabMarket.releasedPools[0].bids[0], /\$9/);
+});
+
+test('a released pool with no matchup data on disk carries its note through to context untouched', () => {
+  const faabMarket = {
+    budget: 100,
+    balances: [],
+    releasedPools: [
+      { week: 2, team: 'Bye Week Blues', rosterId: 4, playerIds: [], playerPoints: {}, note: 'No week 2 matchup data is on disk.' },
+    ],
+  };
+  const context = contextFor('guillotine', { faabMarket });
+  assert.equal(context.faabMarket.releasedPools[0].note, 'No week 2 matchup data is on disk.');
+  assert.deepEqual(context.faabMarket.releasedPools[0].players, []);
+});
+
+test('no FAAB market supplied means no faabMarket key at all, not a null one', () => {
+  const context = contextFor('guillotine');
+  assert.equal(Object.hasOwn(context, 'faabMarket'), false);
+});
+
+test('a dynasty context never carries a FAAB market, even if one is supplied', () => {
+  const faabMarket = { budget: 100, balances: [], releasedPools: [] };
+  const context = contextFor('dynasty', { faabMarket });
+  assert.equal(Object.hasOwn(context, 'faabMarket'), false);
 });
