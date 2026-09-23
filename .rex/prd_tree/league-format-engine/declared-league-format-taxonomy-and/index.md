@@ -14,6 +14,6 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Define the format taxonomy and config schema](./define-the-format-taxonomy-and-config.md) | pending |
+| [Define the format taxonomy and config schema](./define-the-format-taxonomy-and-config.md) | completed |
 | [Resolve declared format over Sleeper detection](./resolve-declared-format-over-sleeper.md) | pending |
 | [Thread resolved format into prompt context and the unavailable list](./thread-resolved-format-into-prompt.md) | pending |

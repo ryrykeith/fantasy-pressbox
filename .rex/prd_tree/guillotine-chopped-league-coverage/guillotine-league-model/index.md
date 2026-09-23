@@ -4,7 +4,8 @@ level: "feature"
 title: "Guillotine league model"
 status: "pending"
 priority: "critical"
-blockedBy: ["c750f1eb-2d36-4204-9e92-47524cddc656"]
+blockedBy:
+  - "c750f1eb-2d36-4204-9e92-47524cddc656"
 acceptanceCriteria: []
 description: "Model the concepts the format actually runs on: who is still alive, cumulative points, who is closest to the chop, and what the FAAB market looks like.\n\nNone of these exist today. src/analysis/week.mjs is built entirely around paired matchups and per-game winner/loser/margin facts."
 lastModified: "2026-09-23T05:41:31.595Z"

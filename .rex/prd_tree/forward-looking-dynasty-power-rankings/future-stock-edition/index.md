@@ -4,7 +4,8 @@ level: "feature"
 title: "Future stock edition"
 status: "pending"
 priority: "medium"
-blockedBy: ["9626fd96-1942-4d17-b8eb-08c42ff89b1f"]
+blockedBy:
+  - "9626fd96-1942-4d17-b8eb-08c42ff89b1f"
 acceptanceCriteria: []
 description: "The report itself."
 lastModified: "2026-09-23T05:43:14.107Z"
