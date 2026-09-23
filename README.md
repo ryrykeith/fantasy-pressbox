@@ -391,6 +391,7 @@ Run them all from inside the project folder.
 | `node src/cli.mjs preview` | Build this week's matchup previews. |
 | `node src/cli.mjs survival-preview` | Build this week's survival preview. Guillotine leagues only — it replaces `preview`. |
 | `node src/cli.mjs recap` | Build last week's recap and awards. |
+| `node src/cli.mjs chop-recap` | Build last week's chop recap and awards. Guillotine leagues only — it replaces `recap`. |
 | `node src/cli.mjs rankings` | Build the power rankings. |
 | `node src/cli.mjs preseason-rankings` | Build preseason rankings, ignoring all results. |
 | `node src/cli.mjs fetch` | Just download and save a week of league data. |

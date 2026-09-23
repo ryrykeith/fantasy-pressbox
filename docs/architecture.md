@@ -155,12 +155,12 @@ Two lines of defence, both keyed off `hasMatchups`/the declared format:
   skips the CLI guard.
 
 Both name the edition that replaces the one refused (`survival-preview`,
-`chop-recap`). `survival-preview` has shipped (see below); `chop-recap` has
-not, and is tracked under the "Guillotine editions" feature. The refusal asks
-`TASKS` which is which rather than carrying its own claim, so the message stops
-saying "not shipped yet" the week a replacement lands instead of going stale.
-`rankings` is unaffected: a power ranking judges rosters, not games, so it has
-something to say for any format once its own weight set exists.
+`chop-recap`), and both have shipped (see below). The refusal asks `TASKS`
+which is which rather than carrying its own claim, so the message would stop
+saying "not shipped yet" the week a future replacement lands, instead of
+going stale. `rankings` is unaffected: a power ranking judges rosters, not
+games, so it has something to say for any format once its own weight set
+exists.
 
 #### The survival preview
 
@@ -232,6 +232,60 @@ dynasty set, so resolving one for every edition would have blocked the survival
 preview on a decision it never reads. `RANKING_TASKS` in `src/promptContext.mjs`
 is the list that asks; a guillotine league can publish its survival preview
 today and is refused only if it asks for a ranking.
+
+#### The chop recap
+
+The backward-looking edition a guillotine league gets in place of the matchup
+recap. `prompts/chop-recap.md` is registered in `TASK_PROMPTS` as `chop-recap`,
+and `src/cli.mjs` exposes it as its own command. It shares `commandEdition`'s
+recap/rankings/postseason path in `src/cli.mjs` rather than getting a branch of
+its own — the only thing that path does differently for it is also read the
+danger board, which a plain recap has no format-fact to want.
+
+Guarded exactly like the survival preview, in both directions: guillotine
+refuses `recap` and points at `chop-recap` (`refuseGuillotineMatchupEdition`),
+and any other format refuses `chop-recap` and points back at `recap`
+(`refuseSurvivalEditionWithoutEliminations`, generalised to both directions via
+`ORDINARY_EDITION_FOR` — the reverse of the `GUILLOTINE_EDITION_FOR` map the
+first guard already used, built once so the two guards can never name
+different commands for the same pair). `buildPrompt` in `src/promptContext.mjs`
+refuses again from the resolved format, the same second line of defence every
+other elimination-only edition carries.
+
+**The one fork this task adds to code the survival preview already owns:**
+`dangerBoardView` (`src/promptContext.mjs`) computes `lastCompletedWeek` from
+weeks strictly before `beforeWeek`. A survival preview is *about* a week that
+has not been played, so it passes `beforeWeek: week` — excluding that week is
+the whole point, since its scores do not exist yet. A chop recap is *about*
+the week that just finished, and that week's own chop is the fact the edition
+exists to report, so it passes `beforeWeek: week + 1` instead — landing
+`lastCompletedWeek` on the week being recapped rather than the one before it.
+`FORWARD_LOOKING_TASKS` (`src/promptContext.mjs`, imported by `src/cli.mjs` for
+the same `resolveWeek` offset decision rather than duplicated) is what
+`buildContext` asks to choose between the two.
+
+Nothing else about the danger board changes: `lastCompletedWeek.scoringOrder`
+still carries the team that was just chopped, sitting on the line at a margin
+of exactly zero — the same "history is not rewritten" rule documented under
+the survival preview above is what makes "who nearly went" (the smallest
+nonzero margin) and "who went" (the zero) both readable off one array. The
+released pool a chop recap reports is the `releasedPools` entry whose `week`
+matches the context's own `week`; the ones before it are older chops, not this
+week's news, and the prompt file is what tells the model to tell them apart.
+
+**`survivorCount` is stated, not counted.** `context.survivorCount` is set
+directly from `eliminationLedger.survivorCount` (falling back to the full
+roster when no ledger ran) rather than left for a model to infer from the
+length of `standings` — the one number a chop recap's headline has to get
+exactly right, computed the same way `pointsLeftOnBench` and every other
+model-facing number in this project already is.
+
+**Grading reuses the survival preview's own mechanism.** A chop recap's
+`previousPredictions` comes from the identical `gradePredictions` call a plain
+recap already makes — `gradeChopPrediction` (`src/store.mjs`) tells a called
+chop apart from a called game by its own fields, not by the caller's task, so
+nothing here needed to change for the called shot a survival preview makes the
+week before to come back gradeable the week after.
 
 #### The elimination ledger
 

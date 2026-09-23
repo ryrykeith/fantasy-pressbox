@@ -21,10 +21,26 @@ const TASK_PROMPTS = {
   preview: 'weekly-preview.md',
   'survival-preview': 'survival-preview.md',
   recap: 'weekly-recap.md',
+  'chop-recap': 'chop-recap.md',
   postseason: 'postseason-power-rankings.md',
 };
 
 export const TASKS = Object.keys(TASK_PROMPTS);
+
+/**
+ * Editions about a week that has not been played yet.
+ *
+ * Everything else is about a week that already happened. The distinction
+ * decides which side of "now" `dangerBoardView` draws its chop line on: a
+ * survival preview must never see the week it is about (its scores do not
+ * exist yet), while a chop recap is *about* the week that just settled and
+ * must see exactly that week's chop line, not the one before it.
+ *
+ * src/cli.mjs reads the same list to decide which way to offset `resolveWeek`
+ * — imported from here rather than duplicated, so the two decisions can never
+ * drift apart.
+ */
+export const FORWARD_LOOKING_TASKS = ['preview', 'survival-preview'];
 
 /**
  * Editions that put the league in order, and are therefore steered by the
@@ -371,20 +387,31 @@ function faabMarketView(faabMarket, players) {
 }
 
 /**
- * The chop-line picture a forward-looking edition is allowed to cite.
+ * The chop-line picture an elimination edition is allowed to cite.
  *
  * `lastCompletedWeek` is a historical fact — the score it actually took to
- * survive the most recent week, and how close the team that survived came to
- * not surviving. There is deliberately no chop line for the week being
- * previewed: it is set by scores that do not exist yet, and a number offered
- * for it would be a guess wearing the tool's authority.
+ * survive the most recently *settled* week, and how close the team that
+ * survived came to not surviving. What counts as "most recently settled"
+ * depends on which side of that week the calling edition sits:
+ *
+ * - A **forward-looking** edition (survival preview) is about a week that has
+ *   not been played yet. There is deliberately no chop line for it: it is set
+ *   by scores that do not exist yet, and a number offered for it would be a
+ *   guess wearing the tool's authority. The caller passes `beforeWeek: week`,
+ *   so that week itself is excluded.
+ * - A **backward-looking** edition (chop recap) is *about* the week that just
+ *   finished, and that week's own chop is the headline fact it exists to
+ *   report. The caller passes `beforeWeek: week + 1`, so that week is the one
+ *   `lastCompletedWeek` describes rather than the one before it.
  *
  * Weeks at or after `beforeWeek` are dropped rather than trusted to be absent.
  * src/analysis/danger.mjs already skips a week that was never played, but a
  * week *in progress* is "played" by that test — Sunday afternoon has real
  * points on the board — and a chop line drawn under a third of a week's scores
- * would be wrong in the most convincing way available. So the week being
- * previewed never sets one, however much of it Sleeper has scored.
+ * would be wrong in the most convincing way available. So a week that has not
+ * actually finished never sets one, however much of it Sleeper has scored —
+ * which for a survival preview is the week being previewed, and for a chop
+ * recap can only be a week later than the one it is reporting on.
  *
  * `floors` is the forward-looking half, and the reason ceiling is not here:
  * this format eliminates the lowest score, so the number that predicts danger
@@ -460,7 +487,7 @@ function byeExposureView(byeExposure, players) {
 
 /**
  * @param {object} input
- * @param {'preseason-rankings'|'rankings'|'preview'|'survival-preview'|'recap'|'postseason'} input.task
+ * @param {'preseason-rankings'|'rankings'|'preview'|'survival-preview'|'recap'|'chop-recap'|'postseason'} input.task
  * @param {object|null} input.eliminationLedger built by
  *        src/analysis/elimination.mjs#buildEliminationLedger; only read for a
  *        format where teams are eliminated (src/format.mjs#hasEliminations).
@@ -469,7 +496,7 @@ function byeExposureView(byeExposure, players) {
  *        eliminationLedger, for the same formats.
  * @param {object|null} input.dangerBoard built by
  *        src/analysis/danger.mjs#buildDangerBoard; the chop line and rolling
- *        floors a survival preview is made of.
+ *        floors a survival preview or a chop recap is made of.
  * @param {Array|null} input.byeExposure built by
  *        src/analysis/byeExposure.mjs#upcomingByeExposure.
  */
@@ -530,17 +557,26 @@ export function buildContext({
     // record — see survivalStandingsView for why record and pointsAgainst are
     // both left out entirely rather than reported as zero.
     context.standings = survivalStandingsView(teams, eliminationLedger);
+    // The one number a chop recap's headline needs exactly right, stated
+    // outright rather than left for a model to count off `standings` — the
+    // same reason `pointsLeftOnBench` is computed here instead of asked for.
+    // Falls back to the full roster when no ledger has run yet, matching
+    // survivalStandingsView's own fallback (an empty history filters nothing).
+    context.survivorCount = eliminationLedger?.survivorCount ?? teams.length;
     context.eliminationHistory = eliminationHistoryView(eliminationLedger);
     // Null before the season's first capture (no ledger has run yet) or in a
     // league with no waiver budget configured at all — either way, absent
     // rather than a market report with nothing in it.
     if (faabMarket) context.faabMarket = faabMarketView(faabMarket, players);
-    // The chop line and the bye-week cliff: the two facts that say who is in
-    // danger in the week about to be played, as opposed to who has been good
-    // so far. Absent before any week has been captured.
+    // The chop line and the bye-week cliff. For a forward-looking edition
+    // (survival preview) these describe who is in danger in the week about to
+    // be played; for a backward-looking one (chop recap) `beforeWeek` shifts
+    // by one so the same call describes the week that just happened instead
+    // — see dangerBoardView's own docstring for why. Absent before any week
+    // has been captured.
     if (dangerBoard) {
       context.dangerBoard = dangerBoardView(dangerBoard, {
-        beforeWeek: week,
+        beforeWeek: FORWARD_LOOKING_TASKS.includes(task) ? week : week + 1,
         eliminationLedger,
       });
     }
@@ -702,12 +738,16 @@ function describeMissingContext({ task, context, week }) {
     });
   }
 
-  // A survival preview is built on the chop line and the waiver market. Either
-  // can be genuinely missing — week 1 has no completed week behind it, and a
-  // league whose earlier weeks were never fetched has nothing on disk to read
-  // — and both are exactly the kind of number a model will supply for itself
-  // if the absence is left implicit.
-  if (task === 'survival-preview' && !context.dangerBoard?.lastCompletedWeek) {
+  // Both elimination-only editions are built on the chop line and the waiver
+  // market. Either can be genuinely missing — week 1 has no completed week
+  // behind it, and a league whose earlier weeks were never fetched has
+  // nothing on disk to read — and both are exactly the kind of number a model
+  // will supply for itself if the absence is left implicit. The instruction
+  // differs by task because a survival preview has no other score to fall
+  // back on (it is forward-looking, so `thisWeek` does not exist at all),
+  // while a chop recap's `thisWeek` is real regardless — only the comparison
+  // to a chop line is unavailable, not the scores themselves.
+  if (ELIMINATION_ONLY_TASKS.includes(task) && !context.dangerBoard?.lastCompletedWeek) {
     missing.push({
       field: 'chopLine',
       why:
@@ -715,13 +755,17 @@ function describeMissingContext({ task, context, week }) {
           ? 'This is the first week of the season: no week has been completed, so nothing has set a chop line yet.'
           : 'No completed week was available, so there is no chop line on record.',
       instruction:
-        'Do not state a chop line, a survival margin, or how near anyone came to being chopped, ' +
-        'and do not cite any score. Write this edition from the field still alive and the ' +
-        'bye-week exposure alone.',
+        task === 'chop-recap'
+          ? 'Do not state a chop line or a survival margin, and do not say how close anyone came ' +
+            "to going out. `thisWeek` still has real scores — write from those alone, without " +
+            'comparing them to a chop line that is not on record.'
+          : 'Do not state a chop line, a survival margin, or how near anyone came to being chopped, ' +
+            'and do not cite any score. Write this edition from the field still alive and the ' +
+            'bye-week exposure alone.',
     });
   }
 
-  if (task === 'survival-preview' && !context.faabMarket) {
+  if (ELIMINATION_ONLY_TASKS.includes(task) && !context.faabMarket) {
     missing.push({
       field: 'faabMarket',
       why: 'No waiver-market figures were available for this week.',
@@ -731,7 +775,7 @@ function describeMissingContext({ task, context, week }) {
     });
   }
 
-  if (task === 'recap' && !context.previousPredictions) {
+  if ((task === 'recap' || task === 'chop-recap') && !context.previousPredictions) {
     missing.push({
       field: 'previousPredictions',
       why: 'No prediction was recorded for this week.',
@@ -785,10 +829,10 @@ const MATCHUP_ONLY_TASKS = ['preview', 'recap'];
 /**
  * Editions that only mean anything where teams are eliminated during the
  * season. The mirror of MATCHUP_ONLY_TASKS, and refused the same way in both
- * places: a survival preview of a league nobody can be chopped out of would be
- * an edition about a stake that does not exist.
+ * places: a survival preview or a chop recap for a league nobody can be
+ * chopped out of would be an edition about a stake that does not exist.
  */
-export const ELIMINATION_ONLY_TASKS = ['survival-preview'];
+export const ELIMINATION_ONLY_TASKS = ['survival-preview', 'chop-recap'];
 
 /** The complete text to paste into a chat, or send to an API. */
 export function buildPrompt({ task, context }) {

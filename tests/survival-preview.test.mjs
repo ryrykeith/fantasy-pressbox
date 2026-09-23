@@ -269,35 +269,36 @@ test('buildPrompt refuses a survival preview built from a head-to-head context',
   }
 });
 
-test('survival-preview is the elimination-only task, and preview is still refused for guillotine', () => {
-  assert.deepEqual(ELIMINATION_ONLY_TASKS, ['survival-preview']);
+test('survival-preview and chop-recap are the elimination-only tasks, and preview/recap are still refused for guillotine', () => {
+  assert.deepEqual(ELIMINATION_ONLY_TASKS, ['survival-preview', 'chop-recap']);
   assert.throws(
     () => refuseGuillotineMatchupEdition(testConfig('guillotine'), 'preview'),
     /`survival-preview`/,
   );
+  assert.throws(
+    () => refuseGuillotineMatchupEdition(testConfig('guillotine'), 'recap'),
+    /`chop-recap`/,
+  );
 });
 
 /**
- * The replacement edition has shipped, so the refusal must stop calling it
- * unbuilt and simply name the command to run. Its sibling has not shipped, and
- * must still say so rather than send anyone to a command that does not exist.
+ * Both replacement editions have shipped, so neither refusal should still be
+ * calling one of them unbuilt — that wording is only correct while a
+ * replacement is genuinely missing (see tests/chop-recap.test.mjs for the
+ * chop-recap side of this pairing, and docs/architecture.md for why the
+ * message asks TASKS instead of carrying its own claim).
  */
-test('the preview refusal points at a command that now exists, and the recap refusal does not', () => {
-  assert.throws(
-    () => refuseGuillotineMatchupEdition(testConfig('guillotine'), 'preview'),
-    (error) => {
-      assert.doesNotMatch(error.message, /not shipped|has not shipped yet/i);
-      return true;
-    },
-  );
-  assert.throws(
-    () => refuseGuillotineMatchupEdition(testConfig('guillotine'), 'recap'),
-    (error) => {
-      assert.match(error.message, /`chop-recap`/);
-      assert.match(error.message, /not shipped/i);
-      return true;
-    },
-  );
+test('both the preview and recap refusals point at commands that now exist', () => {
+  for (const [task, replacement] of [['preview', 'survival-preview'], ['recap', 'chop-recap']]) {
+    assert.throws(
+      () => refuseGuillotineMatchupEdition(testConfig('guillotine'), task),
+      (error) => {
+        assert.doesNotMatch(error.message, /not shipped|has not shipped yet/i);
+        assert.match(error.message, new RegExp(`\`${replacement}\``));
+        return true;
+      },
+    );
+  }
 });
 
 /* ----------------------------------------------------------- nothing matchup-shaped */
