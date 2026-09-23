@@ -516,10 +516,27 @@ function describeMissingContext({ task, context, week }) {
   return missing;
 }
 
+/** Editions that assume two teams played a head-to-head game. */
+const MATCHUP_ONLY_TASKS = ['preview', 'recap'];
+
 /** The complete text to paste into a chat, or send to an API. */
 export function buildPrompt({ task, context }) {
   const file = TASK_PROMPTS[task];
   if (!file) throw new Error(`Unknown task "${task}". Known tasks: ${TASKS.join(', ')}`);
+
+  // Second line of defence: src/cli.mjs already refuses a guillotine
+  // preview/recap before any work begins, using the declared format alone.
+  // This catches any other caller that reaches buildPrompt directly and skips
+  // that guard — the JSON context block is authoritative, so a prompt built
+  // from it must never ask a model to describe a game nobody played.
+  if (MATCHUP_ONLY_TASKS.includes(task) && !hasMatchups(context.league.format)) {
+    throw new Error(
+      `Cannot build a ${task} for a ${context.league.format.type} league: there are no ` +
+        'head-to-head matchups to describe — every team just scores on its own each week. ' +
+        'This should already have been refused in src/cli.mjs; if you are calling buildPrompt ' +
+        'directly, add the same guard there.',
+    );
+  }
 
   return [
     // A pasted or attached file arrives with no surrounding instruction, and a

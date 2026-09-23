@@ -133,6 +133,29 @@ The reasoning is the project's first rule: the JSON context block is
 authoritative, so anything in it may be printed. A matchup that reached it would
 be a false fact with the tool's own authority behind it.
 
+#### Refusing preview and recap outright
+
+Stripping matchup fields is not enough on its own for `preview` and `recap`:
+both editions are *about* a game, so a guillotine league leaves them with
+nothing to describe, not just fewer facts to describe it with. Rather than
+generate a thin, confused edition, both commands refuse outright.
+
+Two lines of defence, both keyed off `hasMatchups`/the declared format:
+
+- `refuseGuillotineMatchupEdition` in `src/cli.mjs` runs first, before any
+  Sleeper call or file write. It only needs `config.leagueFormat`: guillotine
+  can never be *detected* (see above), so a declaration is the only way it is
+  ever true, and checking it costs nothing.
+- `buildPrompt` in `src/promptContext.mjs` checks again against the resolved
+  `context.league.format`, in case some other caller reaches it directly and
+  skips the CLI guard.
+
+Both name the edition that will eventually replace the one refused
+(`survival-preview`, `chop-recap`) — neither has shipped yet; they are tracked
+under the "Guillotine editions" feature. `rankings` is unaffected: a power
+ranking judges rosters, not games, so it has something to say for any format
+once its own weight set exists.
+
 ### Scoring profile
 
 `format.scoring` is built by `deriveScoringProfile` in
