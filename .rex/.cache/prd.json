@@ -1,0 +1,755 @@
+{
+  "schema": "rex/v1",
+  "title": "PRD",
+  "items": [
+    {
+      "id": "e09e1f99-f3ef-47bf-87de-d3a844569c19",
+      "title": "Distributable npm package with league workspaces",
+      "status": "pending",
+      "level": "epic",
+      "description": "Turn Fantasy Pressbox from a cloned repo that covers one league into an installable npm package that manages a workspace per league.\n\nTARGET WORKFLOW\n1. Install the package.\n2. Run an init that asks for the league (Sleeper ID), categorises the format type (dynasty / redraft / guillotine), and creates a local directory for that league holding its config and data.\n3. Run the generate commands in or against that directory, producing pasteable prompts or calling the provider API — the two paths that already exist in src/generate.mjs.\n\nTHE CENTRAL OBSTACLE\nsrc/config.mjs exports ROOT as the package directory and uses it for BOTH kinds of path:\n- package assets that ship with the code: prompts/ (read by readPrompt in src/promptContext.mjs), the config/*.yml defaults;\n- user data that belongs to a league: data/, output/, and .env holding SLEEPER_LEAGUE_ID.\nOnce the package is installed under node_modules, those two must not be the same directory — writing a user's league snapshots into node_modules is obviously wrong, and reading prompts from the user's working directory would break a default install. Separating them is the prerequisite for everything else in this epic.\n\nSECOND OBSTACLE\nEverything about league identity lives in a single .env at the package root, so the project structurally cannot hold two leagues at once. Multi-league is the point of the init flow.\n\nNOTE package.json currently declares private: true and a bin of fantasy-pressbox pointing at src/cli.mjs. It has zero dependencies, which is worth preserving if the init flow can be built without pulling in a prompt library.",
+      "priority": "high",
+      "lastModified": "2026-09-23T05:44:10.040Z",
+      "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+      "children": [
+        {
+          "id": "44b18efd-6560-4493-bd64-2a9dc09b2cb3",
+          "title": "Interactive init and league workspaces",
+          "status": "pending",
+          "level": "feature",
+          "description": "The init flow the workflow is built around: create a league workspace and categorise its format.",
+          "priority": "high",
+          "blockedBy": [
+            "6a8737f4-ae6f-4123-82f5-2801cefb8764",
+            "c750f1eb-2d36-4204-9e92-47524cddc656"
+          ],
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T05:44:14.164Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "420e0a9e-6eb0-4276-9eec-6101ff19f191",
+              "title": "Interactive init command",
+              "status": "pending",
+              "level": "task",
+              "description": "An init that creates a workspace for one league.\n\nFLOW\n- Ask for the Sleeper league ID, then fetch the league to confirm it resolves and show the name, season and team count back for confirmation. src/sleeper/client.mjs already does the fetching and setup.mjs already has patterns for guided setup worth reusing.\n- Categorise the format: offer the detected type where detection is possible and require an explicit choice for guillotine, which cannot be detected (see the format engine epic). This is the step that makes the guillotine fix reachable for a user, so the prompt wording matters — a user in a chopped league must recognise their format in the options.\n- Confirm the scoring profile back to the user (PPR tier, TE premium, superflex), since a misread here silently degrades every edition afterwards.\n- Write the workspace: directory, league config including the declared format type, and the data and output subdirectories.\n- Optionally collect a provider API key, keeping it out of the workspace config file and in an env file, matching how src/config.mjs reads keys from the environment today.\n\nACCEPTANCE\n- Running init twice against the same league does not clobber existing config without asking.\n- An invalid or unreachable league ID fails at the point of entry with a clear message, not later during a generate.\n- The resulting workspace works with the generate commands immediately, with no manual file editing.\n- Zero new runtime dependencies if achievable with node:readline.",
+              "priority": "high",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:44:15.014Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "dc9a9068-1d4c-4bfc-9d81-6d5c433d3eb4",
+              "title": "Multi-league layout and league selection",
+              "status": "pending",
+              "level": "task",
+              "description": "Let one installation serve several leagues.\n\nWHAT\n- A layout where each league is its own directory, either as siblings under a parent or as independent directories the user creates wherever they like. Prefer the latter unless there is a reason not to: it keeps the tool free of a global registry and makes a workspace portable.\n- League selection: run from inside the workspace directory by default, with a flag to point at one explicitly.\n- Every command resolves its league from the workspace, so running a recap in the wrong directory is impossible rather than merely discouraged.\n\nACCEPTANCE\n- Two workspaces for two leagues in different formats each generate correctly, with no cross-contamination of data, output or config.\n- Running a command outside any workspace produces a message naming init as the fix, in the style of the existing missing-league-ID error in src/cli.mjs.\n- data/ and output/ are per workspace, so snapshot history — which the project treats as immutable once written — stays scoped to its league.",
+              "priority": "high",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:44:16.115Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        },
+        {
+          "id": "5987d01a-15f8-47ab-b56c-14fbcf648ceb",
+          "title": "Publish preparation",
+          "status": "pending",
+          "level": "feature",
+          "description": "Everything needed to actually put this on npm.",
+          "priority": "medium",
+          "blockedBy": [
+            "44b18efd-6560-4493-bd64-2a9dc09b2cb3"
+          ],
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T05:44:16.828Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "ba040558-5242-41d7-86ab-52d6781dbd4f",
+              "title": "Package metadata and publishable layout",
+              "status": "pending",
+              "level": "task",
+              "description": "Prepare package.json and the file layout for publication.\n\nWHAT\n- Remove private: true and choose the published name. Decide scoped versus unscoped before publishing, since it cannot be changed afterwards without a new package.\n- files: must include prompts/ and config/ — they are runtime assets, not build inputs, and readPrompt fails without them.\n- bin: keep the existing fantasy-pressbox entry and confirm the shebang and executable bit on src/cli.mjs survive packing.\n- engines already requires Node 18+, which matches the code's use of built-in fetch.\n- Verify the whole thing with a pack and a local install into a scratch directory before publishing anything.\n\nACCEPTANCE\n- npm pack produces a tarball that installs and runs init and one generate command end to end in a clean directory.\n- No dev or repo-only files ship in the tarball.",
+              "priority": "medium",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:44:17.402Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "db331b55-226b-4f61-8d10-60fa21162ebb",
+              "title": "Rewrite the docs for the package workflow",
+              "status": "pending",
+              "level": "task",
+              "description": "README.md documents a clone-and-run workflow throughout: npm run setup, node src/cli.mjs <command>, files landing in the repo's own data/ and output/. All of that changes.\n\nWHAT\n- Install and init as the entry path, with the per-league workspace explained.\n- Document the format categorisation step and what each format changes, including that guillotine must be declared because Sleeper cannot report it.\n- Update the command reference for the new commands added across this PRD (transactions, the guillotine editions, the forward-looking dynasty report).\n- Keep the existing explanation of why the data is the source of truth — it is the clearest statement of the project's design rule and should survive the rewrite.\n- setup.mjs overlaps with the new init; decide whether it is replaced or kept for the repo-clone path, and say so in the docs.\n\nACCEPTANCE\n- A reader who has never cloned the repo can install, init and publish a first edition from the README alone.",
+              "priority": "medium",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:44:17.980Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        },
+        {
+          "id": "6a8737f4-ae6f-4123-82f5-2801cefb8764",
+          "title": "Separate package assets from workspace data",
+          "status": "pending",
+          "level": "feature",
+          "description": "Split the single ROOT into a package root and a workspace root. This is the prerequisite task for the whole epic and should land before the init flow.",
+          "priority": "high",
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T05:44:11.189Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "44c3f4eb-5650-4bfb-b787-fa4d4e830abb",
+              "title": "Split ROOT into package root and workspace root",
+              "status": "pending",
+              "level": "task",
+              "description": "Replace the single exported ROOT in src/config.mjs with two clearly named paths, and update every consumer.\n\nCONSUMERS TO UPDATE\n- src/config.mjs: DEFAULT paths for dataDir and outputDir, the config/*.yml reads, and the .env location in loadConfig.\n- src/promptContext.mjs: readPrompt joins ROOT with prompts/ — that is a PACKAGE asset.\n- src/cli.mjs: commandDoctor checks prompt files under ROOT — also a package asset.\n\nRULES\n- Package root resolves from import.meta.url as ROOT does today, and is read-only at runtime.\n- Workspace root defaults to the current working directory, overridable by a flag and by an environment variable, following the precedence already documented at the top of src/config.mjs.\n\nACCEPTANCE\n- No write ever targets the package root.\n- Running from a directory other than the package root reads prompts correctly and writes data and output into the working directory.\n- The existing single-league repo workflow still works, so current users are not broken by the split alone.",
+              "priority": "high",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:44:12.267Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "d658cee2-739c-4abb-9a02-57964daebd64",
+              "title": "Workspace overrides for prompts and config",
+              "status": "pending",
+              "level": "task",
+              "description": "Let a league workspace override the shipped defaults without copying the whole package.\n\nWHAT\n- config/editorial.yml and config/rankings.yml: read the shipped defaults, then a workspace copy layered on top. readYamlFile in src/config.mjs already does exactly this layering over the built-in DEFAULT objects, including the replaceKeys semantics for maps that must be taken wholesale — extend that chain by one level rather than inventing a second mechanism.\n- prompts/: allow a workspace prompts directory to shadow individual shipped prompt files by name, so a league can rewrite its recap voice without forking the package. readPrompt is the single resolution point, which makes this a small change.\n\nACCEPTANCE\n- A workspace with no overrides behaves exactly like the shipped defaults.\n- A workspace overriding one prompt file gets its version of that file and shipped versions of the rest.\n- doctor reports which prompts and config files are overridden, so a confusing output can be traced to a local override.",
+              "priority": "medium",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:44:13.187Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "793fccd2-780b-401f-be48-f8d99ed64892",
+      "title": "Forward-looking dynasty power rankings",
+      "status": "pending",
+      "level": "epic",
+      "description": "A second, explicitly forward-looking dynasty ranking that weighs future draft capital and roster age alongside current production.\n\nWHY\nThe existing weekly rankings blend current strength and dynasty context in one number, which makes it impossible to see the thing dynasty managers most want to know: who is actually set up for the next three years. A team that is winning now with a 30-year-old core and no picks through the next three drafts should rank near the BOTTOM of a forward-looking report, however good its record is — and the current single ranking cannot express that.\n\nTHE BALANCE THIS MUST STRIKE\nForward-looking must not collapse into youth worship. A roster of unproven 22-year-olds and a pile of picks is not better than a team producing now with a reasonable age curve. Current production stays in the model; the report weighs the window, it does not project fantasy outcomes for young players the tool has no data on. Concretely: reward demonstrated production from players young enough to keep producing, and treat picks and youth as upside on top of that, not as a substitute for it.\n\nFOUNDATIONS ALREADY IN PLACE\nnormalizeFutureDraftCapital computes net pick capital per team per season, correctly excluding picks for drafts already held. normalizePlayer captures age and yearsExp. Neither is aggregated into a roster-level window view yet.\n\nAPPLIES TO dynasty leagues only. In redraft this report has no meaning and the command should refuse, in the same way the guillotine guard rails work.",
+      "priority": "medium",
+      "lastModified": "2026-09-23T05:43:11.626Z",
+      "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+      "children": [
+        {
+          "id": "8283278f-b64f-4de2-9e65-f930766330f0",
+          "title": "Future stock edition",
+          "status": "pending",
+          "level": "feature",
+          "description": "The report itself.",
+          "priority": "medium",
+          "blockedBy": [
+            "9626fd96-1942-4d17-b8eb-08c42ff89b1f"
+          ],
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T05:43:14.107Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "ebe4b1b7-66a1-44fb-8229-9affbbab53c1",
+              "title": "Forward-looking ranking prompt with anti-over-projection guard",
+              "status": "pending",
+              "level": "task",
+              "description": "Write the prompt. The guard against youth worship is the hard part and belongs here, because it is a judgement instruction rather than a computation.\n\nINSTRUCTIONS THE PROMPT MUST CARRY\n- Rank on the next three seasons, not on this week.\n- A contender with an old starting core and no picks over the next three drafts ranks low, explicitly, even if it is winning now. Say this outright in the prompt — it is the motivating case.\n- Do NOT rank a young roster highly on age alone. Youth without production is potential, not value. The production-by-age-band split exists precisely so the model can tell the difference, and it must cite it.\n- Current production still counts. A team producing now with a sustainable age curve is the ideal, not the team with the most picks.\n- Position-aware ageing: a 29-year-old running back and a 29-year-old quarterback are not comparable, and the per-position age summaries are there to support that.\n\nACCEPTANCE\n- The edition ranks all teams with reasoning tied to the age, production and capital facts in the context.\n- A test case or documented example showing the old-contender-with-no-picks case ranking low.\n- Refuses to run for redraft and guillotine leagues, naming the reason.",
+              "priority": "medium",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:43:14.644Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "61fbe539-0bf7-42d7-9d26-edf845180e47",
+              "title": "Wire the forward-looking report into CLI and config",
+              "status": "pending",
+              "level": "task",
+              "description": "Register the task, add the command, and give it its own weight set.\n\nWHERE src/cli.mjs (HELP and dispatch), src/promptContext.mjs (TASK_PROMPTS), config/rankings.yml (a forward-looking weight set under the dynasty format).\n\nThe weights differ from the standard dynasty set: future_draft_capital and the age/window factors carry far more, current-week form far less. Note that the current weights list has no age factor at all — one needs adding.\n\nACCEPTANCE\n- Command documented in HELP with an example, consistent with the existing entries.\n- Weight set validates and sums to 1.0.\n- Works with and without --generate.",
+              "priority": "medium",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:43:15.199Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        },
+        {
+          "id": "9626fd96-1942-4d17-b8eb-08c42ff89b1f",
+          "title": "Roster window metrics",
+          "status": "pending",
+          "level": "feature",
+          "description": "Aggregate age and pick capital into roster-level facts. Facts only — the weighting judgement belongs to the prompt, consistent with how src/analysis/ is kept free of opinion.",
+          "priority": "medium",
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T05:43:12.380Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "fefb9782-3333-4b6d-8f68-6c5febb46d2e",
+              "title": "Roster age and production-window aggregates",
+              "status": "pending",
+              "level": "task",
+              "description": "Compute per-team age structure from the player records already normalized.\n\nWHAT\n- Age distribution across the roster, weighted toward players who actually start — a 34-year-old on the bench is not the same problem as a 34-year-old in the starting lineup, and league.startingSlots plus the starter IDs make that distinction available.\n- Position-aware age: running backs age out years before quarterbacks and tight ends, so a single mean age across the roster is close to meaningless. Produce per-position age summaries.\n- Production concentration by age band: how much of the team's season points to date came from players over and under a given age. This is the number that separates 'old and winning' from 'young and winning' without projecting anything.\n\nACCEPTANCE\n- Per-team, per-position age summaries plus the production-by-age-band split.\n- All values derive from data already fetched; no new external source.",
+              "priority": "medium",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:43:13.138Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "031bea89-d99b-4113-9208-efe8a32c640b",
+              "title": "Three-year pick capital horizon",
+              "status": "pending",
+              "level": "task",
+              "description": "Extend the existing pick capital view into a rolling window suitable for a forward-looking report.\n\nnormalizeFutureDraftCapital already returns per-season rows with picksHeld against a baseline. What is missing is the summary the report needs: net capital across the next three drafts as a single comparable figure per team, with the per-season detail retained.\n\nWATCH OUT\nSleeper only reports picks that have MOVED, which is why the existing code starts every team at roundsPerDraft and applies the moves. That assumption must carry into the horizon summary — a team absent from tradedPicks holds a full complement, not zero.\n\nACCEPTANCE\n- Net three-year capital per team, plus the existing per-season breakdown.\n- A league with no traded future picks yields equal capital for all teams rather than nulls.",
+              "priority": "medium",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:43:13.628Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cf395cd8-94d6-4689-a0dd-aac1a8144cbc",
+      "title": "Guillotine (chopped) league coverage",
+      "status": "pending",
+      "level": "epic",
+      "description": "Support guillotine leagues, where there are no head-to-head matchups and the lowest-scoring team is eliminated every week until one survivor remains.\n\nORIGIN\nReported by a league mate who actually tried to use Fantasy Pressbox on his guillotine league. The generated prompt was not relevant to his format: it described head-to-head matchups that do not exist, called winners and losers of games that are not played, and ranked teams on dynasty asset value in a format where only weekly floor keeps you alive. This is a real user hitting a real wall, and it is the highest-priority item in this PRD.\n\nTHE FORMAT\n- Typically 18 teams (one per NFL regular-season week), though 12- and 17-team variants exist.\n- No matchups. Each week every roster scores, and the LOWEST scorer is eliminated permanently.\n- The eliminated roster is dumped onto the waiver wire and surviving teams bid FAAB (blind) for the players.\n- Rosters get stronger as the season goes on, because the pool keeps absorbing eliminated teams' talent.\n- Strategy inverts the usual advice: play for the FLOOR, not the ceiling. You do not need the most points, only to not be last. Bye-week clustering is a genuine elimination risk. Hoarding FAAB early matters because better players hit the wire later.\n\nTHE CRITICAL TECHNICAL CONSTRAINT\nSleeper has NO native guillotine support. Commissioners run it manually: each week they remove the chopped team's owner and force-drop that roster's players to the waiver pool. Over the API a Sleeper guillotine league still looks like an ordinary head-to-head league, complete with generated matchup pairings that mean nothing. Consequences:\n- The format cannot be detected. It must be declared (see the format engine epic).\n- Sleeper's matchup pairings are noise and must be actively discarded, not merely ignored — src/analysis/week.mjs pairs them via pairMatchups and builds winner/loser/margin facts that are meaningless here.\n- Elimination state is not a field. It has to be derived from manual commissioner actions (emptied roster, removed owner) and/or declared, and derived state from manual actions is unreliable enough to need an operator override.\n\nSources: https://sleeper.com/blog/guillotine-fantasy-football/ and https://rotogrinders.com/fantasy/sleeper-promo-code/guillotine",
+      "priority": "critical",
+      "lastModified": "2026-09-23T05:41:31.125Z",
+      "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+      "children": [
+        {
+          "id": "8e209368-ac6b-4401-aeda-a406c0cad065",
+          "title": "Guard rails against head-to-head output in non-matchup leagues",
+          "status": "completed",
+          "level": "feature",
+          "description": "Make it impossible to generate a matchup-shaped edition for a guillotine league. This is the literal bug that was reported — the tool cheerfully produced irrelevant content instead of saying it could not.\n\nFailing loudly here is worth more than any of the new editions, because it converts a confusing bad output into an actionable message.",
+          "priority": "critical",
+          "startedAt": "2026-09-23T07:49:33.000Z",
+          "completedAt": "2026-09-23T07:49:33.000Z",
+          "endedAt": "2026-09-23T07:49:33.000Z",
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T07:49:33.000Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "90e28064-bbd8-41c6-916c-e2d828ec1923",
+              "title": "Refuse head-to-head editions for guillotine leagues",
+              "status": "completed",
+              "level": "task",
+              "description": "When the resolved format type is guillotine, the preview and recap commands must refuse and point at the guillotine equivalents.\n\nWHERE src/cli.mjs command dispatch, and buildPrompt in src/promptContext.mjs as a second line of defence.\n\nACCEPTANCE\n- Running preview or recap on a declared guillotine league exits non-zero with a message naming the correct command, in the style of the existing helpful errors in src/cli.mjs (e.g. the missing-league-ID message that tells you to run setup).\n- The error explains WHY, briefly: this league has no matchups.\n- No prompt file is written when the command refuses.",
+              "priority": "critical",
+              "startedAt": "2026-09-23T07:38:08.688Z",
+              "completedAt": "2026-09-23T07:49:33.000Z",
+              "endedAt": "2026-09-23T07:49:33.000Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T07:49:33.000Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "98a63c11-622a-4c0e-8795-8455cc897d6e",
+              "title": "Strip matchup-shaped facts from guillotine context",
+              "status": "completed",
+              "level": "task",
+              "description": "Even in the guillotine editions, the context builder must not hand the model matchup data it could accidentally cite.\n\nWHY\nSleeper still returns matchup pairings for a guillotine league, pairMatchups in src/sleeper/normalize.mjs will still pair them, and analyzeWeek will still compute winner, loser, margin, opponent and result for every team. If any of that reaches the JSON context block, the model will use it — the prompt tells it the JSON is authoritative, so a fabricated-looking matchup is exactly the kind of false fact this project exists to prevent.\n\nWHAT\n- In guillotine mode, analyzeWeek produces per-team scoring facts with no opponent, result or margin fields.\n- buildContext emits no thisWeek.games, no upcomingMatchups, no unpairedTeams.\n- describeMissingContext in src/promptContext.mjs gains an entry stating that this league has no matchups and instructing the model never to describe one — consistent with how that function already turns absence into an explicit instruction.\n\nACCEPTANCE\n- A guillotine context JSON contains no opponent, winner, loser, margin or matchupId anywhere.\n- The unavailable list explicitly names matchups as a non-concept for this league.\n- A test asserts the absence, so a future refactor cannot quietly reintroduce the fields.",
+              "priority": "critical",
+              "startedAt": "2026-09-23T07:28:27.239Z",
+              "completedAt": "2026-09-23T07:38:08.039Z",
+              "endedAt": "2026-09-23T07:38:08.039Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T07:38:08.056Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        },
+        {
+          "id": "a99c894d-1a38-41d6-94cd-0ba30773d0fb",
+          "title": "Guillotine editions",
+          "status": "pending",
+          "level": "feature",
+          "description": "Write the prompts for the editions this format actually needs, replacing the head-to-head preview and recap.\n\nThe existing task set in src/promptContext.mjs (TASK_PROMPTS) is preseason-rankings, rankings, preview, recap, postseason. Preview and recap are matchup-shaped and cannot be salvaged for guillotine — they need format-specific siblings.",
+          "priority": "critical",
+          "blockedBy": [
+            "95a2b33b-f430-41cc-9e40-94183aa38c80",
+            "ac2c8227-bc26-433d-8162-8e07dfacc506"
+          ],
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T05:41:34.273Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "a30bf435-c7fa-4305-aa98-726ddb95c281",
+              "title": "Chop recap edition",
+              "status": "completed",
+              "level": "task",
+              "description": "The weekly autopsy: who got chopped, by what margin, who escaped, and what just hit the waiver wire.\n\nCONTENT\n- The elimination, with the survival margin — losing by 0.4 points is the whole story when it happens.\n- Who nearly went and did not.\n- The roster now entering the FAAB pool, and what it is worth to the survivors.\n- Lineup malpractice still applies: src/analysis/lineup.mjs computes optimal lineup and efficiency, and in this format a manager chopped while leaving points on the bench is the most brutal fact available. Keep that.\n- Grade last week's chop prediction if one was recorded.\n\nACCEPTANCE\n- New prompt file under prompts/, registered in TASK_PROMPTS.\n- The edition cites no winner or loser of any matchup.\n- Survivor count is stated and correct (e.g. '13 left').",
+              "priority": "high",
+              "startedAt": "2026-09-23T19:03:13.668Z",
+              "completedAt": "2026-09-23T19:17:12.323Z",
+              "endedAt": "2026-09-23T19:17:12.323Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T19:17:12.338Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "5d1bc559-e47b-4f43-ad78-8eb83028bfb0",
+              "title": "Guillotine power rankings edition",
+              "status": "completed",
+              "level": "task",
+              "description": "Rank surviving teams on survival probability rather than on dynasty asset value.\n\nWHY A SEPARATE EDITION\nThe existing weekly rankings prompt ranks on starting lineup, dynasty value, depth, quarterback, future draft capital and flexibility. In guillotine, future draft capital does not exist, dynasty value is irrelevant (the season ends when you are chopped or win), and the dominant factors are weekly FLOOR, bye-week exposure and FAAB ammunition.\n\nSUGGESTED WEIGHTS (fills the placeholder left in the format-scoped weights task)\n- weekly floor / consistency: heaviest\n- starting lineup quality\n- bye-week exposure over the next few weeks\n- FAAB remaining as ammunition for future pools\n- depth, in the sense of injury survivability\n\nExplicitly zero: dynasty_value, future_draft_capital.\n\nACCEPTANCE\n- New prompt file plus a guillotine weight set in config/rankings.yml.\n- Only surviving teams are ranked; eliminated teams appear as history, not as ranks.\n- The prompt instructs on floor-over-ceiling reasoning, which is the format's core strategic inversion.\n- The rank emoji table in config/editorial.yml defaults to 12 entries while guillotine leagues commonly start at 18. rankEmoji in src/config.mjs repeats the last emoji past the end of the table, so an 18-team league gets seven identical emoji. Ship a documented larger default or a guillotine-appropriate table.",
+              "priority": "high",
+              "startedAt": "2026-09-23T19:29:21.818Z",
+              "completedAt": "2026-09-23T19:46:03.979Z",
+              "endedAt": "2026-09-23T19:46:03.979Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T19:46:04.069Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "791b7613-0623-43d4-8f17-6c1f9b2d813e",
+              "title": "Survival preview edition",
+              "status": "in_progress",
+              "level": "task",
+              "description": "A weekly forward-looking post: who is in danger this week, who has a bye-week problem, what is at stake.\n\nReplaces the matchup preview, which has nothing to describe in a format with no matchups.\n\nCONTENT\n- The current chop line and who is nearest it.\n- Bye-week exposure for the coming week.\n- FAAB positions going into the week.\n- A called shot, which in this format is a prediction of who gets chopped rather than who wins a game. That keeps the existing prediction-and-grading loop in src/store.mjs meaningful — gradePredictions already scores recorded predictions, and a chop prediction fits that shape.\n\nACCEPTANCE\n- New prompt file under prompts/, registered in TASK_PROMPTS.\n- The edition never refers to a matchup, an opponent, or a game.\n- The chop prediction is recorded in a form gradePredictions can score next week.",
+              "priority": "high",
+              "startedAt": "2026-09-23T17:19:14.299Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T17:19:14.317Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        },
+        {
+          "id": "95a2b33b-f430-41cc-9e40-94183aa38c80",
+          "title": "Guillotine league model",
+          "status": "completed",
+          "level": "feature",
+          "description": "Model the concepts the format actually runs on: who is still alive, cumulative points, who is closest to the chop, and what the FAAB market looks like.\n\nNone of these exist today. src/analysis/week.mjs is built entirely around paired matchups and per-game winner/loser/margin facts.",
+          "priority": "critical",
+          "blockedBy": [
+            "c750f1eb-2d36-4204-9e92-47524cddc656"
+          ],
+          "startedAt": "2026-09-23T16:19:12.338Z",
+          "completedAt": "2026-09-23T16:19:12.338Z",
+          "endedAt": "2026-09-23T16:19:12.338Z",
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T16:19:12.359Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "1566989f-ac20-4fa3-a641-877d553aa91d",
+              "title": "Build the elimination ledger",
+              "status": "completed",
+              "level": "task",
+              "description": "Track which teams have been chopped and in which week. This is the spine of every guillotine edition.\n\nWHY IT IS NOT TRIVIAL\nSleeper has no elimination field. A chopped team shows up as a roster whose owner was removed and whose players were force-dropped — so the signals are indirect and depend on the commissioner having done the manual work promptly and correctly. A commissioner who is a day late leaves the tool looking at a league state that contradicts itself.\n\nAPPROACH\n- Derive candidate eliminations: rosters with an empty or near-empty player list, and/or a null owner_id, cross-referenced against being last in cumulative points in a completed week.\n- Allow a declared override: an operator-maintained ledger of week -> eliminated team, which wins over derivation. This is the reliable path and should be what doctor nudges users toward.\n- Reconcile the two and report disagreement explicitly rather than silently preferring one.\n\nACCEPTANCE\n- The ledger yields, for any week, the set of surviving teams and the ordered elimination history.\n- A derived elimination that contradicts the declared ledger is surfaced as a warning naming both, not swallowed.\n- A league where the commissioner has not yet processed the chop produces a clear 'week not yet resolved' state rather than a wrong answer.\n- The snapshot written by captureWeek in src/pipeline.mjs records the ledger state for that week, so history stays immutable in the same way scores already are.",
+              "priority": "critical",
+              "startedAt": "2026-09-23T07:52:07.384Z",
+              "completedAt": "2026-09-23T08:10:03.000Z",
+              "endedAt": "2026-09-23T08:10:03.000Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T08:10:03.000Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "40ba1740-5b27-4b1e-a97f-af0fe72c6518",
+              "title": "Bye-week exposure per team",
+              "status": "completed",
+              "level": "task",
+              "description": "Report each surviving team's count of rostered starters on bye for the next few weeks — carved out of \"Chopping-block and danger analysis\" because the data that task assumed exists does not.\n\nWHAT WAS FOUND\nThat task's description (mine, and wrong) claimed \"the data to compute it exists in the player records.\" It does not. The cached /players/nfl dictionary (data/cache/players-nfl.json, 12,228 players) was inspected directly — every top-level key across every player, plus a raw-text scan for \"bye\" at any nesting depth. No bye-week field exists. Verified separately against https://docs.sleeper.com/: Sleeper has no bye-week endpoint, no schedule endpoint, and no per-team weekly opponent data. Sleeper cannot answer this question.\n\nTHE APPROACH — derive byes from the NFL schedule, then map player -> NFL team -> bye\nA bye is not a published field anywhere; it is the absence of a game. Take a week's NFL schedule, and any team with no game that week is on bye. Each roster's starters already resolve to an NFL team via normalizePlayer, so team-level byes give player-level byes.\n\nVERIFIED, NOT ASSUMED\nESPN's public scoreboard endpoint carries the schedule and was tested against real responses:\n\n  https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=<1-18>&dates=<season>\n\nWalking weeks 1-18 of 2025 and collecting competitors produced exactly 32 teams, each with exactly one missing week — a clean one-bye-per-team result with no gaps or duplicates. The 2026 season returns the same shape (week 6: 14 games, 28 teams playing, 4 on bye), so the schedule is published far enough ahead to be useful in-season, not just historically.\n\nTWO MAPPING GOTCHAS THAT WILL SILENTLY CORRUPT THE COUNT\nSleeper's team abbreviations and ESPN's do not fully agree. Compared directly against this project's cached player blob:\n- Washington is WAS in Sleeper and WSH in ESPN. Unaliased, every Washington starter looks like it has no bye.\n- Sleeper still carries OAK on retired players (the Raiders are LV now). OAK has no current-season schedule and must not be treated as a missing bye.\nAn unmapped or unknown abbreviation must be refused loudly, never silently treated as \"no bye\" — a team that appears to never have a bye is exactly the kind of wrong fact that reaches print.\n\nDESIGN — generate once into config, do not add a runtime dependency\nThis project has zero dependencies and talks to exactly one third party. Prefer a small script (e.g. scripts/fetch-bye-weeks.mjs) that walks the schedule once per season and writes a reviewable config/bye-weeks.<season>.yml of nflTeam -> week, which is committed. Runtime reads only that file, the way it already reads config/guillotine.yml's declared eliminations.\n\nRationale: the table is 32 static rows that never change once the season's schedule is published, so fetching it on every run buys nothing and puts an undocumented third-party API on the critical path of every edition. A checked-in table is inspectable, diffable, and cannot fail at 9pm on a Sunday. Deriving it beats hand-entering it; depending on it at runtime does not.\n\nDo NOT hardcode a season's bye schedule in src/. Byes shift every year, and CLAUDE.md's rule against hard-coded league-specific values rules it out.\n\nWHAT TO COMPUTE\n- Per surviving team, the count of rostered STARTERS (not full roster) on bye in each of the next few weeks. league.startingSlots plus each roster's starterIds identify starters; normalizePlayer already resolves a player id to its NFL team.\n- Numbers only, in src/analysis/ — alongside the other guillotine danger facts in src/analysis/danger.mjs, or its own module if the bye source needs its own loader/validator. Never prose, consistent with src/analysis/week.mjs and danger.mjs.\n\nACCEPTANCE\n- Bye weeks are derived from the real NFL schedule, not hand-entered and not hardcoded in src/.\n- The generated table covers all 32 teams with exactly one bye each; a season that does not produce that shape fails loudly rather than shipping a partial table.\n- WAS/WSH is aliased and OAK is handled; an unknown abbreviation is refused, never silently treated as no bye.\n- Upcoming bye exposure (rostered starters on bye) is reported per surviving team for the next few weeks, as numeric facts.\n- A missing or malformed config entry is refused at load, mirroring parseDeclaredEliminations in src/analysis/elimination.mjs.\n- docs/architecture.md's \"The danger board\" section is updated to remove the noted gap.",
+              "priority": "high",
+              "startedAt": "2026-09-23T16:09:03.324Z",
+              "completedAt": "2026-09-23T16:19:12.285Z",
+              "endedAt": "2026-09-23T16:19:12.285Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T16:19:12.300Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "05f6c331-8ac8-46d2-9cab-d0c10dc757cc",
+              "title": "Chopping-block and danger analysis",
+              "status": "completed",
+              "level": "task",
+              "description": "Produce the facts the coverage is actually about: who nearly died, who is trending toward the block, and by how much.\n\nWHAT TO COMPUTE (facts only — src/analysis/ produces numbers, never prose)\n- Weekly scoring order among survivors, and the margin between last and second-to-last (the survival margin).\n- Each surviving team's margin above the chop line this week.\n- Rolling floor: a team's lowest and median weekly score, since floor is the thing that kills you in this format.\n- Bye-week exposure: count of rostered starters on bye in upcoming weeks. Bye clustering is a named elimination risk in this format and the data to compute it exists in the player records.\n\nACCEPTANCE\n- Each week produces a survival margin and a per-team distance from the chop line.\n- Upcoming bye exposure is reported per team for the next few weeks.\n- All outputs are numeric facts consumable by the prompt layer, consistent with how src/analysis/week.mjs already separates facts from editorialising.\n\nRESOLUTION NOTE (2026-09-23): the first two ACCEPTANCE bullets and the weekly-scoring-order/rolling-floor WHAT-TO-COMPUTE bullets shipped in src/analysis/danger.mjs, wired into captureWeek's snapshot. The bye-week-exposure bullet did not: its premise (\"the data to compute it exists in the player records\") is false — the full cached Sleeper player dictionary has no bye-week field anywhere, verified directly. Split into a new task, \"Bye-week exposure per team\", with the finding and two candidate designs written up there rather than guessed at here.",
+              "priority": "high",
+              "startedAt": "2026-09-23T08:20:35.400Z",
+              "completedAt": "2026-09-23T14:38:47.420Z",
+              "endedAt": "2026-09-23T14:38:47.420Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T14:38:47.467Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "3d78f983-c4c3-4c6f-b395-17866c55a432",
+              "title": "Cumulative-points survival standings",
+              "status": "completed",
+              "level": "task",
+              "description": "Replace win-loss standings with what the format actually runs on.\n\nIn guillotine the only standings that matter are cumulative total points among surviving teams. Records are meaningless — Sleeper will happily report a 6-2 record from matchups nobody plays.\n\nWHERE\nsrc/promptContext.mjs builds context.standings sorted by wins then points. For guillotine this must sort by cumulative points and carry no win-loss record at all. team.seasonPointsFor is already normalized in src/sleeper/normalize.mjs, so the data is there.\n\nACCEPTANCE\n- Guillotine context carries survivor standings by cumulative points, with elimination week shown for chopped teams.\n- No win-loss record appears anywhere in guillotine context, so the model cannot cite one.\n- Eliminated teams are listed separately as an elimination history, not mixed into live standings.",
+              "priority": "critical",
+              "startedAt": "2026-09-23T08:11:23.208Z",
+              "completedAt": "2026-09-23T08:18:47.000Z",
+              "endedAt": "2026-09-23T08:18:47.000Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T08:18:47.000Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "f36cf83f-9806-4e3c-bc19-3bb64dd1a714",
+              "title": "FAAB pool and market state",
+              "status": "completed",
+              "level": "task",
+              "description": "The waiver market IS the story in a guillotine league — every chop dumps a full roster of talent onto the wire.\n\nWHAT\n- Remaining FAAB per surviving team. league.waiverBudget and team.waiverBudgetUsed are already normalized in src/sleeper/normalize.mjs, so this is mostly plumbing.\n- The pool released by the most recent chop: which players hit the wire and their quality.\n- Bid history from transactions: normalizeTransactions already captures waiver_bid, so winning bids on released players can be reported.\n\nACCEPTANCE\n- Context carries remaining FAAB per survivor and FAAB spent to date.\n- The players released by each elimination are identifiable and attributable to the team that was chopped.\n- Overlaps with the transactions epic — reuse that work rather than duplicating transaction normalization.",
+              "priority": "high",
+              "startedAt": "2026-09-23T08:29:54.874Z",
+              "completedAt": "2026-09-23T15:54:44.393Z",
+              "endedAt": "2026-09-23T15:54:44.393Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T15:54:44.411Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "45d586e8-b0f8-4e25-bcd1-9ce8e8b306f6",
+      "title": "League format engine",
+      "status": "completed",
+      "level": "epic",
+      "description": "Make league format a first-class, resolved concept instead of a loose bag of booleans.\n\nWHY\nsrc/sleeper/normalize.mjs builds league.format ad hoc (superflex, pointsPerReception, tePremium, passingTouchdown, dynasty) and nothing downstream branches on it in a meaningful way. config/rankings.yml applies one dynasty-flavoured weight set (dynasty_value 0.25 + future_draft_capital 0.10 = 35% of the ranking) to EVERY league regardless of format. Worse, some formats cannot be detected from Sleeper at all: guillotine leagues are run on Sleeper by manual commissioner action, so the API reports an ordinary head-to-head league. Format therefore has to be DECLARED as well as detected.\n\nThis epic is the foundation for the guillotine (Epic: Guillotine league coverage), redraft (Epic: Redraft league support) and forward-looking-rankings work. Land it first.\n\nSCOPE\n- A declared format taxonomy resolved over Sleeper detection, with explicit precedence.\n- A derived scoring profile (TE-premium, PPR tier, superflex, passing TD) surfaced to every edition rather than just the preseason prompt.\n- Format-scoped ranking weights so a redraft league is not ranked on dynasty assets.\n\nOUT OF SCOPE\nFormat-specific editions and prompts — those live in the per-format epics.",
+      "priority": "critical",
+      "startedAt": "2026-09-23T07:28:26.623Z",
+      "completedAt": "2026-09-23T07:28:26.623Z",
+      "endedAt": "2026-09-23T07:28:26.623Z",
+      "lastModified": "2026-09-23T07:28:26.638Z",
+      "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+      "children": [
+        {
+          "id": "c750f1eb-2d36-4204-9e92-47524cddc656",
+          "title": "Declared league format taxonomy and resolution",
+          "status": "completed",
+          "level": "feature",
+          "description": "Introduce an explicit format type that the operator can declare and the tool can partly detect, then thread the resolved value through the context builder.\n\nSleeper exposes enough to infer dynasty (settings.type == 2 or taxi_slots) and superflex, but NOT guillotine — the commissioner runs that manually, so Sleeper still reports head-to-head matchups. Declaration must therefore win over detection, and the resolved format must be visible in doctor output so a user can see what the tool thinks their league is before generating anything.",
+          "priority": "critical",
+          "startedAt": "2026-09-23T06:28:48.107Z",
+          "completedAt": "2026-09-23T06:28:48.107Z",
+          "endedAt": "2026-09-23T06:28:48.107Z",
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T06:28:48.120Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "34d4f5c9-e224-4b0d-8c29-4159c9238ae3",
+              "title": "Define the format taxonomy and config schema",
+              "status": "completed",
+              "level": "task",
+              "description": "Add a format type with three values to start: dynasty, redraft, guillotine.\n\nWHERE\n- New config surface (see the npm package epic for where league-scoped config eventually lives; until then extend config/ + .env handling in src/config.mjs).\n- src/sleeper/normalize.mjs — normalizeLeague currently owns league.format.\n\nWHAT\n- format.type: 'dynasty' | 'redraft' | 'guillotine' (declared).\n- Keep the existing derived modifiers (superflex, pointsPerReception, tePremium, passingTouchdown) as a separate scoring sub-object — they are orthogonal to the type. A guillotine league can be superflex and TE-premium.\n- format.source: record whether the type was declared or detected, so downstream code and doctor can say which.\n\nACCEPTANCE\n- An unknown/misspelled type fails loudly at config load with the list of valid values, rather than silently defaulting.\n- A league with no declared type still resolves to a usable type via detection.",
+              "priority": "critical",
+              "startedAt": "2026-09-23T06:00:21.263Z",
+              "completedAt": "2026-09-23T06:12:35.004Z",
+              "endedAt": "2026-09-23T06:12:35.004Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T06:12:35.024Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "4988da4f-eeb5-4a9e-8e2b-2cd5e38b2387",
+              "title": "Resolve declared format over Sleeper detection",
+              "status": "completed",
+              "level": "task",
+              "description": "Implement the precedence and make it observable.\n\nPRECEDENCE (highest first)\n1. Declared config value.\n2. Sleeper detection: dynasty when settings.type == 2 or taxi_slots > 0.\n3. Default: redraft.\n\nGuillotine is never detected — it can only be declared, because a Sleeper guillotine league is indistinguishable from a head-to-head league over the API. Document that in the code comment so the next reader does not go looking for a detection rule.\n\nACCEPTANCE\n- commandDoctor in src/cli.mjs prints the resolved format type AND its source, e.g. 'Format  guillotine (declared)' / 'dynasty (detected from taxi slots)'.\n- When a league is detected as dynasty but declared redraft, the declared value wins and doctor says so.",
+              "priority": "critical",
+              "startedAt": "2026-09-23T06:17:53.843Z",
+              "completedAt": "2026-09-23T06:23:59.020Z",
+              "endedAt": "2026-09-23T06:23:59.020Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T06:23:59.033Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "d76f0b1b-0ff9-41f0-9310-6aff4f4ca2cc",
+              "title": "Thread resolved format into prompt context and the unavailable list",
+              "status": "completed",
+              "level": "task",
+              "description": "buildContext in src/promptContext.mjs already emits league.format. Extend it to carry the resolved type and source, and teach describeMissingContext to reason about format.\n\nWHAT\n- context.league.format gains type and source.\n- describeMissingContext gains format-aware entries. Today it emits a futureDraftCapital 'nothing traded' note for every ranking edition; in a redraft league that note is wrong in a different way — future picks are not a concept at all, so the instruction should say so rather than implying picks exist but are untraded.\n\nACCEPTANCE\n- A redraft league's ranking context carries an unavailable entry that tells the model not to discuss draft capital as a concept.\n- A dynasty league's behaviour is unchanged from today.",
+              "priority": "high",
+              "startedAt": "2026-09-23T06:25:29.936Z",
+              "completedAt": "2026-09-23T06:28:48.059Z",
+              "endedAt": "2026-09-23T06:28:48.059Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T06:28:48.071Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        },
+        {
+          "id": "ac2c8227-bc26-433d-8162-8e07dfacc506",
+          "title": "Format-scoped ranking weights",
+          "status": "completed",
+          "level": "feature",
+          "description": "Make config/rankings.yml weights depend on the resolved format type.\n\nWHY\nThe current single weight set spends 35% of the ranking on dynasty_value and future_draft_capital. Applied to a redraft league that is straightforwardly wrong — there are no future picks and long-term asset value is irrelevant the moment the season ends. Applied to a guillotine league it is worse than wrong, because survival depends on weekly floor, not asset quality.",
+          "priority": "high",
+          "startedAt": "2026-09-23T07:28:26.589Z",
+          "completedAt": "2026-09-23T07:28:26.589Z",
+          "endedAt": "2026-09-23T07:28:26.589Z",
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T07:28:26.604Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "79c15e99-bdc0-42f7-9305-f79ed6d1e853",
+              "title": "Restructure rankings.yml into per-format weight sets",
+              "status": "completed",
+              "level": "task",
+              "description": "Move weights under a format key while keeping a shared default, and select the set from the resolved format type.\n\nWHERE src/config.mjs (DEFAULT_RANKINGS, readYamlFile) and config/rankings.yml.\n\nSUGGESTED SHAPE\nKeep the existing weights as the dynasty set. Add a redraft set that drops dynasty_value and future_draft_capital and redistributes into starting_lineup, depth and contender_viability. The guillotine set is specified in the guillotine epic — leave a placeholder here and cross-reference.\n\nNOTE ON MERGE SEMANTICS\nreadYamlFile deep-merges over defaults, with replaceKeys for maps that must be taken wholesale. A weight set is exactly that kind of map: someone who writes five weights means five, and silently restoring the other four from defaults produces a set that does not sum to 1.0. Add the per-format weight maps to replaceKeys.\n\nACCEPTANCE\n- A redraft league's prompt context carries redraft weights and never mentions draft capital.\n- A user-supplied partial weight map replaces rather than merges, matching the existing ranking_emoji behaviour.",
+              "priority": "high",
+              "startedAt": "2026-09-23T07:00:03.707Z",
+              "completedAt": "2026-09-23T07:06:08.929Z",
+              "endedAt": "2026-09-23T07:06:08.929Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T07:06:08.942Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "cb77f985-2985-4569-9441-1d97220fb82d",
+              "title": "Validate weight sets and fail loudly on mismatch",
+              "status": "completed",
+              "level": "task",
+              "description": "Weights are documented as needing to sum to 1.0 but nothing checks it, and nothing checks that the resolved format actually has a weight set.\n\nACCEPTANCE\n- A weight set that does not sum to 1.0 (within a small tolerance) is reported at config load with the actual sum and the offending format.\n- A format type with no weight set is a loud error naming the missing key, not a silent fallback to dynasty weights.\n- doctor surfaces both checks.",
+              "priority": "medium",
+              "startedAt": "2026-09-23T07:20:19.577Z",
+              "completedAt": "2026-09-23T07:28:26.545Z",
+              "endedAt": "2026-09-23T07:28:26.545Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T07:28:26.560Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        },
+        {
+          "id": "5bd82641-f568-4a23-a99e-35797d46eff0",
+          "title": "Scoring profile derivation and surfacing",
+          "status": "completed",
+          "level": "feature",
+          "description": "Derive a complete scoring profile from Sleeper's scoring_settings and surface it to every edition.\n\nWHY\nnormalizeLeague captures scoring wholesale into league.scoring but only four values are promoted into league.format. Only prompts/preseason-power-rankings.md actually references league.format.tePremium; the weekly rankings, preview and recap prompts never mention it. So in a TE-premium league the weekly editions rank and describe tight ends as if they were ordinary flex pieces — the position is systematically undervalued in exactly the editions published most often.\n\nThis is the TE-premium ask, generalised so the next scoring wrinkle does not need the same fix again.",
+          "priority": "high",
+          "startedAt": "2026-09-23T06:58:37.040Z",
+          "completedAt": "2026-09-23T06:58:37.040Z",
+          "endedAt": "2026-09-23T06:58:37.040Z",
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T06:58:37.054Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "1879971e-66cb-44cb-9676-2279c5f78bf0",
+              "title": "Derive a structured scoring profile from scoring_settings",
+              "status": "completed",
+              "level": "task",
+              "description": "Build a scoring profile object in src/sleeper/normalize.mjs from the raw league.scoring_settings blob.\n\nWHAT TO CAPTURE\n- Reception scoring: rec (0 / 0.5 / 1 / other) plus a human tier label ('standard', 'half-PPR', 'full PPR').\n- Positional reception bonuses: bonus_rec_te (TE premium), and the equivalent RB/WR bonuses if present, expressed as the DELTA over the base rec value — a TE premium of +0.5 on top of 1.0 PPR means a TE catch is worth 1.5, and the delta is what changes positional value.\n- Passing: pass_td, pass_yd, and interception cost — a 6-point passing TD league values QBs very differently from a 4-point one.\n- Superflex / 2QB, already derived from starting slots.\n- Anything non-default worth flagging generically: compare against Sleeper's defaults and surface the diff so unusual settings (return yards, first downs, tackle-based IDP) are at least visible rather than silently dropped.\n\nACCEPTANCE\n- A TE-premium league produces a profile showing the TE delta and the effective per-catch value by position.\n- A league with entirely default scoring produces a profile that says so, with an empty non-default list.",
+              "priority": "high",
+              "startedAt": "2026-09-23T06:32:45.828Z",
+              "completedAt": "2026-09-23T06:40:15.239Z",
+              "endedAt": "2026-09-23T06:40:15.239Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T06:40:15.252Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "7ae466aa-ed81-48cf-8854-ebed3da913a5",
+              "title": "Report the scoring profile in doctor",
+              "status": "completed",
+              "level": "task",
+              "description": "commandDoctor in src/cli.mjs prints a one-line format summary today: superflex, PPR, TE premium. Expand it to the resolved profile so a user can confirm the tool read their settings correctly before they generate a single edition.\n\nACCEPTANCE\n- doctor prints reception tier, positional bonuses with deltas, passing TD value, and superflex status.\n- Non-default scoring settings the tool does not specifically model are listed under a 'not modelled' heading rather than hidden.",
+              "priority": "medium",
+              "startedAt": "2026-09-23T06:50:29.492Z",
+              "completedAt": "2026-09-23T06:58:36.990Z",
+              "endedAt": "2026-09-23T06:58:36.990Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T06:58:37.003Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "1c698a80-41f4-404c-b795-f2b9a573863f",
+              "title": "Surface positional value implications in every edition prompt",
+              "status": "completed",
+              "level": "task",
+              "description": "Thread the scoring profile into buildContext for all tasks and reference it in the prompts that currently ignore it.\n\nWHERE\n- src/promptContext.mjs — editorialView / context.league.\n- prompts/weekly-power-rankings.md, prompts/weekly-preview.md, prompts/weekly-recap.md — none of these mention tePremium today.\n- prompts/preseason-power-rankings.md already mentions it; keep it consistent with the new profile shape.\n\nWHAT\nGive the model the profile AND the instruction on how to use it, in the same style as the existing superflex guidance in weekly-power-rankings.md ('In a Superflex league, quarterback...'). The instruction should be about relative positional value, not a formula: in a TE-premium league an every-down TE is a genuine positional advantage and should be ranked as one.\n\nACCEPTANCE\n- Generating weekly rankings for a TE-premium league produces a prompt whose ranking instructions explicitly account for elevated TE value.\n- A standard-scoring league's prompt does not acquire noise about premiums that do not apply.",
+              "priority": "high",
+              "startedAt": "2026-09-23T06:44:24.390Z",
+              "completedAt": "2026-09-23T06:49:51.656Z",
+              "endedAt": "2026-09-23T06:49:51.656Z",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T06:49:51.670Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "8536bc62-2e3b-45f4-b05e-1c8c25fb6aa9",
+      "title": "Redraft league support",
+      "status": "pending",
+      "level": "epic",
+      "description": "Support standard redraft leagues: a new team every season, no future picks, no taxi squad, no long-term asset value.\n\nWHY\nThe project was built dynasty-first and it shows. config/rankings.yml spends 35% of the ranking weight on dynasty_value and future_draft_capital. rosterView in src/promptContext.mjs always emits taxiSquad and injuredReserve. normalizeFutureDraftCapital and the futureDraftCapital context block run for every ranking edition. describeMissingContext tells the model that 'every team holds its own future picks and nothing else' when no picks have been traded — in a redraft league that sentence implies future picks exist as tradeable assets, which is false.\n\nNone of this crashes. It produces confidently wrong editorial: a redraft league ranked partly on assets that will never be drafted, and prose about draft capital in a league that has none.\n\nDEPENDS ON the format engine epic for the resolved format type and per-format weight sets.",
+      "priority": "high",
+      "lastModified": "2026-09-23T05:43:05.695Z",
+      "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+      "children": [
+        {
+          "id": "557b6302-3fce-4aa3-8e72-57c4c29a07db",
+          "title": "Redraft format handling",
+          "status": "pending",
+          "level": "feature",
+          "description": "Branch the context builder and config on the redraft format type so dynasty-only concepts disappear cleanly.",
+          "priority": "high",
+          "blockedBy": [
+            "c750f1eb-2d36-4204-9e92-47524cddc656",
+            "ac2c8227-bc26-433d-8162-8e07dfacc506"
+          ],
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T05:43:05.990Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "e11d3d25-5c26-408e-87f8-c87593df8a39",
+              "title": "Redraft ranking weights and prompt guidance",
+              "status": "pending",
+              "level": "task",
+              "description": "Give redraft its own weight set and make the ranking prompts respect it.\n\nWEIGHTS\nDrop dynasty_value and future_draft_capital to zero. Redistribute into starting_lineup, depth, contender_viability and roster_flexibility — in a redraft league the only question is who wins this season.\n\nPROMPTS\nprompts/weekly-power-rankings.md and prompts/preseason-power-rankings.md both instruct on dynasty asset value and age curves. preseason-power-rankings.md line 20 asks for 'dynasty asset value and age curve' unconditionally. These sections must become conditional on format, or the prompt files must be selected per format.\n\nDESIGN NOTE\nDecide between (a) conditional sections inside the shared prompt files driven by the context, or (b) per-format prompt files. Option (b) duplicates the house style across files and will drift; option (a) keeps one file but makes it harder to read. Prefer (a) with clearly delimited conditional blocks, and record the decision wherever the prompts are documented.\n\nACCEPTANCE\n- Redraft rankings never mention draft capital, taxi squads, or long-term asset value.\n- Age is still allowed as a factor where it bears on THIS season (an ageing RB in decline), but not as an asset-value argument.\n- The weight set sums to 1.0 and passes the validation added in the format engine epic.",
+              "priority": "high",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:43:06.617Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "9e43d244-6524-444e-83b7-baa6bf06c94c",
+              "title": "Suppress dynasty-only context in redraft leagues",
+              "status": "pending",
+              "level": "task",
+              "description": "Stop emitting concepts that do not exist in a redraft league.\n\nWHERE src/promptContext.mjs (buildContext, rosterView, describeMissingContext) and src/cli.mjs where normalizeFutureDraftCapital is called.\n\nWHAT\n- Skip the futureDraftCapital computation and context block entirely. Sleeper may still report traded picks for a redraft league's own upcoming rookie/startup draft, so do not rely on the data being empty — branch on format.\n- Omit taxiSquad from rosterView when the league has no taxi slots (league.taxiSlots is already normalized). Keep injuredReserve, which redraft leagues do have.\n- Replace the futureDraftCapital entry in describeMissingContext with a redraft-specific one: future picks are not a concept in this format, do not discuss draft capital at all.\n\nACCEPTANCE\n- A redraft league's ranking context contains no futureDraftCapital key and no empty taxiSquad arrays.\n- The unavailable list tells the model draft capital does not apply, rather than that nothing has been traded.\n- Dynasty leagues are unaffected.",
+              "priority": "high",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:43:06.319Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "64ee423c-b258-4027-90a5-6727951ae274",
+      "title": "Trade and waiver wire coverage",
+      "status": "pending",
+      "level": "epic",
+      "description": "Add press coverage of transactions: trade grades and waiver/free-agent pickup commentary. These are press-worthy events in EVERY league format.\n\nWHY\nTransactions are the second most discussed thing in a league chat after scores, and the project currently does almost nothing with them. normalizeTransactions in src/sleeper/normalize.mjs already does solid work — it filters to completed moves, reads adds, drops, traded picks (correctly excluding picks for drafts already held) and FAAB transfers, and captures the winning waiver bid. But the output is a flat array of prose-ish strings, it is passed to the model only as incidental colour alongside whatever edition is being written, and there is no edition about it and no CLI command for it.\n\nWHAT THIS ADDS\nA transaction scan that builds a dedicated brief — trade grades, and comments on pickups judged against the acquiring roster's actual needs — usable either as a pasteable prompt or via the provider API, matching the two existing paths in src/generate.mjs.\n\nAPPLIES TO all three formats. In guillotine it matters more than anywhere else, because the FAAB market after each chop is the central drama of the season.",
+      "priority": "high",
+      "lastModified": "2026-09-23T05:43:06.915Z",
+      "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+      "children": [
+        {
+          "id": "b905a231-33d7-4f14-a97a-49e285a83b82",
+          "title": "Trade report edition",
+          "status": "pending",
+          "level": "feature",
+          "description": "A dedicated edition that grades trades.",
+          "priority": "high",
+          "blockedBy": [
+            "55083474-f16c-40dc-8354-c37881d64ff0"
+          ],
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T05:43:08.646Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "7d2fb145-e419-4653-8465-4ddfa217db53",
+              "title": "Add the transactions CLI command",
+              "status": "pending",
+              "level": "task",
+              "description": "Wire a command that scans a week's transactions and produces the brief.\n\nWHERE src/cli.mjs — follow the shape of the existing commands: resolve week, capture, build context, build prompt, then either write the prompt file or call generate when --generate is passed.\n\nSCOPE\n- A single command covering both trades and waiver pickups, with the edition able to skip a section when there is nothing in it. Two near-identical commands would duplicate the whole pipeline for little gain.\n- Respect the existing --week, --format and --generate flags.\n- When a week has no completed transactions, exit cleanly saying so rather than generating an edition about nothing. describeMissingContext already has a transactions entry for the incidental case; a dedicated edition should refuse outright instead.\n\nACCEPTANCE\n- The command appears in HELP in src/cli.mjs with an example.\n- Works with and without --generate, matching every other command.\n- A quiet week produces a clear message and a zero exit, not an empty post.",
+              "priority": "high",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:43:09.784Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "1be8aca2-4089-4651-b371-1c937af219a9",
+              "title": "Trade grade prompt and task registration",
+              "status": "pending",
+              "level": "task",
+              "description": "Write the prompt and register it as a task in TASK_PROMPTS in src/promptContext.mjs.\n\nCONTENT\n- Grade each side of each trade, with reasoning tied to the structured facts.\n- Judge against roster construction and league format: a win-now move by a contender and the same move by a rebuilding team are not the same trade. In dynasty, factor the pick capital already computed by normalizeFutureDraftCapital. In redraft, ignore picks entirely. In guillotine, judge purely on whether it raises the weekly floor.\n- Keep the existing house rules: the JSON context is authoritative, no invented facts, banned phrases from config/editorial.yml respected, output length-checked for the Sleeper limit.\n\nACCEPTANCE\n- A trade with no clear winner is allowed to be graded as such rather than forced into a verdict.\n- The edition cites only players and picks present in the context.\n- Output passes checkPosts in src/validate.mjs for the configured format.",
+              "priority": "high",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:43:09.248Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        },
+        {
+          "id": "55083474-f16c-40dc-8354-c37881d64ff0",
+          "title": "Transaction analysis",
+          "status": "pending",
+          "level": "feature",
+          "description": "Enrich transactions from a flat move list into structured facts a model can actually grade.",
+          "priority": "high",
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T05:43:07.210Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "b2be6fc5-5174-4094-97c1-95c45ad7ae32",
+              "title": "Enrich transaction normalization with roster and need context",
+              "status": "pending",
+              "level": "task",
+              "description": "normalizeTransactions currently emits { type, week, teams, bid, moves[] } where moves are formatted strings like 'Team A gets Josh Allen (QB, BUF, age 29)'. A grade needs structure, not sentences.\n\nWHAT TO ADD\n- Keep the human-readable strings (the existing incidental use depends on them) but add a structured side: per-transaction, per-team, what was received and what was given up, as player references rather than prose.\n- Attach the acquiring team's positional shape before and after the move: starting slot requirements come from league.startingSlots, and the roster is on the team record. A WR added to a team already starting three good WRs is a different move from the same WR filling a hole.\n- Attach the scoring profile context from the format engine epic, so a TE acquired in a TE-premium league is graded on the right scale.\n- For waiver claims, attach the winning bid AND the acquiring team's remaining FAAB, so the cost can be judged as a share of budget rather than as a raw number.\n\nACCEPTANCE\n- Each transaction carries enough structure for a model to say who won it and why, without the model inventing roster context.\n- Existing consumers of the moves strings keep working unchanged.",
+              "priority": "high",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:43:07.622Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            },
+            {
+              "id": "7f7c8d1c-3de9-4fe1-88d0-f47b2d091077",
+              "title": "Waiver and FAAB market context",
+              "status": "pending",
+              "level": "task",
+              "description": "Build the market picture that makes a single pickup legible.\n\nWHAT\n- Remaining FAAB per team and spend to date (waiverBudget and waiverBudgetUsed are already normalized).\n- Bid distribution for the week: what other claims were placed and at what price, so an overpay or a bargain can be identified as such.\n- Whether the added player was a chop-pool release, in guillotine leagues — cross-reference the elimination ledger from the guillotine epic.\n\nACCEPTANCE\n- A pickup can be described relative to the market: what it cost, what it cost relative to budget, and what else was going for similar money that week.",
+              "priority": "medium",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:43:08.111Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        },
+        {
+          "id": "56a55095-17d8-40f4-98cf-94d9cc0ae83d",
+          "title": "Waiver wire edition",
+          "status": "pending",
+          "level": "feature",
+          "description": "Pickup commentary as its own section or edition.",
+          "priority": "medium",
+          "blockedBy": [
+            "55083474-f16c-40dc-8354-c37881d64ff0"
+          ],
+          "acceptanceCriteria": [],
+          "lastModified": "2026-09-23T05:43:10.293Z",
+          "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>",
+          "children": [
+            {
+              "id": "91643c9b-f0ca-4f3c-b86e-c7f086ffd2a7",
+              "title": "Waiver pickup commentary prompt",
+              "status": "pending",
+              "level": "task",
+              "description": "Comment on the week's adds and drops with the market context.\n\nCONTENT\n- Best value pickup, biggest overpay, and the drop most likely to be regretted.\n- Judged against the acquiring roster's needs and the scoring profile, not against generic player rankings — the project's rule is that the model may hold opinions but may not invent facts, and a player's general NFL standing is opinion territory while roster fit is computable.\n- In guillotine leagues, tie the FAAB spend to survival strategy: spending big early is a known trap in that format because better players hit the wire after later chops.\n\nACCEPTANCE\n- Commentary references the acquiring team's actual roster shape.\n- No claim about a player's production that is not in the context.",
+              "priority": "medium",
+              "acceptanceCriteria": [],
+              "lastModified": "2026-09-23T05:43:10.873Z",
+              "lastModifiedBy": "Ryan Keith <ryan.k@endash.us>"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
