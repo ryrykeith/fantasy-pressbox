@@ -31,3 +31,6 @@ ndx-export/
 .rex/.backups/
 .run-logs/
 claude_commands.log
+
+# Local dashboard process state — machine-specific, never shared.
+.n-dx-web.pid
