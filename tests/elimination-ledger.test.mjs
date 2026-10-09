@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { loadConfig, ROOT } from '../src/config.mjs';
+import { loadConfig, PACKAGE_ROOT } from '../src/config.mjs';
 
 import {
   WEEK_STATUS,
@@ -447,7 +447,7 @@ test('captureWeek carries earlier weeks forward, so week 2 knows who week 1 chop
 
 // Point config at a file that does not exist so the developer's own .env plays
 // no part in what these read.
-const NO_ENV_FILE = join(ROOT, 'tests', '.env.does-not-exist');
+const NO_ENV_FILE = join(PACKAGE_ROOT, 'tests', '.env.does-not-exist');
 
 function withGuillotineFile(body, contents) {
   const path = join(mkdtempSync(join(tmpdir(), 'pressbox-config-')), 'guillotine.yml');
@@ -477,7 +477,7 @@ test('a league with no guillotine file has an empty ledger, not a missing one', 
 test('the shipped config/guillotine.yml is readable and declares nothing', () => {
   const config = loadConfig({
     envPath: NO_ENV_FILE,
-    guillotinePath: join(ROOT, 'config', 'guillotine.yml'),
+    guillotinePath: join(PACKAGE_ROOT, 'config', 'guillotine.yml'),
   });
   assert.deepEqual(config.guillotine.eliminations, []);
 });

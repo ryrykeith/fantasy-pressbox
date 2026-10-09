@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { renderFormatBlocks } from '../src/promptTemplate.mjs';
 import { buildContext, buildPrompt, taskPromptOnly } from '../src/promptContext.mjs';
-import { ROOT } from '../src/config.mjs';
+import { PACKAGE_ROOT } from '../src/config.mjs';
 import { FORMAT_TYPES } from '../src/format.mjs';
 
 /**
@@ -69,7 +69,7 @@ test('an unclosed, nested or stray block is refused', () => {
 });
 
 test('every prompt file renders cleanly for every format', () => {
-  const dir = join(ROOT, 'prompts');
+  const dir = join(PACKAGE_ROOT, 'prompts');
   for (const file of readdirSync(dir).filter((name) => name.endsWith('.md'))) {
     const text = readFileSync(join(dir, file), 'utf8');
     for (const type of FORMAT_TYPES) {

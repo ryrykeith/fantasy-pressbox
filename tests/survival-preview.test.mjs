@@ -18,7 +18,7 @@ import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { buildDangerBoard } from '../src/analysis/danger.mjs';
 import { gradePredictions } from '../src/store.mjs';
 import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
-import { ROOT } from '../src/config.mjs';
+import { PACKAGE_ROOT } from '../src/config.mjs';
 
 /**
  * The survival preview: the forward-looking edition a guillotine league gets
@@ -200,7 +200,7 @@ function unavailableFields(context) {
 
 test('survival-preview is a registered task with a prompt file of its own', () => {
   assert.ok(TASKS.includes('survival-preview'), 'survival-preview is in TASKS');
-  const text = readFileSync(join(ROOT, 'prompts', 'survival-preview.md'), 'utf8');
+  const text = readFileSync(join(PACKAGE_ROOT, 'prompts', 'survival-preview.md'), 'utf8');
   assert.ok(text.trim().length > 0, 'the prompt file is not empty');
 });
 
@@ -220,7 +220,7 @@ test('buildPrompt embeds the survival-preview prompt file and the context', () =
  * what makes that checkable.
  */
 test('the survival-preview prompt never mentions a matchup, an opponent or a game', () => {
-  const text = readFileSync(join(ROOT, 'prompts', 'survival-preview.md'), 'utf8');
+  const text = readFileSync(join(PACKAGE_ROOT, 'prompts', 'survival-preview.md'), 'utf8');
   for (const word of ['matchup', 'opponent', 'game']) {
     assert.doesNotMatch(
       text,

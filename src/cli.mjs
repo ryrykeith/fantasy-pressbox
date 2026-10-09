@@ -9,7 +9,16 @@
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { loadConfig, loadProspectBoard, rankEmoji, resolveRankingWeights, ROOT } from './config.mjs';
+import {
+  loadConfig,
+  loadProspectBoard,
+  PACKAGE_ROOT,
+  rankEmoji,
+  resolveRankingWeights,
+  resolveWorkspaceRoot,
+  WORKSPACE_ENV_VAR,
+  workspaceConfigDir,
+} from './config.mjs';
 import { describeFormat, hasFutureDraftCapital, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './scoringReport.mjs';
 import { describeEliminationLedger } from './eliminationReport.mjs';
@@ -88,6 +97,8 @@ Options
   --refresh-players             Re-download the NFL player list instead of using the cache
   --refresh-market              Fetch trade values again instead of reusing the week's saved ones
   --early                       Run the tank watch before its start week
+  --workspace <folder>          The league folder: its .env, config, data and output
+                                (default: $${WORKSPACE_ENV_VAR}, else the current folder)
   --help                        Show this message
 
 Examples
@@ -115,7 +126,11 @@ function parseArgs(argv) {
     else if (token === '--week') args.week = Number.parseInt(argv[++i], 10);
     else if (token === '--format') args.format = argv[++i];
     else if (token === '--task') args.task = argv[++i];
-    else if (token.startsWith('--')) throw new Error(`Unknown option "${token}". Try --help.`);
+    else if (token === '--workspace') {
+      const folder = argv[++i];
+      if (!folder || folder.startsWith('--')) throw new Error('--workspace needs a folder, e.g. --workspace ~/leagues/my-league');
+      args.workspace = folder;
+    } else if (token.startsWith('--')) throw new Error(`Unknown option "${token}". Try --help.`);
     else args._.push(token);
   }
   return args;
@@ -123,6 +138,11 @@ function parseArgs(argv) {
 
 const say = (...parts) => console.log(...parts);
 const warn = (...parts) => console.warn(...parts);
+
+/** The league's prospect board for a draft class, from its workspace — never the package. */
+function loadLeagueProspectBoard(config, draftYear) {
+  return loadProspectBoard({ draftYear: Number(draftYear), configDir: workspaceConfigDir(config.workspaceRoot) });
+}
 
 function requireLeagueId(config) {
   if (config.leagueId) return;
@@ -270,13 +290,14 @@ async function commandDoctor(config) {
   say(`  Node.js            ${process.versions.node} ${major >= 18 ? '✓' : '✗ needs 18 or newer'}`);
   say(`  League ID          ${config.leagueId || '✗ not set — run npm run setup'}`);
   say(`  AI provider        ${describeProvider(config.ai)}`);
-  say(`  Data folder        ${config.dataDir}`);
+  say(`  Workspace          ${config.workspaceRoot}`);
+  say(`  Data folder       ${config.dataDir}`);
   say(`  Output folder      ${config.outputDir}`);
   say(`  Sleeper post limit ${config.editorial.output.sleeper_max_chars} characters`);
 
   const missingPrompts = ['system.md', 'weekly-preview.md', 'weekly-recap.md', 'weekly-power-rankings.md']
     .filter((file) => {
-      const path = join(ROOT, 'prompts', file);
+      const path = join(PACKAGE_ROOT, 'prompts', file);
       return !existsSync(path) || readFileSync(path, 'utf8').trim() === '';
     });
   say(`  Prompt files       ${missingPrompts.length ? `✗ empty or missing: ${missingPrompts.join(', ')}` : '✓'}`);
@@ -338,7 +359,7 @@ async function commandDoctor(config) {
   if (hasFutureDraftCapital(league.format)) {
     const draftYear = Number.parseInt(league.season, 10) + 1;
     try {
-      for (const line of describeProspectBoard(loadProspectBoard({ draftYear }), { draftYear })) {
+      for (const line of describeProspectBoard(loadLeagueProspectBoard(config, draftYear), { draftYear })) {
         say(`  ${line}`);
       }
     } catch (error) {
@@ -545,7 +566,7 @@ async function commandEdition(config, args, task) {
         // declares its draft order; without one they keep the refusal to name
         // a slot, and the edition still runs.
         draftOrder = captured.draftOrder ?? null;
-        prospectBoard = draftOrder ? loadProspectBoard({ draftYear: Number(draftOrder.draftSeason) }) : null;
+        prospectBoard = draftOrder ? loadLeagueProspectBoard(config, draftOrder.draftSeason) : null;
         if (draftOrder) {
           say(
             `Traded ${draftOrder.draftSeason} picks are valued at their projected slot` +
@@ -576,7 +597,7 @@ async function commandEdition(config, args, task) {
           ? `Measuring movement against the week ${previousTankWatch.week} tank watch.`
           : 'No earlier tank watch this season: no movement to report.',
       );
-      prospectBoard = loadProspectBoard({ draftYear: Number(draftOrder.draftSeason) });
+      prospectBoard = loadLeagueProspectBoard(config, draftOrder.draftSeason);
     } else if (isFutureStock) {
       // Everything the edition reads is already on disk or one market fetch
       // away. A market that cannot be fetched degrades to unpriced picks
@@ -589,7 +610,7 @@ async function commandEdition(config, args, task) {
       pickCapital = readPickCapital({ league, teams, tradedPicks, market: marketValues, config });
       // Optional: without a declared draft rule the picks simply carry no slot.
       draftOrder = captured.draftOrder ?? null;
-      prospectBoard = draftOrder ? loadProspectBoard({ draftYear: Number(draftOrder.draftSeason) }) : null;
+      prospectBoard = draftOrder ? loadLeagueProspectBoard(config, draftOrder.draftSeason) : null;
       if (!rosterWindow.weeksCovered.length) {
         warn(`Week ${week} has no completed week on disk: production by age cannot be reported yet.`);
       }
@@ -1002,7 +1023,7 @@ async function main() {
     return 0;
   }
 
-  const config = loadConfig();
+  const config = loadConfig({ workspaceRoot: resolveWorkspaceRoot({ flag: args.workspace }) });
 
   switch (command) {
     case 'doctor':

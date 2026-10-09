@@ -411,6 +411,7 @@ Useful options:
 | `--generate` | Call the AI for you and write finished posts. |
 | `--refresh-players` | Re-download the NFL player list instead of using the cached copy. |
 | `--early` | Run the tank watch before its start week. |
+| `--workspace <folder>` | Use a league folder other than the one you are in: its `.env`, its league config, and where `data/` and `output/` go. `PRESSBOX_WORKSPACE` does the same. Without either, the current folder is the league folder. |
 
 ---
 

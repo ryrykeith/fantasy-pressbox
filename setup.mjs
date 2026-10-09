@@ -12,13 +12,14 @@
  */
 import { createInterface } from 'node:readline';
 import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { loadEnvFile } from './src/lib/env.mjs';
+import { PACKAGE_ROOT, resolveWorkspaceRoot } from './src/config.mjs';
 
-const ROOT = dirname(fileURLToPath(import.meta.url));
-const ENV_PATH = join(ROOT, '.env');
+// The package (its manifest, .env.example) is only read. The answers — .env,
+// and the data/ and output/ folders — go to the league's workspace, which is
+// this folder when setup runs as `npm run setup` from a checkout.
 const MIN_NODE_MAJOR = 18;
 
 const say = (text = '') => console.log(text);
@@ -156,7 +157,7 @@ function checkNode() {
  * setup keeps working if that changes.
  */
 function checkPackages() {
-  const manifest = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const manifest = JSON.parse(readFileSync(join(PACKAGE_ROOT, 'package.json'), 'utf8'));
   const dependencyCount = Object.keys(manifest.dependencies ?? {}).length;
 
   if (dependencyCount === 0) {
@@ -164,9 +165,10 @@ function checkPackages() {
     return true;
   }
 
-  const installed = existsSync(join(ROOT, 'node_modules'));
+  // A checkout's own install step, which only runs if a dependency is ever added.
+  const installed = existsSync(join(PACKAGE_ROOT, 'node_modules'));
   say(installed ? 'Updating packages...' : `Installing ${dependencyCount} package(s)...`);
-  const result = spawnSync('npm', ['install'], { cwd: ROOT, stdio: 'inherit', shell: process.platform === 'win32' });
+  const result = spawnSync('npm', ['install'], { cwd: PACKAGE_ROOT, stdio: 'inherit', shell: process.platform === 'win32' });
   if (result.status !== 0) {
     say(red('✗ npm install failed. Check the messages above, then run: npm install'));
     return false;
@@ -197,7 +199,7 @@ function extractLeagueId(input) {
 /* ------------------------------------------------------------------- write */
 
 function renderEnv(values) {
-  const template = readFileSync(join(ROOT, '.env.example'), 'utf8');
+  const template = readFileSync(join(PACKAGE_ROOT, '.env.example'), 'utf8');
   const remaining = new Set(Object.keys(values));
 
   const body = template
@@ -219,6 +221,9 @@ function renderEnv(values) {
 /* -------------------------------------------------------------------- main */
 
 async function main() {
+  const workspaceRoot = resolveWorkspaceRoot();
+  const envPath = join(workspaceRoot, '.env');
+
   say('');
   say(bold('  Fantasy Pressbox setup'));
   say(dim('  AI league coverage from your Sleeper data'));
@@ -230,7 +235,7 @@ async function main() {
   if (!checkNode()) return 1;
   if (!checkPackages()) return 1;
 
-  const existing = loadEnvFile(ENV_PATH);
+  const existing = loadEnvFile(envPath);
   if (Object.keys(existing).length) {
     say(dim(`  Found an existing .env — your current answers are the defaults.`));
   }
@@ -340,15 +345,15 @@ async function main() {
     DEBUG: existing.DEBUG ?? 'false',
   };
 
-  if (existsSync(ENV_PATH)) {
-    const backup = `${ENV_PATH}.backup`;
-    copyFileSync(ENV_PATH, backup);
+  if (existsSync(envPath)) {
+    const backup = `${envPath}.backup`;
+    copyFileSync(envPath, backup);
     say(dim(`  Previous settings backed up to .env.backup`));
   }
-  writeFileSync(ENV_PATH, renderEnv(values));
-  mkdirSync(join(ROOT, 'data'), { recursive: true });
-  mkdirSync(join(ROOT, 'output'), { recursive: true });
-  say(green('✓ Settings saved to .env'));
+  writeFileSync(envPath, renderEnv(values));
+  mkdirSync(join(workspaceRoot, 'data'), { recursive: true });
+  mkdirSync(join(workspaceRoot, 'output'), { recursive: true });
+  say(green(`✓ Settings saved to ${envPath}`));
   say(dim('  This file holds your keys and is never committed to git.'));
 
   heading('Done');

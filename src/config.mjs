@@ -10,9 +10,28 @@
  *
  * Nothing about a specific league belongs in this file. League identity lives
  * in .env; editorial behaviour lives in config/.
+ *
+ * Two roots, never confused:
+ *
+ *   PACKAGE_ROOT    where the code lives, and with it the shipped assets:
+ *                   prompts/, the config/editorial.yml and config/rankings.yml
+ *                   defaults, the config/bye-weeks.<season>.yml tables, and
+ *                   the empty templates. Read-only at run time — once the
+ *                   package is installed it sits under node_modules, and
+ *                   nothing may be written there.
+ *
+ *   workspace root  one league's folder: its .env, its own config/
+ *                   (rookie-draft.yml, guillotine.yml, prospects.<year>.yml),
+ *                   and the data/ and output/ every write goes to. Chosen by
+ *                   resolveWorkspaceRoot with the same precedence as above:
+ *                   --workspace, then PRESSBOX_WORKSPACE, then the working
+ *                   directory. It cannot come from .env, because .env is in it.
+ *
+ * Run from a checkout's own folder the two are the same directory, which is
+ * how a cloned repository covering one league keeps working unchanged.
  */
-import { readFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { readFileSync, existsSync, statSync } from 'node:fs';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseYaml } from './lib/yaml.mjs';
 import { applyEnvFile } from './lib/env.mjs';
@@ -23,7 +42,43 @@ import { parseDeclaredDraftOrder, parseDeclaredRoundOrder } from './rookieDraft.
 import { parseProspectBoard } from './prospectBoard.mjs';
 import { parseTankWatchStartWeek } from './tankWatch.mjs';
 
-export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+/** The package's own directory: code and shipped assets. Read-only at run time. */
+export const PACKAGE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+
+/** The environment variable that names a league's workspace folder. */
+export const WORKSPACE_ENV_VAR = 'PRESSBOX_WORKSPACE';
+
+/**
+ * The league folder this run reads its .env and league config from, and writes
+ * its data and output into.
+ *
+ * `flag` (--workspace) wins, then the environment variable, then `cwd`. A
+ * relative path is taken from `cwd`. A named folder that does not exist is
+ * refused rather than created: a typo would otherwise start a fresh, empty
+ * league history somewhere nobody meant, with nothing saying so.
+ */
+export function resolveWorkspaceRoot({ flag, env = process.env, cwd = process.cwd() } = {}) {
+  const fromEnv = (env[WORKSPACE_ENV_VAR] ?? '').trim();
+  let chosen = null;
+  let source = null;
+  if (flag !== undefined && flag !== null) [chosen, source] = [flag, '--workspace'];
+  else if (fromEnv) [chosen, source] = [fromEnv, WORKSPACE_ENV_VAR];
+  if (chosen === null) return resolve(cwd);
+
+  const path = resolve(cwd, chosen);
+  if (!existsSync(path)) {
+    throw new Error(`The workspace folder ${path} (from ${source} ${chosen}) does not exist.`);
+  }
+  if (!statSync(path).isDirectory()) {
+    throw new Error(`The workspace ${path} (from ${source} ${chosen}) is not a folder.`);
+  }
+  return path;
+}
+
+/** The workspace's own config folder: the league's rookie-draft, guillotine and prospect files. */
+export function workspaceConfigDir(workspaceRoot) {
+  return join(workspaceRoot, 'config');
+}
 
 const DEFAULT_EDITORIAL = {
   tone: 'humorous',
@@ -288,16 +343,27 @@ function bool(value, fallback) {
   return /^(1|true|yes|on)$/i.test(String(value));
 }
 
+/**
+ * Loads a run's settings for the league in `workspaceRoot`.
+ *
+ * League-specific files (.env, rookie-draft.yml, guillotine.yml) are read from
+ * the workspace. The editorial and ranking defaults are read from the package;
+ * a workspace overriding them is a separate step. data/ and output/ default
+ * into the workspace, and a relative DATA_DIR or OUTPUT_DIR is taken from it
+ * too, so a league folder means the same thing whichever shell runs it.
+ */
 export function loadConfig({
-  envPath = join(ROOT, '.env'),
-  rankingsPath = join(ROOT, 'config', 'rankings.yml'),
-  guillotinePath = join(ROOT, 'config', 'guillotine.yml'),
-  rookieDraftPath = join(ROOT, 'config', 'rookie-draft.yml'),
+  workspaceRoot = resolveWorkspaceRoot(),
+  envPath = join(workspaceRoot, '.env'),
+  rankingsPath = join(PACKAGE_ROOT, 'config', 'rankings.yml'),
+  editorialPath = join(PACKAGE_ROOT, 'config', 'editorial.yml'),
+  guillotinePath = join(workspaceConfigDir(workspaceRoot), 'guillotine.yml'),
+  rookieDraftPath = join(workspaceConfigDir(workspaceRoot), 'rookie-draft.yml'),
 } = {}) {
   applyEnvFile(envPath);
   const env = process.env;
 
-  const editorial = readYamlFile(join(ROOT, 'config', 'editorial.yml'), DEFAULT_EDITORIAL, {
+  const editorial = readYamlFile(editorialPath, DEFAULT_EDITORIAL, {
     replaceKeys: ['ranking_emoji', 'awards', 'banned_phrases'],
   });
   const rankings = readYamlFile(rankingsPath, DEFAULT_RANKINGS, {
@@ -337,6 +403,7 @@ export function loadConfig({
   editorial.output.include_emoji = bool(env.INCLUDE_EMOJI, editorial.output.include_emoji);
 
   return {
+    workspaceRoot,
     leagueId: (env.SLEEPER_LEAGUE_ID || '').trim(),
     season: env.SLEEPER_SEASON ? String(env.SLEEPER_SEASON).trim() : null,
     week: env.FANTASY_WEEK ? Number.parseInt(env.FANTASY_WEEK, 10) : null,
@@ -350,8 +417,8 @@ export function loadConfig({
       openaiKey: (env.OPENAI_API_KEY || '').trim(),
       model: (env.AI_MODEL || env.OPENAI_MODEL || '').trim(),
     },
-    dataDir: env.DATA_DIR || join(ROOT, 'data'),
-    outputDir: env.OUTPUT_DIR || join(ROOT, 'output'),
+    dataDir: resolve(workspaceRoot, env.DATA_DIR || 'data'),
+    outputDir: resolve(workspaceRoot, env.OUTPUT_DIR || 'output'),
     debug: bool(env.DEBUG, false),
     editorial,
     rankings,
@@ -382,7 +449,7 @@ export function loadConfig({
  * (`league.season` in src/pipeline.mjs) — `config.season` here is only ever
  * an operator's optional override of what Sleeper already says.
  */
-export function loadByeWeekTable({ season, configDir = join(ROOT, 'config') } = {}) {
+export function loadByeWeekTable({ season, configDir = join(PACKAGE_ROOT, 'config') } = {}) {
   const source = byeWeekTableSource(season);
   const path = join(configDir, `bye-weeks.${season}.yml`);
   if (!existsSync(path)) {
@@ -410,8 +477,17 @@ export function loadByeWeekTable({ season, configDir = join(ROOT, 'config') } = 
  * handle (the model is told no prospect may be discussed), not an error. An
  * invalid one throws, naming the file. Season-specific, so not part of
  * `loadConfig()` — the draft year is known only once a league has been opened.
+ *
+ * `configDir` is required: the workspace's config folder. There is
+ * deliberately no package fallback, because a board is one operator's sourced
+ * opinion and the package ships only config/prospects.example.yml.
  */
-export function loadProspectBoard({ draftYear, configDir = join(ROOT, 'config') } = {}) {
+export function loadProspectBoard({ draftYear, configDir } = {}) {
+  if (!configDir) {
+    throw new Error(
+      "loadProspectBoard needs configDir, the workspace's config folder: a board is never read from the package.",
+    );
+  }
   const path = join(configDir, `prospects.${draftYear}.yml`);
   if (!existsSync(path)) return null;
 

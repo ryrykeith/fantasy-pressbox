@@ -12,7 +12,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, resolveFutureStockWeights, resolveRankingWeights } from './config.mjs';
+import { PACKAGE_ROOT, resolveFutureStockWeights, resolveRankingWeights } from './config.mjs';
 import { hasMatchups, hasEliminations, hasFutureDraftCapital } from './format.mjs';
 import { renderFormatBlocks } from './promptTemplate.mjs';
 import { currentSeeds } from './analysis/standings.mjs';
@@ -101,9 +101,11 @@ export const RANKING_TASKS = [...FIXED_FIELD_RANKING_TASKS, 'survival-rankings']
  * Reads a prompt file and resolves its format-conditional sections (see
  * src/promptTemplate.mjs) for `formatType`. A file with no such sections reads
  * the same for every format, so `formatType` may be omitted for it.
+ *
+ * Prompts are package assets: read from the package, never the workspace.
  */
 function readPrompt(file, formatType) {
-  const path = join(ROOT, 'prompts', file);
+  const path = join(PACKAGE_ROOT, 'prompts', file);
   if (!existsSync(path)) throw new Error(`Missing prompt file: prompts/${file}`);
   const text = renderFormatBlocks(readFileSync(path, 'utf8').trim(), formatType, file);
   if (!text) throw new Error(`Prompt file prompts/${file} is empty.`);

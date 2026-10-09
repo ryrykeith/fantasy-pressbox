@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { loadConfig, ROOT } from '../src/config.mjs';
+import { loadConfig, PACKAGE_ROOT } from '../src/config.mjs';
 import { parseYaml } from '../src/lib/yaml.mjs';
 import {
   DRAFT_ORDER_DIRECTIONS,
@@ -43,7 +43,7 @@ const THIS_LEAGUE_RULE = {
   ],
 };
 
-const NO_ENV_FILE = join(ROOT, 'tests', '.env.does-not-exist');
+const NO_ENV_FILE = join(PACKAGE_ROOT, 'tests', '.env.does-not-exist');
 
 function withRookieDraftFile(body, contents) {
   const path = join(mkdtempSync(join(tmpdir(), 'pressbox-config-')), 'rookie-draft.yml');
@@ -238,7 +238,7 @@ test('a league with no rookie-draft file declares no rule', () => {
 // until league workspaces land, config/ is that league's config. The test
 // guards that what is committed parses, rather than that it is empty.
 test('the committed config/rookie-draft.yml is readable and declares a projectable rule', () => {
-  const config = loadConfig({ envPath: NO_ENV_FILE, rookieDraftPath: join(ROOT, 'config', 'rookie-draft.yml') });
+  const config = loadConfig({ envPath: NO_ENV_FILE, rookieDraftPath: join(PACKAGE_ROOT, 'config', 'rookie-draft.yml') });
   assert.deepEqual(config.rookieDraft.order, THIS_LEAGUE_RULE);
   assert.equal(config.rookieDraft.rounds, 'linear');
 });

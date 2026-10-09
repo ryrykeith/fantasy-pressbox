@@ -39,13 +39,38 @@ undiagnosable.
 When output is wrong, this separation makes it answerable whether the data was
 wrong, the analysis was wrong, or the writing was wrong.
 
+## Package root and workspace root
+
+Two directories, never confused (`src/config.mjs`):
+
+| Root | What lives there | At run time |
+|---|---|---|
+| `PACKAGE_ROOT` (from `import.meta.url`) | `prompts/`, the `config/editorial.yml` and `config/rankings.yml` defaults, `config/bye-weeks.<season>.yml`, `config/prospects.example.yml`, empty `rookie-draft.yml` / `guillotine.yml` templates | read only |
+| workspace (`config.workspaceRoot`) | one league's `.env`, its `config/rookie-draft.yml`, `config/guillotine.yml`, `config/prospects.<year>.yml`, and `data/` and `output/` | read and written |
+
+The workspace is chosen by `resolveWorkspaceRoot`: `--workspace <folder>`, then
+`PRESSBOX_WORKSPACE`, then the working directory. It cannot come from `.env`,
+because `.env` is in it. A named folder that does not exist is refused rather
+than created. A relative `DATA_DIR` or `OUTPUT_DIR` is taken from the
+workspace.
+
+Every write goes through `config.dataDir` or `config.outputDir`, so nothing is
+ever written into an installed package. Only the modules that read shipped
+assets (`config.mjs`, `promptContext.mjs`'s `readPrompt`, `cli.mjs`'s doctor)
+refer to `PACKAGE_ROOT`, and `tests/workspace-root.test.mjs` holds that line.
+The prospect board has no package fallback: `loadProspectBoard` needs the
+workspace's config folder.
+
+Run from a checkout's own folder, the two roots are the same directory, which
+is how a cloned repository covering one league keeps working unchanged.
+
 ## Module map
 
 | Path | Responsibility |
 |---|---|
 | `src/lib/yaml.mjs` | A small YAML reader, so `config/` needs no dependency |
 | `src/lib/env.mjs` | `.env` parsing, so secrets need no dependency |
-| `src/config.mjs` | Merges flags, env, `config/*.yml` and defaults |
+| `src/config.mjs` | Merges flags, env, `config/*.yml` and defaults; owns the package root and the workspace root (below) |
 | `src/format.mjs` | The league format taxonomy: valid types, declaration parsing, resolution |
 | `src/rookieDraft.mjs` | The declared rookie draft order rule (`config/rookie-draft.yml`): parsing, group sizes, plain-words description, and the refusal to project an order without one |
 | `src/sleeper/client.mjs` | HTTP only. Retries, friendly errors, player-file cache |
