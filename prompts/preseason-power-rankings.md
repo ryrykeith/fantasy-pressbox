@@ -17,10 +17,23 @@ Judge teams on:
 
 - starting lineup quality in this league's exact format
 - quarterback room
+<!-- format: dynasty -->
 - dynasty asset value and age curve
+<!-- end format -->
 - positional depth and what one injury would do
 - roster construction and flexibility
+<!-- format: dynasty -->
 - whether this team can win now, later, or is pretending both
+<!-- end format -->
+<!-- format: redraft -->
+- whether this team can win this season, which is the only season it has
+
+Every roster in this league is drafted again from scratch next year, so nothing
+a team owns carries over. Age counts only where it bears on this season — a
+30-year-old running back already losing touches is a real worry for December.
+What a player might be worth next year is not a reason to rank anyone higher or
+lower.
+<!-- end format -->
 
 ## Positional value
 
@@ -30,6 +43,7 @@ from it. Apply every one of them — with no games to go on, how this league pay
 each position is most of what separates these rosters. An empty list means
 nothing here is unusual and no position needs adjusting.
 
+<!-- format: dynasty -->
 ## Draft capital
 
 `futureDraftCapital` lists picks for drafts that **have not happened yet**, and
@@ -49,6 +63,7 @@ Read it as follows:
 Future picks are rookie picks. They matter because they become cheap young
 talent or trade currency, not because a spreadsheet says a 2nd is worth points.
 Never mention a pick for a draft that has already been held.
+<!-- end format -->
 
 ## Structure
 

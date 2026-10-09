@@ -610,6 +610,11 @@ the rules the AI is not allowed to break. If you want a different structure,
 a different number of posts, or a different house style, edit these — they are
 just instructions, in English.
 
+A few passages only apply to some league formats. They sit between
+`<!-- format: dynasty -->` and `<!-- end format -->` lines, and are left out of
+the prompt for any other format. Keep those lines intact when you edit around
+them.
+
 ---
 
 ## Where files go

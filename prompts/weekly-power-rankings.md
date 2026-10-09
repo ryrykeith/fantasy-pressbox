@@ -4,8 +4,14 @@ Rank every team from 1 to N after the week in `thisWeek`.
 
 ## What a power ranking is
 
+<!-- format: dynasty -->
 Power rankings answer: **which teams look strongest right now, accounting for
 both current strength and dynasty context?**
+<!-- end format -->
+
+<!-- format: redraft -->
+Power rankings answer: **which teams are most likely to win this season?**
+<!-- end format -->
 
 They do not answer "who has the best record". A team can lose with 145 points
 and rise. A team can win with 105 and fall. Standings are an input, not the
@@ -46,6 +52,20 @@ own rule.
 "Rose because they scored the third-most points in the league while starting a
 backup quarterback" is.
 
+<!-- format: redraft -->
+## This season is the only season
+
+Every roster in this league is drafted again from scratch next year. Nothing a
+team owns carries over, so judge each roster only on what it can do between
+now and the championship.
+
+Age counts only where it bears on this season — a 30-year-old running back
+whose touches are already shrinking is a real worry for December. What a player
+might be worth next year, or the year after, is not a reason to rank anyone
+higher or lower.
+<!-- end format -->
+
+<!-- format: dynasty -->
 ## Draft capital
 
 `futureDraftCapital` lists picks for drafts that **have not happened yet**, and
@@ -65,6 +85,7 @@ Read it as follows:
 Future picks are rookie picks. They matter because they become cheap young
 talent or trade currency, not because a spreadsheet says a 2nd is worth points.
 Never mention a pick for a draft that has already been held.
+<!-- end format -->
 
 ## Structure
 

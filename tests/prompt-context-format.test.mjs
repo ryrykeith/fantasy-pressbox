@@ -180,7 +180,7 @@ test('a dynasty league with no traded picks keeps today\'s "nothing traded" word
   assert.equal(entry.why, 'No picks have been traded for any draft that has not yet been held.');
 });
 
-test('a redraft league with traded picks present does not get the futureDraftCapital entry at all', () => {
+test('a redraft league with traded picks present drops the block and says draft capital does not apply', () => {
   const context = buildContext({
     task: 'rankings',
     config: testConfig(),
@@ -191,7 +191,10 @@ test('a redraft league with traded picks present does not get the futureDraftCap
     futureDraftCapital: { note: 'x', roundsPerDraft: 1, seasons: [], teams: [] },
   });
 
-  assert.equal(findEntry(context, 'futureDraftCapital'), undefined);
+  assert.equal('futureDraftCapital' in context, false);
+  const entry = findEntry(context, 'futureDraftCapital');
+  assert.ok(entry, 'expected an unavailable entry for futureDraftCapital');
+  assert.match(entry.instruction, /not a concept/i);
 });
 
 /* ------------------------------------------------ positional value */

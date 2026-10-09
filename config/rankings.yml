@@ -2,7 +2,9 @@
 # Power ranking settings — how teams are judged.
 #
 # Power rankings are not standings. They answer "who looks strongest right
-# now, accounting for dynasty context", not "who has the best record".
+# now, by the standards of this league's format", not "who has the best
+# record". A dynasty league counts long-term assets; a redraft league counts
+# only this season.
 # ============================================================================
 
 # How much each factor counts. These are guidance given to the model, not a
