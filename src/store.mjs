@@ -80,6 +80,21 @@ export function createStore({ dataDir }) {
         .map((week) => store.loadSnapshot(season, week))
         .filter(Boolean);
     },
+    /**
+     * Every name each roster has been captured under this season, week by week.
+     *
+     * Published rankings and predictions are written in team names, and teams
+     * rename themselves mid-season. A week's snapshot records which roster each
+     * name meant that week, which is what lets src/teamIdentity.mjs match a name
+     * printed in week 3 to the roster that goes by something else in week 5.
+     */
+    loadTeamNameHistory(season) {
+      return store
+        .loadSnapshotsThrough(season, Number.POSITIVE_INFINITY)
+        .flatMap((snapshot) =>
+          (snapshot.teams || []).map((team) => ({ week: snapshot.week, rosterId: team.rosterId, name: team.name })),
+        );
+    },
 
     saveRankings(season, label, rankings) {
       return writeJson(pathFor('rankings', season, `${label}.json`), rankings);
@@ -127,11 +142,14 @@ export function createStore({ dataDir }) {
  * that was never ranked did not "hold steady".
  */
 export function withMovement(rankings, previous) {
-  const previousByTeam = new Map(
-    (previous?.rankings || []).map((entry) => [entry.team, entry.rank]),
-  );
+  // A roster id survives a rename and a name does not, so entries are matched
+  // on the id whenever one is known. Name matching remains only for callers
+  // that have no league to resolve names against.
+  const keyOf = (entry) =>
+    entry.rosterId !== undefined && entry.rosterId !== null ? `roster:${entry.rosterId}` : `name:${entry.team}`;
+  const previousByTeam = new Map((previous?.rankings || []).map((entry) => [keyOf(entry), entry.rank]));
   return rankings.map((entry) => {
-    const previousRank = previousByTeam.get(entry.team) ?? null;
+    const previousRank = previousByTeam.get(keyOf(entry)) ?? null;
     return {
       ...entry,
       previousRank,
@@ -149,12 +167,21 @@ export function movementLabel(movement) {
 }
 
 /** One called game: who won, and how close the projected score was. */
-function gradeMatchupPrediction(prediction, resultByTeam) {
-  const a = resultByTeam.get(prediction.team_a);
-  const b = resultByTeam.get(prediction.team_b);
+function gradeMatchupPrediction(prediction, results) {
+  const a = results.find(prediction.team_a, prediction.roster_a);
+  const b = results.find(prediction.team_b, prediction.roster_b);
   if (!a || !b) return { ...prediction, graded: false, reason: 'team not found in results' };
   const actualWinner =
     a.points === b.points ? null : a.points > b.points ? prediction.team_a : prediction.team_b;
+  // Who won is settled by roster, not by spelling: a team renamed between the
+  // preview and the result is still the team that was called.
+  const winningRoster = a.points === b.points ? null : a.points > b.points ? a.rosterId : b.rosterId;
+  const calledRoster = results.rosterOf(prediction.predicted_winner, prediction.predicted_winner_roster);
+  const correct =
+    actualWinner !== null &&
+    (calledRoster !== null && winningRoster !== undefined
+      ? calledRoster === winningRoster
+      : actualWinner === prediction.predicted_winner);
   const scoreError =
     prediction.predicted_score_a !== undefined && prediction.predicted_score_b !== undefined
       ? Number(
@@ -170,7 +197,7 @@ function gradeMatchupPrediction(prediction, resultByTeam) {
     actual_winner: actualWinner,
     actual_score_a: a.points,
     actual_score_b: b.points,
-    correct: actualWinner !== null && actualWinner === prediction.predicted_winner,
+    correct,
     total_score_error: scoreError,
   };
 }
@@ -191,7 +218,7 @@ function gradeMatchupPrediction(prediction, resultByTeam) {
  * punish a correct call for a commissioner's timing. `chop_source` travels with
  * a graded result so a reader can tell a declaration from a derivation.
  */
-function gradeChopPrediction(prediction, { week, eliminationLedger }) {
+function gradeChopPrediction(prediction, { week, eliminationLedger, results }) {
   if (!eliminationLedger) {
     return {
       ...prediction,
@@ -217,7 +244,14 @@ function gradeChopPrediction(prediction, { week, eliminationLedger }) {
     graded: true,
     actual_chop: chop.team,
     chop_source: chop.source,
-    correct: chop.team === prediction.predicted_chop,
+    // Matched by roster: comparing names would mark a correct call WRONG the
+    // moment the chopped team renamed itself, which is worse than ungraded.
+    correct: (() => {
+      const calledRoster = results.rosterOf(prediction.predicted_chop, prediction.predicted_chop_roster);
+      return calledRoster !== null && chop.rosterId !== undefined
+        ? calledRoster === chop.rosterId
+        : chop.team === prediction.predicted_chop;
+    })(),
   };
 }
 
@@ -236,15 +270,31 @@ function gradeChopPrediction(prediction, { week, eliminationLedger }) {
  * @param weekAnalysis     that week's analysis (src/analysis/week.mjs)
  * @param eliminationLedger the ledger for the same week, required to grade a
  *                          called chop; absent means those go ungraded
+ * @param identity         resolves a published team name to its roster
+ *                         (src/teamIdentity.mjs), so a rename between the call
+ *                         and the result does not change the grade
  */
-export function gradePredictions(predictions, weekAnalysis, { eliminationLedger = null } = {}) {
+export function gradePredictions(predictions, weekAnalysis, { eliminationLedger = null, identity = null } = {}) {
   if (!predictions?.length) return null;
-  const resultByTeam = new Map(weekAnalysis.teamWeeks.map((t) => [t.team, t]));
+  const week = weekAnalysis.week;
+  const byRoster = new Map(weekAnalysis.teamWeeks.map((t) => [t.rosterId, t]));
+  const byName = new Map(weekAnalysis.teamWeeks.map((t) => [t.team, t]));
+  const results = {
+    /** A recorded roster id wins; otherwise the name is resolved as published that week. */
+    rosterOf(name, recorded) {
+      if (recorded !== undefined && recorded !== null) return recorded;
+      return identity ? identity.rosterIdFor(name, { week }) : null;
+    },
+    find(name, recorded) {
+      const rosterId = results.rosterOf(name, recorded);
+      return (rosterId !== null && byRoster.get(rosterId)) || byName.get(name) || null;
+    },
+  };
 
   const graded = predictions.map((prediction) =>
     prediction?.predicted_chop === undefined
-      ? gradeMatchupPrediction(prediction, resultByTeam)
-      : gradeChopPrediction(prediction, { week: weekAnalysis.week, eliminationLedger }),
+      ? gradeMatchupPrediction(prediction, results)
+      : gradeChopPrediction(prediction, { week, eliminationLedger, results }),
   );
 
   const scored = graded.filter((g) => g.graded);
