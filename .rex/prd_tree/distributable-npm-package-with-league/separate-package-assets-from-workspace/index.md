@@ -14,5 +14,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Split ROOT into package root and workspace root](./split-root-into-package-root-and.md) | pending |
+| [Split ROOT into package root and workspace root](./split-root-into-package-root-and.md) | completed |
 | [Workspace overrides for prompts and config](./workspace-overrides-for-prompts-and.md) | pending |
