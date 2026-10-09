@@ -19,6 +19,9 @@ import { applyEnvFile } from './lib/env.mjs';
 import { parseDeclaredFormatType } from './format.mjs';
 import { parseDeclaredEliminations } from './analysis/elimination.mjs';
 import { byeWeekTableSource, parseByeWeekTable } from './analysis/byeExposure.mjs';
+import { parseDeclaredDraftOrder } from './rookieDraft.mjs';
+import { parseProspectBoard } from './prospectBoard.mjs';
+import { parseTankWatchStartWeek } from './tankWatch.mjs';
 
 export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -120,6 +123,15 @@ const DEFAULT_RANKINGS = {
  * there is nothing this tool could honestly put there.
  */
 const DEFAULT_GUILLOTINE = { eliminations: {} };
+
+/**
+ * The rookie draft settings, before an operator has written any.
+ *
+ * `order` is the declared draft order rule (src/rookieDraft.mjs). Null by
+ * default, because Sleeper does not report one and any default this tool
+ * picked would put picks in the wrong slots for some league.
+ */
+const DEFAULT_ROOKIE_DRAFT = { order: null, tank_watch: { start_week: null } };
 
 /** Per-format weight maps: a partial override in rankings.yml replaces the whole set, never merges into it. */
 const RANKING_WEIGHT_REPLACE_KEYS = ['weights.dynasty', 'weights.redraft', 'weights.guillotine'];
@@ -249,6 +261,7 @@ export function loadConfig({
   envPath = join(ROOT, '.env'),
   rankingsPath = join(ROOT, 'config', 'rankings.yml'),
   guillotinePath = join(ROOT, 'config', 'guillotine.yml'),
+  rookieDraftPath = join(ROOT, 'config', 'rookie-draft.yml'),
 } = {}) {
   applyEnvFile(envPath);
   const env = process.env;
@@ -270,6 +283,17 @@ export function loadConfig({
     replaceKeys: ['eliminations'],
   });
   const eliminations = parseDeclaredEliminations(guillotine.eliminations);
+
+  // Same again for the rookie draft order: checked at load whatever the
+  // league's format, so a misspelled group or sort stops every command, listing
+  // the valid values, rather than only the one that projects picks.
+  const rookieDraft = readYamlFile(rookieDraftPath, DEFAULT_ROOKIE_DRAFT, { replaceKeys: ['order'] });
+  const rookieDraftOrder = parseDeclaredDraftOrder(rookieDraft.order, {
+    source: `order in ${rookieDraftPath}`,
+  });
+  const tankWatchStartWeek = parseTankWatchStartWeek(rookieDraft.tank_watch?.start_week, {
+    source: `tank_watch.start_week in ${rookieDraftPath}`,
+  });
 
   // .env may override the two editorial knobs a beginner is most likely to want.
   if (env.PRESSBOX_TONE) editorial.tone = env.PRESSBOX_TONE;
@@ -301,6 +325,11 @@ export function loadConfig({
     // own sub-object so nothing reaches for `config.eliminations` in a format
     // where no team is ever eliminated.
     guillotine: { eliminations },
+    // How the rookie draft is ordered, if declared. Null means undeclared, and
+    // no draft order can be projected (requireDraftOrderRule). The tank
+    // watch's start week is null unless declared, meaning the regular
+    // season's midpoint (src/tankWatch.mjs#resolveTankWatchStartWeek).
+    rookieDraft: { order: rookieDraftOrder, tankWatch: { startWeek: tankWatchStartWeek } },
   };
 }
 
@@ -337,6 +366,28 @@ export function loadByeWeekTable({ season, configDir = join(ROOT, 'config') } = 
   }
 
   return parseByeWeekTable(parsed, { season, source });
+}
+
+/**
+ * Reads and validates the declared prospect board for a draft class
+ * (src/prospectBoard.mjs).
+ *
+ * Returns null when no file is declared: an absent board is a state editions
+ * handle (the model is told no prospect may be discussed), not an error. An
+ * invalid one throws, naming the file. Season-specific, so not part of
+ * `loadConfig()` — the draft year is known only once a league has been opened.
+ */
+export function loadProspectBoard({ draftYear, configDir = join(ROOT, 'config') } = {}) {
+  const path = join(configDir, `prospects.${draftYear}.yml`);
+  if (!existsSync(path)) return null;
+
+  let parsed;
+  try {
+    parsed = parseYaml(readFileSync(path, 'utf8'));
+  } catch (error) {
+    throw new Error(`Could not read ${path}: ${error.message}`);
+  }
+  return parseProspectBoard(parsed, { draftYear, source: path });
 }
 
 /** The emoji that precedes a team at a given rank, e.g. 1 -> 🥇. */

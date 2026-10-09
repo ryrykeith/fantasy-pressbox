@@ -6,7 +6,8 @@
  * the subset of YAML the files under config/ actually use:
  *
  *   - nested maps, by indentation
- *   - lists of scalars and lists of single-line maps
+ *   - lists of scalars and lists of maps (`- key: value` with more keys
+ *     indented beneath it)
  *   - strings, numbers, booleans, null
  *   - `#` comments and blank lines
  *
@@ -88,6 +89,22 @@ function parseBlock(lines, start, indent) {
         const [value, next] = parseBlock(lines, i, lines[i].indent);
         list.push(value);
         i = next;
+      } else if (splitKey(item) && hasChildren) {
+        // A map spread over several lines:
+        //   - teams: playoff
+        //     sort: record
+        // Its first key sits on the dash line, so re-read that key as though
+        // it were on a line of its own, at the column the text starts in.
+        const itemIndent = lines[i - 1].indent + lines[i - 1].content.length - item.length;
+        let end = i;
+        while (end < lines.length && lines[end].indent > indent) end++;
+        const block = [{ ...lines[i - 1], indent: itemIndent, content: item }, ...lines.slice(i, end)];
+        const [value, consumed] = parseBlock(block, 0, itemIndent);
+        if (consumed < block.length) {
+          throw new Error(`Unexpected indentation on line ${block[consumed].lineNumber}`);
+        }
+        list.push(value);
+        i = end;
       } else if (splitKey(item)) {
         const [key, raw] = splitKey(item);
         list.push({ [key]: parseScalar(raw) });

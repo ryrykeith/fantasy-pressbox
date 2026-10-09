@@ -7,11 +7,14 @@
  */
 import { createClient } from './sleeper/client.mjs';
 import {
+  futurePickOwnership,
   normalizeLeague,
   normalizeTeams,
   normalizeTransactions,
   normalizeWeekRosters,
 } from './sleeper/normalize.mjs';
+import { projectDraftOrder, projectedDraftSeason } from './analysis/draftOrder.mjs';
+import { isProjectableDraftOrder } from './rookieDraft.mjs';
 import { analyzeWeek } from './analysis/week.mjs';
 import { buildEliminationLedger } from './analysis/elimination.mjs';
 import { buildDangerBoard } from './analysis/danger.mjs';
@@ -24,7 +27,7 @@ import {
   marketValueQuery,
   normalizeMarketValues,
 } from './fantasycalc/client.mjs';
-import { hasEliminations } from './format.mjs';
+import { hasEliminations, hasFutureDraftCapital } from './format.mjs';
 import { createStore } from './store.mjs';
 import { loadByeWeekTable } from './config.mjs';
 
@@ -288,8 +291,31 @@ export function readByeExposure({
   });
 }
 
+/**
+ * The projected rookie draft order (src/analysis/draftOrder.mjs) for the draft
+ * this season's standings decide, or null when there is none to project: a
+ * format without future picks, no projectable rule declared in
+ * config/rookie-draft.yml, or a league that does not report its playoff field.
+ * Null rather than a refusal, because every week's snapshot calls this and an
+ * undeclared rule must not stop a recap; an edition that needs the order
+ * calls requireDraftOrderRule itself and refuses there.
+ */
+export function readDraftOrder({ league, teams, config = null, tradedPicks = [] }) {
+  const rule = config?.rookieDraft?.order ?? null;
+  if (!hasFutureDraftCapital(league.format)) return null;
+  if (!isProjectableDraftOrder(rule)) return null;
+  if (!Number.isInteger(league.playoffTeams) || league.playoffTeams < 1) return null;
+  const picks = futurePickOwnership({
+    tradedPicks,
+    rosterIds: teams.map((team) => team.rosterId),
+    roundsPerDraft: league.draftRounds,
+    season: projectedDraftSeason(league),
+  });
+  return projectDraftOrder({ league, teams, rule, picks });
+}
+
 /** Fetch one week, save the raw bundle and the analyzed snapshot. */
-export async function captureWeek({ client, store, league, teams, players, week, config = null }) {
+export async function captureWeek({ client, store, league, teams, players, week, config = null, tradedPicks = [] }) {
   const [matchups, transactions] = await Promise.all([
     client.matchups(week),
     client.transactions(week),
@@ -374,6 +400,11 @@ export async function captureWeek({ client, store, league, teams, players, week,
       })
     : null;
 
+  // Where every rookie pick would land if the season ended now, and who holds
+  // it. Saved with the week so next week's movement is measured against what
+  // was projected then, not recomputed from later standings.
+  const draftOrder = readDraftOrder({ league, teams, config, tradedPicks });
+
   const snapshotPath = store.saveSnapshot(league.season, week, {
     week,
     season: league.season,
@@ -391,6 +422,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
     ...(danger ? { danger } : {}),
     ...(faab ? { faab } : {}),
     ...(byeExposure ? { byeExposure } : {}),
+    ...(draftOrder ? { draftOrder } : {}),
     analysis,
   });
 
@@ -402,6 +434,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
     ...(danger ? { danger } : {}),
     ...(faab ? { faab } : {}),
     ...(byeExposure ? { byeExposure } : {}),
+    ...(draftOrder ? { draftOrder } : {}),
     rawPath,
     snapshotPath,
   };

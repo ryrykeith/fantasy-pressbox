@@ -390,7 +390,7 @@ test('a guillotine trade carries no picks, no record and no seed', () => {
 test('the prompt states the format\'s rule for picks and nothing from the others', () => {
   const dynasty = buildPrompt({ task: 'trade-report', context: context() });
   assert.match(dynasty, /# Trade Report/);
-  assert.match(dynasty, /do not\s+put any pick in a tier/);
+  assert.match(dynasty, /do not\s+put it in a tier or name a slot/);
   assert.doesNotMatch(dynasty, /weekly floor/);
 
   const redraft = buildPrompt({ task: 'trade-report', context: context({ l: league('redraft') }) });

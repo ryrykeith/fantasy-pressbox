@@ -395,6 +395,7 @@ Run them all from inside the project folder.
 | `node src/cli.mjs rankings` | Build the power rankings. |
 | `node src/cli.mjs survival-rankings` | Build the power rankings for a guillotine league — the teams still alive, ranked on the floor that keeps them there. Guillotine leagues only; it replaces `rankings`. |
 | `node src/cli.mjs preseason-rankings` | Build preseason rankings, ignoring all results. |
+| `node src/cli.mjs tank-watch` | Build the tank watch: the race for next season's top rookie picks, who owns them, and which picks jump if their team crosses the playoff line. Dynasty leagues only. It needs a declared draft order (see `config/rookie-draft.yml`) and opens from the middle of the regular season. |
 | `node src/cli.mjs fetch` | Just download and save a week of league data. |
 | `node src/cli.mjs record <file> --task <name>` | File a finished edition you pasted back from a chat. |
 | `node src/cli.mjs check <file>` | Check a file of posts against the Sleeper length limit. |
@@ -408,6 +409,7 @@ Useful options:
 | `--format imessage` | One long message instead of Sleeper-sized posts. |
 | `--generate` | Call the AI for you and write finished posts. |
 | `--refresh-players` | Re-download the NFL player list instead of using the cached copy. |
+| `--early` | Run the tank watch before its start week. |
 
 ---
 
@@ -603,6 +605,65 @@ pick one.
 
 Run `node src/cli.mjs doctor` after editing to see the ledger it read.
 
+### `config/rookie-draft.yml` — how the rookie draft is ordered
+
+For dynasty leagues. Sleeper does not say how your rookie draft is ordered, so
+until you write the rule here, Fantasy Pressbox will not project where any pick
+lands. The rule is a list of groups that pick in turn:
+
+```yaml
+order:
+  - teams: non_playoff      # the teams that miss the playoffs pick first...
+    sort: max_points_for    # ...ordered by max points-for...
+    direction: ascending    # ...lowest first
+  - teams: playoff
+    sort: max_points_for
+    direction: ascending
+```
+
+`teams` is `non_playoff`, `playoff` or `all`. `sort` is `max_points_for`,
+`points_for` or `record`. `direction` is `ascending` (lowest first) or
+`descending`. How many teams are in each group comes from your league's number
+of playoff teams in Sleeper. A `lottery` sort is recognised but not supported
+yet, so a league with one can't be projected. A value that isn't on these lists
+stops the command and lists the valid ones.
+
+Run `node src/cli.mjs doctor` after editing to see the rule in plain words.
+
+With a rule declared, the trade report grades a traded pick for next season's
+draft at its projected slot, for example 1.07. If the pick's original team is
+on the playoff bubble, the report also gives the slot the pick would jump to
+if that team crossed the line. When a prospect board exists (see below), it
+names the prospects ranked near that slot. The pick market's values are still
+quoted alongside. Without a rule, the report won't say where any pick lands.
+
+The same file sets when the tank watch opens:
+
+```yaml
+tank_watch:
+  start_week: 8    # the first completed week it covers
+```
+
+Leave `start_week` empty to open it at the middle of the regular season (after
+week 7 when the playoffs start in week 15). Before then `tank-watch` refuses and
+tells you when it opens; `--early` runs it anyway. Each tank watch saves its
+projection under `data/tank-watch/`, and the next one reports how every pick
+has moved since.
+
+### `config/prospects.<year>.yml` — who headlines the rookie class
+
+For dynasty leagues. Nothing in Sleeper or the pick market knows the college
+players, so the class is whatever you write down, with where each claim came
+from. Copy `config/prospects.example.yml` (all invented names) to
+`config/prospects.2027.yml` and fill in your own board. It needs `draftYear`, an
+`updated` date, and ranked entries, each with `rank`, `name`, `position`,
+`school`, an optional short `note`, and a `source` (a publication and/or URL).
+
+A missing source, a repeated rank, or a missing `updated` date stops the command
+with a message naming the entry. A prospect who isn't on the board is not
+discussed. `node src/cli.mjs doctor` reports the board's age and warns once it
+is over 45 days old.
+
 ### `prompts/` — what it writes
 
 One Markdown file per edition, plus `system.md`, which defines the voice and
@@ -628,7 +689,8 @@ fantasy-pressbox/
 │   ├── raw/           exactly what Sleeper returned
 │   ├── snapshots/     each week, analyzed and frozen
 │   ├── rankings/      every ranking you've published
-│   └── predictions/   every pick you've made
+│   ├── predictions/   every pick you've made
+│   └── tank-watch/    the draft order each tank watch reported
 ├── output/          the files you paste into a chat, and the finished posts
 ├── docs/            how the project is designed
 └── .env             your settings (never committed)

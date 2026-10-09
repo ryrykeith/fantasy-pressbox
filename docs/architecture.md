@@ -47,6 +47,7 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/lib/env.mjs` | `.env` parsing, so secrets need no dependency |
 | `src/config.mjs` | Merges flags, env, `config/*.yml` and defaults |
 | `src/format.mjs` | The league format taxonomy: valid types, declaration parsing, resolution |
+| `src/rookieDraft.mjs` | The declared rookie draft order rule (`config/rookie-draft.yml`): parsing, group sizes, plain-words description, and the refusal to project an order without one |
 | `src/sleeper/client.mjs` | HTTP only. Retries, friendly errors, player-file cache |
 | `src/sleeper/normalize.mjs` | Sleeper shapes → league concepts |
 | `src/analysis/lineup.mjs` | Optimal lineup solving |
@@ -56,6 +57,10 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/analysis/faab.mjs` | Remaining FAAB per survivor and the player pool each chop released, for a guillotine league |
 | `src/analysis/transactions.mjs` | A transaction's grading context: each side's roster shape before and after, a claim's cost against budget, moved players' weekly points |
 | `src/analysis/standings.mjs` | Current seeds: wins, then points-for |
+| `src/analysis/playoffField.mjs` | The projected playoff field and the bubble that decides it |
+| `src/tankWatch.mjs` | The tank-watch edition: its refusals (dynasty only, declared rule, start week) and the race/stakes/cliff/movement view of the projected draft order |
+| `src/analysis/draftOrder.mjs` | The projected rookie draft order: each slot's original team and current owner, the cliff a bubble team's pick falls off, week-over-week movement |
+| `src/tradePicks.mjs` | A traded pick at its projected slot for the trade report: slot, cliff, the board prospects around it, and what is still unknown |
 | `src/fantasycalc/client.mjs` | FantasyCalc trade values: query from the league's format and scoring, fetch, normalize. FantasyCalc field names stop here, as Sleeper's stop at `src/sleeper/` |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
 | `src/store.mjs` | Snapshots, rankings, predictions, market values, movement, grading |
@@ -666,6 +671,101 @@ on disk and fetches nothing.
   roster that banked them.
 - **Scoring.** The part of the scoring profile that applies to the positions
   that moved, so a tight end in a TE-premium league carries the premium.
+
+### Rookie draft order
+
+`src/analysis/draftOrder.mjs#projectDraftOrder` projects next season's rookie
+draft from this season's standings. It applies the rule declared in
+`config/rookie-draft.yml` (`requireDraftOrderRule`, `draftOrderGroupSizes`)
+to the projected playoff field (`projectPlayoffField`). It returns numbers
+only.
+
+- **Ownership.** `futurePickOwnership` (`src/sleeper/normalize.mjs`) starts
+  every team with its own pick in every round and applies Sleeper's
+  `traded_picks` on top. `normalizeFutureDraftCapital` is built on the same
+  walk. Each slot carries `originalTeam` (whose finish decides the slot) and
+  `owner` (who holds the pick). Anything reporting a pick names the owner.
+- **Slots.** Each slot reports its group, its max points-for, and the gap to
+  the slots either side in the group's sort value. A gap is null across a
+  group boundary, because the sort value does not separate two groups. It
+  also reports its distance from the top-3 line, the race a tank watch
+  covers. `pick` labels round 1 only ("1.07"). Later rounds list their owners
+  without a pick number, because whether the draft snakes is not declared.
+- **The cliff.** For each team on the playoff bubble, `cliff` gives the slot
+  its pick would land in if it swapped sides of the line with the team
+  across from it. The bubble is the last team in, the first team out, and
+  anyone tied with them. The cliff names the pick's owner.
+
+`captureWeek` writes the projection into the week's snapshot as `draftOrder`.
+It is absent when the format has no future picks, when no projectable rule
+is declared, or when the league does not report its playoff field. An
+undeclared rule never fails an unrelated edition. `draftOrderMovement`
+compares the projection with an earlier week's saved one, so movement is read
+from history rather than recomputed from today's standings. The saved
+projection is only as old as the run that captured it. Re-capturing a past
+week rewrites its snapshot from the standings at that moment, the same as the
+snapshot's `teams`.
+
+### Tank watch
+
+`src/tankWatch.mjs` holds the `tank-watch` edition's gates and facts.
+`refuseTankWatch` refuses a league that is not dynasty, a missing rule
+(through `requireDraftOrderRule`), and a week before the start week unless
+`--early` is passed. The start week is `tank_watch.start_week` in
+`config/rookie-draft.yml`, or the regular season's midpoint
+(`resolveTankWatchStartWeek`). The CLI runs the gate twice: before Sleeper is
+contacted, with the declared format, and again with the resolved format and
+week. `buildPrompt` refuses as well, as a second line of defence.
+
+`tankWatchView` turns the projection into the context block:
+
+- `race`: the first group's picks, with their gaps.
+- `stakes`: every pick held by someone other than its original team, in every
+  round.
+- `cliff`: the bubble picks that would move if their team crossed the line.
+- `order`: the whole of round 1.
+- `movement`: change since the previous tank watch.
+
+The prize is the top `topLine` entries of the prospect board, run through
+`prospectBoardView`. With no board, `prospectBoardUnavailable` says nothing
+about the class may be said.
+
+Movement is measured against `data/tank-watch/<season>/week-<n>.json`, which is
+written when the prompt is built. That makes it the projection the last tank
+watch actually reported, not a later re-capture of that week's snapshot.
+
+### Traded picks in the trade report
+
+FantasyCalc prices every pick of a round the same way: one generic value and
+one Early/Mid/Late value each. What separates two 1sts is where they land
+under the league's own order. `src/tradePicks.mjs#pickProjection` reads that
+from the week's `draftOrder` and adds it to each traded pick as `projection`.
+The market values stay beside it as context.
+
+- **Round 1.** `projectedPick` (for example "1.07") out of `of` picks, and
+  which side of the playoff line the original team sits on. A bubble team's
+  pick also gets `ifOriginalTeamCrosses`, its slot from `cliff`. With a
+  declared board it gets `boardAroundPick` (and `boardAroundPickIfCrossed`):
+  the board entries ranked within `BOARD_WINDOW` of the slot.
+- **Later rounds.** `projectedPick` is null, as in the tank watch.
+  `originalTeamRound1Pick` says where the original team picks in round 1.
+- **Other drafts.** A pick for a later draft than the one this season's
+  standings decide gets no `projection`.
+
+`context.draftProjection` labels the projection with its rule in words, its
+status, and the week its standings came from. `context.prospectBoard` carries
+only the entries some traded pick is around, each with its source.
+`tradePicksUnavailable` writes the matching `unavailable` entries:
+
+- `projectedDraftSlot`: for picks with no projection. That covers every pick
+  when no rule is declared.
+- `finalDraftOrder`: every slot is still projected.
+- `projectedSlotAtTradeTime`: the projection uses today's standings, not
+  those on the trade date.
+- `laterRoundPickNumbers`: only round 1 has pick numbers.
+- The prospect board entry (`prospectBoard` or `prospectsNotOnBoard`).
+- `boardRankIsNotAvailability`: the board ranks the class. It is not a mock
+  draft.
 
 ## State
 

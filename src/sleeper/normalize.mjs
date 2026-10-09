@@ -573,10 +573,57 @@ const ORDINALS = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9
 const ordinal = (round) => ORDINALS[round] ?? `round ${round}`;
 
 /**
+ * Who holds every pick of one season's draft.
+ *
+ * Sleeper's traded_picks lists only the picks that have *moved*, so every team
+ * starts owning its own pick in every round and each move is applied on top.
+ * In a traded pick, roster_id is whose pick it originally was and owner_id is
+ * who holds it now.
+ *
+ * A moved pick outside the rounds given (an unknown round count is 0) is
+ * still reported, so no move is ever dropped for want of a league setting.
+ *
+ * @returns {{ season: string, round: number, originalRosterId: number, ownerRosterId: number }[]}
+ *          round first, then in `rosterIds` order
+ */
+export function futurePickOwnership({ tradedPicks, rosterIds, roundsPerDraft, season }) {
+  const rounds = roundsPerDraft > 0 ? roundsPerDraft : 0;
+  const key = (round, rosterId) => `${round}:${rosterId}`;
+  const picks = new Map();
+  for (let round = 1; round <= rounds; round += 1) {
+    for (const rosterId of rosterIds) {
+      picks.set(key(round, rosterId), { season: String(season), round, originalRosterId: rosterId, ownerRosterId: rosterId });
+    }
+  }
+
+  for (const pick of tradedPicks || []) {
+    if (String(pick.season) !== String(season)) continue;
+    const existing = picks.get(key(pick.round, pick.roster_id));
+    if (existing) {
+      existing.ownerRosterId = pick.owner_id;
+    } else {
+      picks.set(key(pick.round, pick.roster_id), {
+        season: String(season),
+        round: pick.round,
+        originalRosterId: pick.roster_id,
+        ownerRosterId: pick.owner_id,
+      });
+    }
+  }
+
+  const position = new Map(rosterIds.map((rosterId, index) => [rosterId, index]));
+  const at = (rosterId) => position.get(rosterId) ?? Number.MAX_SAFE_INTEGER;
+  return [...picks.values()].sort(
+    (a, b) => a.round - b.round || at(a.originalRosterId) - at(b.originalRosterId) || a.originalRosterId - b.originalRosterId,
+  );
+}
+
+/**
  * Net future draft capital per team.
  *
  * Sleeper only reports picks that have *moved*, so a complete picture means
- * starting every team with one pick per round and applying those moves. What
+ * starting every team with one pick per round and applying those moves
+ * (futurePickOwnership, which the projected draft order reads too). What
  * the publication actually wants to know is who is hoarding rookie picks and
  * who has mortgaged them.
  */
@@ -587,32 +634,25 @@ export function normalizeFutureDraftCapital({ tradedPicks, league, teamsByRoster
   const rounds = roundsPerDraft > 0 ? roundsPerDraft : 0;
   const name = (rosterId) => teamsByRosterId.get(rosterId)?.name ?? `Roster ${rosterId}`;
   const seasons = [...new Set(future.map((pick) => String(pick.season)))].sort();
+  const rosterIds = [...teamsByRosterId.keys()];
 
   const rows = [];
   for (const season of seasons) {
-    const held = new Map([...teamsByRosterId.keys()].map((rosterId) => [rosterId, rounds]));
-    const acquired = new Map();
-    const lost = new Map();
+    const picks = futurePickOwnership({ tradedPicks: future, rosterIds, roundsPerDraft: rounds, season });
+    const moved = picks.filter((pick) => pick.ownerRosterId !== pick.originalRosterId);
 
-    for (const pick of future.filter((p) => String(p.season) === season)) {
-      // roster_id is whose pick it originally was; owner_id is who holds it now.
-      if (pick.owner_id === pick.roster_id) continue;
-      held.set(pick.owner_id, (held.get(pick.owner_id) ?? rounds) + 1);
-      held.set(pick.roster_id, (held.get(pick.roster_id) ?? rounds) - 1);
-      if (!acquired.has(pick.owner_id)) acquired.set(pick.owner_id, []);
-      if (!lost.has(pick.roster_id)) lost.set(pick.roster_id, []);
-      acquired.get(pick.owner_id).push(`${name(pick.roster_id)} ${ordinal(pick.round)}`);
-      lost.get(pick.roster_id).push(`own ${ordinal(pick.round)} to ${name(pick.owner_id)}`);
-    }
-
-    for (const rosterId of teamsByRosterId.keys()) {
-      const gained = acquired.get(rosterId) ?? [];
-      const given = lost.get(rosterId) ?? [];
+    for (const rosterId of rosterIds) {
+      const gained = moved
+        .filter((pick) => pick.ownerRosterId === rosterId)
+        .map((pick) => `${name(pick.originalRosterId)} ${ordinal(pick.round)}`);
+      const given = moved
+        .filter((pick) => pick.originalRosterId === rosterId)
+        .map((pick) => `own ${ordinal(pick.round)} to ${name(pick.ownerRosterId)}`);
       if (gained.length === 0 && given.length === 0) continue;
       rows.push({
         team: name(rosterId),
         season,
-        picksHeld: held.get(rosterId),
+        picksHeld: rounds + gained.length - given.length,
         baseline: rounds,
         acquired: gained,
         tradedAway: given,
