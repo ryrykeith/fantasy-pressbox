@@ -57,6 +57,8 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/analysis/faab.mjs` | Remaining FAAB per survivor and the player pool each chop released, for a guillotine league |
 | `src/analysis/transactions.mjs` | A transaction's grading context: each side's roster shape before and after, a claim's cost against budget, moved players' weekly points |
 | `src/analysis/standings.mjs` | Current seeds: wins, then points-for |
+| `src/analysis/playoffField.mjs` | The projected playoff field and the bubble that decides it |
+| `src/analysis/draftOrder.mjs` | The projected rookie draft order: each slot's original team and current owner, the cliff a bubble team's pick falls off, week-over-week movement |
 | `src/fantasycalc/client.mjs` | FantasyCalc trade values: query from the league's format and scoring, fetch, normalize. FantasyCalc field names stop here, as Sleeper's stop at `src/sleeper/` |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
 | `src/store.mjs` | Snapshots, rankings, predictions, market values, movement, grading |
@@ -667,6 +669,40 @@ on disk and fetches nothing.
   roster that banked them.
 - **Scoring.** The part of the scoring profile that applies to the positions
   that moved, so a tight end in a TE-premium league carries the premium.
+
+### Rookie draft order
+
+`src/analysis/draftOrder.mjs#projectDraftOrder` projects next season's rookie
+draft from this season's standings. It applies the rule declared in
+`config/rookie-draft.yml` (`requireDraftOrderRule`, `draftOrderGroupSizes`)
+to the projected playoff field (`projectPlayoffField`). It returns numbers
+only.
+
+- **Ownership.** `futurePickOwnership` (`src/sleeper/normalize.mjs`) starts
+  every team with its own pick in every round and applies Sleeper's
+  `traded_picks` on top. `normalizeFutureDraftCapital` is built on the same
+  walk. Each slot carries `originalTeam` (whose finish decides the slot) and
+  `owner` (who holds the pick). Anything reporting a pick names the owner.
+- **Slots.** Each slot reports its group, its max points-for, and the gap to
+  the slots either side in the group's sort value. A gap is null across a
+  group boundary, because the sort value does not separate two groups. It
+  also reports its distance from the top-3 line, the race a tank watch
+  covers. `pick` labels round 1 only ("1.07"). Later rounds list their owners
+  without a pick number, because whether the draft snakes is not declared.
+- **The cliff.** For each team on the playoff bubble, `cliff` gives the slot
+  its pick would land in if it swapped sides of the line with the team
+  across from it. The bubble is the last team in, the first team out, and
+  anyone tied with them. The cliff names the pick's owner.
+
+`captureWeek` writes the projection into the week's snapshot as `draftOrder`.
+It is absent when the format has no future picks, when no projectable rule
+is declared, or when the league does not report its playoff field. An
+undeclared rule never fails an unrelated edition. `draftOrderMovement`
+compares the projection with an earlier week's saved one, so movement is read
+from history rather than recomputed from today's standings. The saved
+projection is only as old as the run that captured it. Re-capturing a past
+week rewrites its snapshot from the standings at that moment, the same as the
+snapshot's `teams`.
 
 ## State
 

@@ -166,6 +166,15 @@ export function requireDraftOrderRule(rule) {
   return rule;
 }
 
+/**
+ * Would requireDraftOrderRule accept this rule? For callers where a missing or
+ * unsupported rule means "nothing to project" rather than a refusal — every
+ * week's snapshot, which must not fail an unrelated edition.
+ */
+export function isProjectableDraftOrder(rule) {
+  return Boolean(rule) && !rule.groups.some((group) => UNSUPPORTED_DRAFT_ORDER_SORTS.includes(group.sort));
+}
+
 /** Is the league's playoff field size usable for this rule's groups? */
 function canSizeGroups(rule, { teamCount, playoffTeams }) {
   if (!Number.isInteger(teamCount) || teamCount <= 0) return false;
