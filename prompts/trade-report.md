@@ -33,9 +33,20 @@ the team that got him.
 - **Picks.** A dynasty trade is judged on this season and the ones after it.
   Each traded pick shows its original team's record, points-for, max
   points-for and current seed, and what the market pays for a pick of that
-  round. Follow the `projectedDraftSlot` entry in `unavailable` exactly: do not
-  put any pick in a tier or name a slot. Quote the tiered values as the range
-  the pick could be worth, not as where it will land.
+  round.
+  - A pick with a `projection` is graded at its slot. `projectedPick` is where
+    it lands under the league's own order (`draftProjection.rule`) if the
+    season ended now, out of `of` picks. `ifOriginalTeamCrosses` is where it
+    moves if its original team crosses the playoff line. When it is there, say
+    so: a pick that sits one result from a much better slot is a different
+    asset. `boardAroundPick` (and `boardAroundPickIfCrossed`) are the declared
+    board's prospects ranked near that slot. A later-round pick carries no
+    number, only `originalTeamRound1Pick`.
+  - The market's generic and tiered values are the same for every pick of the
+    round. Quote them as market context beside the projection, not instead of
+    it, and not as where the pick will land.
+  - A pick without a `projection` follows the `projectedDraftSlot` entry in
+    `unavailable` exactly: do not put it in a tier or name a slot.
 - **Age.** Ages are in the player lines. Use them for the seasons after this
   one, as opinion, not as a fact about any player's future.
 <!-- end format -->

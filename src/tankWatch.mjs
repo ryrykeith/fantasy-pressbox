@@ -30,7 +30,8 @@ const SORT_UNITS = {
   record: 'wins (a tie counts as half a win)',
 };
 
-const SIDE_IN_WORDS = { playoff: 'projected playoff team', non_playoff: 'projected to miss the playoffs' };
+/** Which side of the projected playoff line a pick's original team is on, in words. */
+export const PLAYOFF_SIDE_IN_WORDS = { playoff: 'projected playoff team', non_playoff: 'projected to miss the playoffs' };
 
 /**
  * Reads the declared start week, or refuses it. Absent means "open at the
@@ -118,7 +119,7 @@ function orderView(draftOrder) {
     pick: slot.pick,
     team: slot.originalTeam,
     ...ownedBy(slot),
-    ...(SIDE_IN_WORDS[slot.groupTeams] ? { side: SIDE_IN_WORDS[slot.groupTeams] } : {}),
+    ...(PLAYOFF_SIDE_IN_WORDS[slot.groupTeams] ? { side: PLAYOFF_SIDE_IN_WORDS[slot.groupTeams] } : {}),
     record: recordText(slot.record),
     pointsFor: slot.pointsFor,
     maxPointsFor: slot.maxPointsFor,
@@ -173,7 +174,7 @@ function cliffView(draftOrder) {
   return draftOrder.cliff.map((entry) => ({
     team: entry.originalTeam,
     ...ownedBy(entry),
-    side: SIDE_IN_WORDS[entry.side],
+    side: PLAYOFF_SIDE_IN_WORDS[entry.side],
     gamesFromLine: entry.gamesFromLine,
     pick: entry.pick,
     pickIfCrossed: entry.pickIfCrossed,

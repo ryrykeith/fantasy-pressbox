@@ -527,6 +527,19 @@ async function commandEdition(config, args, task) {
       if (marketValues.unavailable) {
         warn(`Trade values could not be fetched (${marketValues.unavailable}). Grades will not quote a market.`);
       }
+      if (task === 'trade-report') {
+        // Traded picks are valued at their projected slot when the league
+        // declares its draft order; without one they keep the refusal to name
+        // a slot, and the edition still runs.
+        draftOrder = captured.draftOrder ?? null;
+        prospectBoard = draftOrder ? loadProspectBoard({ draftYear: Number(draftOrder.draftSeason) }) : null;
+        if (draftOrder) {
+          say(
+            `Traded ${draftOrder.draftSeason} picks are valued at their projected slot` +
+              (prospectBoard ? ', with the prospect board around it.' : '. No prospect board is declared for that class.'),
+          );
+        }
+      }
     } else if (isTankWatch) {
       // The refusals above leave one way for the projection to be missing: a
       // league that does not report its number of playoff teams.

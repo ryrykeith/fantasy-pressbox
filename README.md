@@ -630,6 +630,13 @@ stops the command and lists the valid ones.
 
 Run `node src/cli.mjs doctor` after editing to see the rule in plain words.
 
+With a rule declared, the trade report grades a traded pick for next season's
+draft at its projected slot, for example 1.07. If the pick's original team is
+on the playoff bubble, the report also gives the slot the pick would jump to
+if that team crossed the line. When a prospect board exists (see below), it
+names the prospects ranked near that slot. The pick market's values are still
+quoted alongside. Without a rule, the report won't say where any pick lands.
+
 The same file sets when the tank watch opens:
 
 ```yaml

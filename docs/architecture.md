@@ -60,6 +60,7 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/analysis/playoffField.mjs` | The projected playoff field and the bubble that decides it |
 | `src/tankWatch.mjs` | The tank-watch edition: its refusals (dynasty only, declared rule, start week) and the race/stakes/cliff/movement view of the projected draft order |
 | `src/analysis/draftOrder.mjs` | The projected rookie draft order: each slot's original team and current owner, the cliff a bubble team's pick falls off, week-over-week movement |
+| `src/tradePicks.mjs` | A traded pick at its projected slot for the trade report: slot, cliff, the board prospects around it, and what is still unknown |
 | `src/fantasycalc/client.mjs` | FantasyCalc trade values: query from the league's format and scoring, fetch, normalize. FantasyCalc field names stop here, as Sleeper's stop at `src/sleeper/` |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
 | `src/store.mjs` | Snapshots, rankings, predictions, market values, movement, grading |
@@ -732,6 +733,39 @@ about the class may be said.
 Movement is measured against `data/tank-watch/<season>/week-<n>.json`, which is
 written when the prompt is built. That makes it the projection the last tank
 watch actually reported, not a later re-capture of that week's snapshot.
+
+### Traded picks in the trade report
+
+FantasyCalc prices every pick of a round the same way: one generic value and
+one Early/Mid/Late value each. What separates two 1sts is where they land
+under the league's own order. `src/tradePicks.mjs#pickProjection` reads that
+from the week's `draftOrder` and adds it to each traded pick as `projection`.
+The market values stay beside it as context.
+
+- **Round 1.** `projectedPick` (for example "1.07") out of `of` picks, and
+  which side of the playoff line the original team sits on. A bubble team's
+  pick also gets `ifOriginalTeamCrosses`, its slot from `cliff`. With a
+  declared board it gets `boardAroundPick` (and `boardAroundPickIfCrossed`):
+  the board entries ranked within `BOARD_WINDOW` of the slot.
+- **Later rounds.** `projectedPick` is null, as in the tank watch.
+  `originalTeamRound1Pick` says where the original team picks in round 1.
+- **Other drafts.** A pick for a later draft than the one this season's
+  standings decide gets no `projection`.
+
+`context.draftProjection` labels the projection with its rule in words, its
+status, and the week its standings came from. `context.prospectBoard` carries
+only the entries some traded pick is around, each with its source.
+`tradePicksUnavailable` writes the matching `unavailable` entries:
+
+- `projectedDraftSlot`: for picks with no projection. That covers every pick
+  when no rule is declared.
+- `finalDraftOrder`: every slot is still projected.
+- `projectedSlotAtTradeTime`: the projection uses today's standings, not
+  those on the trade date.
+- `laterRoundPickNumbers`: only round 1 has pick numbers.
+- The prospect board entry (`prospectBoard` or `prospectsNotOnBoard`).
+- `boardRankIsNotAvailability`: the board ranks the class. It is not a mock
+  draft.
 
 ## State
 

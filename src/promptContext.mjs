@@ -18,6 +18,7 @@ import { renderFormatBlocks } from './promptTemplate.mjs';
 import { currentSeeds } from './analysis/standings.mjs';
 import { prospectBoardView } from './prospectBoard.mjs';
 import { TANK_WATCH_TASK, tankWatchPrize, tankWatchUnavailable, tankWatchView } from './tankWatch.mjs';
+import { draftProjectionView, pickProjection, tradePicksUnavailable, tradeProspectBoard } from './tradePicks.mjs';
 
 const TASK_PROMPTS = {
   'preseason-rankings': 'preseason-power-rankings.md',
@@ -592,20 +593,24 @@ function playerMarket(id, market) {
 }
 
 /**
- * A traded pick: whose it was, how that team stands today, and what the
- * market says a pick of that round is worth generically and per tier.
+ * A traded pick: whose it was, how that team stands today, what the market
+ * says a pick of that round is worth generically and per tier, and — for the
+ * draft this season decides, when the league declares its order — where it is
+ * projected to land (src/tradePicks.mjs#pickProjection).
  *
- * The standing is facts only. Where the pick will land is the league's
- * draft-order rule applied to a final table nobody has yet, and the
- * `projectedDraftSlot` unavailable entry forbids guessing it.
+ * The market's tiers are the same for every pick of the round, so they stay as
+ * context beside the projection. A pick with no projection is covered by the
+ * `projectedDraftSlot` unavailable entry, which forbids guessing its slot.
  */
-function pickView(pick, { teamsById, seeds, headToHead, market }) {
+function pickView(pick, { teamsById, seeds, headToHead, market, draftOrder, board }) {
   const priced = market?.picks?.[`${pick.season}-${pick.round}`];
+  const projection = pickProjection(pick, { draftOrder, board });
   return {
     pick: `${pick.season} round ${pick.round}`,
     originalTeam: teamsById.get(pick.originalRosterId)?.name ?? `Roster ${pick.originalRosterId}`,
     originalTeamNow: teamStandingView(teamsById.get(pick.originalRosterId), seeds, headToHead),
     ...(market ? { market: priced ? { generic: priced.generic, tiers: priced.tiers } : null } : {}),
+    ...(projection ? { projection } : {}),
   };
 }
 
@@ -712,11 +717,14 @@ function pickupsView(transactions, { teams, players, headToHead }) {
  * redraft league re-drafts from scratch and a guillotine team may not be here
  * to use one, so a pick there is not a small asset but no asset.
  */
-function tradesView(transactions, { teams, players, headToHead, withPicks, market }) {
+function tradesView(transactions, { teams, players, headToHead, withPicks, market, draftOrder = null, board = null }) {
   const teamsById = new Map(teams.map((team) => [team.rosterId, team]));
   const seeds = currentSeeds(teams);
   const describe = (id) => describePlayer(id, players[id]);
-  const picks = (list) => (withPicks ? { picks: list.map((pick) => pickView(pick, { teamsById, seeds, headToHead, market })) } : {});
+  const picks = (list) =>
+    withPicks
+      ? { picks: list.map((pick) => pickView(pick, { teamsById, seeds, headToHead, market, draftOrder, board })) }
+      : {};
 
   return transactions
     .filter((transaction) => transaction.type === 'trade')
@@ -1014,16 +1022,46 @@ export function buildContext({
   // moves below. Picks travel only where they are an asset at all — the same
   // rule futureDraftCapital follows above.
   const market = marketValues && !marketValues.unavailable ? marketValues : null;
+  // The part of the prospect board this edition may name: the top of the class
+  // for a tank watch, the ranks around each traded pick for a trade report.
+  let prize = null;
+  // Every pick that changed hands in the edition's trades, once each (a pick
+  // one side received is the pick the other gave up). Empty where picks are
+  // no asset.
+  let tradedPicks = [];
   if (task === 'trade-report') {
-    const trades = tradesView(enrichedTransactions ?? [], {
+    const withPicks = !eliminates && hasFutureDraftCapital(league.format);
+    const tradeEntries = (enrichedTransactions ?? []).filter((transaction) => transaction.type === 'trade');
+    tradedPicks = withPicks ? tradeEntries.flatMap((trade) => trade.sides.flatMap((s) => s.received.picks)) : [];
+    // A traded pick is valued at its projected slot only where the order can
+    // be projected; the board only travels for the class that order decides.
+    const projectable = withPicks ? draftOrder : null;
+    const board = projectable ? prospectBoard : null;
+    const trades = tradesView(tradeEntries, {
       teams,
       players,
       headToHead,
-      withPicks: !eliminates && hasFutureDraftCapital(league.format),
+      withPicks,
       market,
+      draftOrder: projectable,
+      board,
     });
     if (trades.length) context.trades = trades;
     if (market) context.marketValues = marketValuesView(market);
+    if (projectable && tradedPicks.some((pick) => String(pick.season) === projectable.draftSeason)) {
+      context.draftProjection = draftProjectionView(projectable, {
+        rule: config.rookieDraft?.order,
+        teamCount: teams.length,
+        playoffTeams: league.playoffTeams,
+        // Sleeper reports standings only as they are now.
+        asOfWeek: league.lastScoredWeek ?? week,
+      });
+      prize = tradeProspectBoard(
+        board,
+        tradedPicks.map((pick) => pickProjection(pick, { draftOrder: projectable, board })).filter(Boolean),
+      );
+      if (prize) context.prospectBoard = prospectBoardView(prize);
+    }
   }
   if (task === 'waiver-report') {
     const pickups = pickupsView(enrichedTransactions ?? [], { teams, players, headToHead });
@@ -1036,7 +1074,6 @@ export function buildContext({
   // edition's prompt with facts it has never been asked to use.
   // The race, the stakes and the cliff, and the prospects the top picks are
   // for. Absent without a projected order; buildPrompt refuses the edition then.
-  let prize = null;
   if (task === TANK_WATCH_TASK && draftOrder) {
     context.tankWatch = tankWatchView({
       draftOrder,
@@ -1065,6 +1102,7 @@ export function buildContext({
     week,
     marketUnavailable: marketValues?.unavailable ?? null,
     prize,
+    tradedPicks,
   });
 
   return context;
@@ -1079,7 +1117,7 @@ export function buildContext({
  * project refuses to invent. So absence is made explicit and instructions are
  * attached to it.
  */
-function describeMissingContext({ task, context, week, marketUnavailable = null, prize = null }) {
+function describeMissingContext({ task, context, week, marketUnavailable = null, prize = null, tradedPicks = [] }) {
   const missing = [];
   const isRanking = RANKING_TASKS.includes(task);
 
@@ -1214,7 +1252,7 @@ function describeMissingContext({ task, context, week, marketUnavailable = null,
   }
 
   if (task === 'trade-report') {
-    missing.push(...describeMissingTradeContext({ context, marketUnavailable }));
+    missing.push(...describeMissingTradeContext({ context, marketUnavailable, tradedPicks, prize }));
   } else if (task === 'waiver-report') {
     missing.push(...describeMissingPickupContext());
   } else if (task === TANK_WATCH_TASK) {
@@ -1270,7 +1308,7 @@ function describeMissingPickupContext() {
  * What a trade grade cannot know. These came out of grading a real trade by
  * hand: each one is a fact a model reached for and did not have.
  */
-function describeMissingTradeContext({ context, marketUnavailable }) {
+function describeMissingTradeContext({ context, marketUnavailable, tradedPicks = [], prize = null }) {
   const missing = [];
   const formatType = context.league.format?.type;
 
@@ -1293,22 +1331,14 @@ function describeMissingTradeContext({ context, marketUnavailable }) {
     });
   }
 
-  const picksMoved = (context.trades ?? []).some((trade) =>
-    trade.sides.some((side) => side.received.picks?.length),
-  );
-  if (picksMoved) {
-    missing.push({
-      field: 'projectedDraftSlot',
-      why:
-        "This league's rookie draft order depends on its own rule applied to the final standings, and " +
-        'the projection of that order is not available yet. A pick\'s Early/Mid/Late tier cannot be ' +
-        'read off its original team\'s record or points-for.',
-      instruction:
-        'Do not place any pick in a tier (Early, Mid or Late), do not name a draft slot, and do not say ' +
-        'a pick will land early or late. You may report the original team\'s record, points-for, max ' +
-        'points-for and current seed, and quote the generic and tiered market values as the range a pick ' +
-        'of that round trades for.',
-    });
+  if (tradedPicks.length) {
+    missing.push(
+      ...tradePicksUnavailable({
+        picks: tradedPicks,
+        draftProjection: context.draftProjection ?? null,
+        board: prize,
+      }),
+    );
   } else if (formatType === 'redraft' || hasEliminations(context.league.format)) {
     missing.push({
       field: 'draftPicks',
