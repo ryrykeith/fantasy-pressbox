@@ -17,4 +17,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Add the transactions CLI command](./add-the-transactions-cli-command.md) | pending |
-| [Trade grade prompt and task registration](./trade-grade-prompt-and-task-registration.md) | pending |
+| [Trade grade prompt and task registration](./trade-grade-prompt-and-task-registration.md) | completed |
