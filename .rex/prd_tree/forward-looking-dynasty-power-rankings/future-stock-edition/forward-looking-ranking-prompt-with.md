@@ -2,10 +2,15 @@
 id: "ebe4b1b7-66a1-44fb-8229-9affbbab53c1"
 level: "task"
 title: "Forward-looking ranking prompt with anti-over-projection guard"
-status: "pending"
+status: "completed"
 priority: "medium"
+startedAt: "2026-10-09T21:24:18.964Z"
+completedAt: "2026-10-09T21:30:43.268Z"
+endedAt: "2026-10-09T21:30:43.268Z"
+resolutionType: "code-change"
+resolutionDetail: "Commit 8060d37: future-stock prompt, src/futureStock.mjs (refusal + view), context wiring, 17 tests; 554 pass."
 acceptanceCriteria: []
 description: "READ FIRST (2026-10-09) — this task predates the trade report and rookie draft epics, which have since landed on main. Reuse what they built; do not rebuild it.\n\n1. USE THE DRAFT PROJECTION AND THE PROSPECT BOARD. The forward-looking case for a team turns on the picks it holds, and those now have projected slots (analysis/draftOrder.mjs) with a cliff where a bubble team's pick crosses the playoff line. The prospect board (config/prospects.<year>.yml, prospectBoard.mjs) names who is in range of a pick. Pass both through with the same rules the trade report and tank watch already follow (tradePicks.mjs#tradePicksUnavailable, prospectBoardUnavailable). Only prospects on the board are discussed, always attributed to the board's source. A board rank is a ranking, not a promise that a player will be there at a pick. 2028 picks are never placed in a tier.\n\n2. KEEP THE GUARD AGAINST OVER-PROJECTION APPLIED TO PICKS TOO. A projected top-3 pick in a class like 2027 is real capital, but it is still a projection. It must not outweigh a productive young core, and the guard below applies to picks as much as to young players.\n\nTHE MOTIVATING CASE in the operator's league: Rebuild Szn (1-3, lowest points-for) holds its own projected 1.02 and Taco Tuesday' 1st, which projects 1.07 and becomes 1.02 if JD misses the playoffs. Taco Tuesday is a contender with an older core and no 2027 1st or 2nd, which is exactly the \"old contender with no picks\" case this prompt must rank low.\n\n---- original description ----\n\nWrite the prompt. The guard against youth worship is the hard part and belongs here, because it is a judgement instruction rather than a computation.\n\nINSTRUCTIONS THE PROMPT MUST CARRY\n- Rank on the next three seasons, not on this week.\n- A contender with an old starting core and no picks over the next three drafts ranks low, explicitly, even if it is winning now. Say this outright in the prompt — it is the motivating case.\n- Do NOT rank a young roster highly on age alone. Youth without production is potential, not value. The production-by-age-band split exists precisely so the model can tell the difference, and it must cite it.\n- Current production still counts. A team producing now with a sustainable age curve is the ideal, not the team with the most picks.\n- Position-aware ageing: a 29-year-old running back and a 29-year-old quarterback are not comparable, and the per-position age summaries are there to support that.\n\nACCEPTANCE\n- The edition ranks all teams with reasoning tied to the age, production and capital facts in the context.\n- A test case or documented example showing the old-contender-with-no-picks case ranking low.\n- Refuses to run for redraft and guillotine leagues, naming the reason."
-lastModified: "2026-10-09T20:57:45.190Z"
+lastModified: "2026-10-09T21:30:43.280Z"
 lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 ---

@@ -16,5 +16,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Forward-looking ranking prompt with anti-over-projection guard](./forward-looking-ranking-prompt-with.md) | pending |
+| [Forward-looking ranking prompt with anti-over-projection guard](./forward-looking-ranking-prompt-with.md) | completed |
 | [Wire the forward-looking report into CLI and config](./wire-the-forward-looking-report-into.md) | pending |
