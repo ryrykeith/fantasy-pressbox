@@ -30,7 +30,7 @@
  * reliable source for "what got released", and it is why this module reads
  * raw matchups rather than any normalized roster.
  */
-import { waiverBidsFor } from '../sleeper/normalize.mjs';
+import { normalizePlayer, waiverBidsFor } from '../sleeper/normalize.mjs';
 
 /**
  * Remaining FAAB per surviving team, and what each has spent so far.
@@ -146,5 +146,98 @@ export function buildFaabMarket({
     budget: waiverBudget,
     balances: faabBalances({ teams, waiverBudget, ledger }),
     releasedPools,
+  };
+}
+
+/**
+ * What counts as "similar money" when describing a claim against the rest of
+ * its week: another bid within the larger of `absolute` dollars or `relative`
+ * of this one. A flat percentage alone calls a $1 and a $2 bid dissimilar; a
+ * flat dollar window alone calls $40 and $42 the same as $1 and $3.
+ */
+export const SIMILAR_SPEND = { absolute: 2, relative: 0.25 };
+
+const round3 = (value) => Math.round(value * 1000) / 1000;
+
+/**
+ * Every waiver bid placed in one week, won and lost, most expensive first.
+ *
+ * normalizeTransactions reports completed moves only — a failed claim is not
+ * news on its own — but a failed bid is exactly what shows whether a winner
+ * overpaid, so the market reads the raw entries. A bid has a price; a free
+ * agent pickup does not and is not a bid.
+ *
+ * @param transactions     raw Sleeper transactions (src/store.mjs raw bundle)
+ * @param week             the week to read; entries from other weeks are ignored
+ * @param players          the player file, keyed by id
+ * @param teamsByRosterId  Map<rosterId, team>, for display names only
+ */
+export function weekBids({ transactions = [], week, players = {}, teamsByRosterId = new Map() } = {}) {
+  const bids = [];
+  for (const entry of transactions || []) {
+    const outcome = entry.status === 'complete' ? 'won' : entry.status === 'failed' ? 'lost' : null;
+    const amount = entry.settings?.waiver_bid;
+    if (!outcome || entry.type !== 'waiver' || (entry.leg ?? null) !== week) continue;
+    if (amount === undefined || amount === null) continue;
+    for (const [playerId, rosterId] of Object.entries(entry.adds || {})) {
+      const player = normalizePlayer(playerId, players[playerId]);
+      bids.push({
+        playerId,
+        player: player.name,
+        position: player.position,
+        rosterId,
+        team: teamsByRosterId.get(rosterId)?.name ?? `Roster ${rosterId}`,
+        amount,
+        outcome,
+        transactionId: entry.transaction_id ?? null,
+      });
+    }
+  }
+  return bids.sort((a, b) => b.amount - a.amount);
+}
+
+/**
+ * One winning claim, described against its week's market: what rivals bid for
+ * the same player, where the price ranks among the week's winning bids, and
+ * what else was going for similar money.
+ *
+ * `margin` is the winning bid less the best losing bid on the same player — a
+ * large one is an overpay, 0 a tie broken by priority — and null when the
+ * claim was uncontested, since an uncontested bid shows nothing either way.
+ * `chopRelease` names the elimination whose roster released the player, or
+ * null; in a league with no chop pools that is simply "not applicable".
+ *
+ * @param bid           the winning entry from weekBids()
+ * @param bids          weekBids() for the claim's week
+ * @param releasedPools buildFaabMarket().releasedPools; omit outside guillotine
+ */
+export function claimMarket({ bid, bids = [], releasedPools = [] }) {
+  const won = bids.filter((entry) => entry.outcome === 'won');
+  const rivals = bids.filter((entry) => entry.playerId === bid.playerId && entry.outcome === 'lost');
+  const window = Math.max(SIMILAR_SPEND.absolute, bid.amount * SIMILAR_SPEND.relative);
+  const similar = bids.filter(
+    (entry) =>
+      !(entry.playerId === bid.playerId && entry.rosterId === bid.rosterId) &&
+      Math.abs(entry.amount - bid.amount) <= window,
+  );
+  const topRival = Math.max(...rivals.map((entry) => entry.amount));
+  const pool = releasedPools.find((candidate) => candidate.playerIds.includes(bid.playerId));
+  const weekSpend = won.reduce((sum, entry) => sum + entry.amount, 0);
+
+  return {
+    weekWinningBids: won.length,
+    // 1 is the week's most expensive winning claim; ties share a rank.
+    rankAmongWinners: won.filter((entry) => entry.amount > bid.amount).length + 1,
+    rivals: rivals.map(({ team, amount }) => ({ team, amount })),
+    margin: rivals.length ? bid.amount - topRival : null,
+    similarSpend: similar.map(({ player, position, team, amount, outcome }) => ({
+      player,
+      position,
+      team,
+      amount,
+      outcome,
+    })),
+    shareOfWeekSpend: weekSpend > 0 ? round3(bid.amount / weekSpend) : null,
+    chopRelease: pool ? { week: pool.week, team: pool.team } : null,
   };
 }

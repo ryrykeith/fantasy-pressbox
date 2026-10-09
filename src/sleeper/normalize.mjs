@@ -382,11 +382,26 @@ export function isFuturePick(pick, league) {
 }
 
 /**
- * Turns Sleeper's transaction objects into lines a human (or a model) can read.
+ * Turns Sleeper's transaction objects into lines a human (or a model) can read,
+ * and into the structure a trade or a pickup can actually be judged on.
  *
  * The raw shape is roster IDs pointing at player IDs, which is both unreadable
  * and enormous. Only completed moves are reported — a failed waiver claim is
  * not news.
+ *
+ * Two views of the same move, side by side:
+ *
+ *   moves  prose lines ("Team A gets Josh Allen (QB, BUF, age 29)") — what
+ *          every edition already passes along as colour. Unchanged.
+ *   sides  one entry per roster involved, keyed by roster id: what it
+ *          received and what it gave up, as player and pick references. Team
+ *          names rename freely mid-season, so `team` is for display only and
+ *          `rosterId` is the identity — the same rule src/teamIdentity.mjs
+ *          follows for published rankings.
+ *
+ * `completedAt` is when the move cleared, not when it was proposed. It matters
+ * because a trade that clears Monday night leaves that week's points with the
+ * team that gave the player up.
  */
 export function normalizeTransactions(transactions, { teamsByRosterId, players, describePlayer, league }) {
   const name = (rosterId) => teamsByRosterId.get(rosterId)?.name ?? `Roster ${rosterId}`;
@@ -395,30 +410,131 @@ export function normalizeTransactions(transactions, { teamsByRosterId, players, 
   return (transactions || [])
     .filter((entry) => entry.status === 'complete')
     .map((entry) => {
-      const adds = Object.entries(entry.adds || {}).map(([id, rosterId]) => `${name(rosterId)} gets ${player(id)}`);
-      const drops = Object.entries(entry.drops || {}).map(([id, rosterId]) => `${name(rosterId)} drops ${player(id)}`);
+      const addEntries = Object.entries(entry.adds || {});
+      const dropEntries = Object.entries(entry.drops || {});
       // A pick for a draft that has already been held is a spent receipt, not
       // an asset. Reporting it invites analysis of draft capital that no
       // longer exists — especially in a league's startup year, where most
       // traded picks were consumed by the startup draft itself.
-      const picks = (entry.draft_picks || [])
-        .filter((pick) => (league ? isFuturePick(pick, league) : true))
-        .map(
-          (pick) => `${name(pick.owner_id)} gets ${pick.season} round ${pick.round} pick from ${name(pick.roster_id)}`,
-        );
-      const budget = (entry.waiver_budget || []).map(
+      const livePicks = (entry.draft_picks || []).filter((pick) => (league ? isFuturePick(pick, league) : true));
+      const budgetMoves = entry.waiver_budget || [];
+
+      const adds = addEntries.map(([id, rosterId]) => `${name(rosterId)} gets ${player(id)}`);
+      const drops = dropEntries.map(([id, rosterId]) => `${name(rosterId)} drops ${player(id)}`);
+      const picks = livePicks.map(
+        (pick) => `${name(pick.owner_id)} gets ${pick.season} round ${pick.round} pick from ${name(pick.roster_id)}`,
+      );
+      const budget = budgetMoves.map(
         (move) => `${name(move.sender)} sends $${move.amount} FAAB to ${name(move.receiver)}`,
       );
+
+      const bid = entry.settings?.waiver_bid ?? null;
+      const rosterIds = entry.roster_ids || [];
 
       return {
         type: entry.type,
         week: entry.leg ?? null,
-        teams: (entry.roster_ids || []).map(name),
-        bid: entry.settings?.waiver_bid ?? null,
+        teams: rosterIds.map(name),
+        bid,
         moves: [...adds, ...drops, ...picks, ...budget],
+        id: entry.transaction_id ?? null,
+        completedAt: Number.isFinite(entry.status_updated) ? new Date(entry.status_updated).toISOString() : null,
+        rosterIds,
+        sides: transactionSides({
+          rosterIds,
+          addEntries,
+          dropEntries,
+          livePicks,
+          budgetMoves,
+          // A bid is what a waiver claim cost the claimant. Anything else
+          // carrying one would be a Sleeper oddity, not a cost to report.
+          bid: entry.type === 'waiver' ? bid : null,
+          players,
+          name,
+        }),
       };
     })
     .filter((entry) => entry.moves.length > 0);
+}
+
+/** A player as a reference: enough to identify and judge, no prose. */
+function playerRef(id, players) {
+  const player = normalizePlayer(id, players[id]);
+  return { id, name: player.name, position: player.position, nflTeam: player.team, age: player.age ?? null };
+}
+
+/**
+ * Per-roster view of one transaction. A player in `adds` went to that roster;
+ * one in `drops` left it. A dropped player nobody added was released to free
+ * agency (`to: null`); an added player nobody dropped came off the wire
+ * (`from: null`).
+ */
+function transactionSides({ rosterIds, addEntries, dropEntries, livePicks, budgetMoves, bid, players, name }) {
+  const addedTo = new Map(addEntries);
+  const droppedBy = new Map(dropEntries);
+
+  // Every roster that moved anything, in Sleeper's own order first.
+  const involved = [...rosterIds];
+  const include = (rosterId) => {
+    if (rosterId !== undefined && rosterId !== null && !involved.includes(rosterId)) involved.push(rosterId);
+  };
+  for (const [, rosterId] of [...addEntries, ...dropEntries]) include(rosterId);
+  for (const pick of livePicks) {
+    include(pick.owner_id);
+    include(pick.previous_owner_id ?? pick.roster_id);
+  }
+  for (const move of budgetMoves) {
+    include(move.sender);
+    include(move.receiver);
+  }
+
+  return involved.map((rosterId) => {
+    const pickRef = (pick) => ({ season: String(pick.season), round: pick.round, originalRosterId: pick.roster_id });
+    const pickGiver = (pick) => pick.previous_owner_id ?? pick.roster_id;
+    const side = {
+      rosterId,
+      team: name(rosterId),
+      received: {
+        players: addEntries
+          .filter(([, to]) => to === rosterId)
+          .map(([id]) => ({ ...playerRef(id, players), from: droppedBy.get(id) ?? null })),
+        picks: livePicks
+          .filter((pick) => pick.owner_id === rosterId)
+          .map((pick) => ({ ...pickRef(pick), from: pickGiver(pick) })),
+        faab: budgetMoves.filter((move) => move.receiver === rosterId).reduce((sum, move) => sum + move.amount, 0),
+      },
+      gaveUp: {
+        players: dropEntries
+          .filter(([, from]) => from === rosterId)
+          .map(([id]) => ({ ...playerRef(id, players), to: addedTo.get(id) ?? null })),
+        picks: livePicks
+          .filter((pick) => pickGiver(pick) === rosterId && pick.owner_id !== rosterId)
+          .map((pick) => ({ ...pickRef(pick), to: pick.owner_id })),
+        faab: budgetMoves.filter((move) => move.sender === rosterId).reduce((sum, move) => sum + move.amount, 0),
+      },
+    };
+    // Only the roster that won the claim paid for it.
+    if (bid !== null && side.received.players.length > 0) side.waiverBid = bid;
+    return side;
+  });
+}
+
+/**
+ * Each roster as it was fielded in one week, out of that week's raw matchup
+ * entries.
+ *
+ * Sleeper keeps no roster history; a week's matchup entry is the only record
+ * of what a roster held then, bench included. That makes it the "as of the
+ * move" picture a trade or a claim has to be judged against — today's roster
+ * already carries every later move.
+ */
+export function normalizeWeekRosters(matchups) {
+  return (matchups || []).map((entry) => ({
+    rosterId: entry.roster_id,
+    playerIds: entry.players || [],
+    starterIds: entry.starters || [],
+    playerPoints: entry.players_points || {},
+  }));
 }
 
 /**

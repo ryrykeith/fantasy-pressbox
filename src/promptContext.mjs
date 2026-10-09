@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { ROOT, resolveRankingWeights } from './config.mjs';
 import { hasMatchups, hasEliminations, hasFutureDraftCapital } from './format.mjs';
 import { renderFormatBlocks } from './promptTemplate.mjs';
+import { currentSeeds } from './analysis/standings.mjs';
 
 const TASK_PROMPTS = {
   'preseason-rankings': 'preseason-power-rankings.md',
@@ -25,9 +26,19 @@ const TASK_PROMPTS = {
   'chop-recap': 'chop-recap.md',
   'survival-rankings': 'survival-rankings.md',
   postseason: 'postseason-power-rankings.md',
+  'trade-report': 'trade-report.md',
+  'waiver-report': 'waiver-report.md',
 };
 
 export const TASKS = Object.keys(TASK_PROMPTS);
+
+/**
+ * Editions about the week's transactions rather than its scores. They read
+ * the enriched transactions (src/analysis/transactions.mjs) and, for a trade,
+ * the market values a grade is anchored to — and they replace the incidental
+ * `transactions` colour every other edition gets, rather than repeating it.
+ */
+export const TRANSACTION_TASKS = ['trade-report', 'waiver-report'];
 
 /**
  * Editions about a week that has not been played yet.
@@ -526,9 +537,235 @@ function byeExposureView(byeExposure, players) {
   }));
 }
 
+/** A team's season so far, as the facts a contender-or-rebuilder read is made of. */
+function teamStandingView(team, seeds, headToHead) {
+  if (!team) return null;
+  return {
+    team: team.name,
+    ...(headToHead
+      ? {
+          record: `${team.record.wins}-${team.record.losses}${team.record.ties ? `-${team.record.ties}` : ''}`,
+          currentSeed: seeds.get(team.rosterId) ?? null,
+        }
+      : {}),
+    pointsFor: team.seasonPointsFor,
+    maxPointsFor: team.seasonPotentialPoints,
+  };
+}
+
+/** A projected lineup as lines: "WR DJ Moore 14.1", or "WR EMPTY" for a hole. */
+const starterLines = (shape) =>
+  shape.projectedStarters.map((starter) =>
+    starter.id ? `${starter.slot} ${starter.name} ${starter.pointsPerGame ?? 'unscored'}` : `${starter.slot} EMPTY`,
+  );
+
+/** "QB 2, RB 4, WR 5, TE 2" — how deep the roster is at each startable position. */
+const depthLine = (shape) =>
+  Object.entries(shape.byPosition)
+    .map(([position, { rostered }]) => `${position} ${rostered}`)
+    .join(', ');
+
+/**
+ * A player's market entry, or null when FantasyCalc does not price him. Null
+ * rather than absent, so "not priced" and "no market at all" read differently.
+ */
+function playerMarket(id, market) {
+  const entry = market?.players?.[id];
+  if (!entry) return null;
+  return {
+    value: entry.value,
+    overallRank: entry.overallRank,
+    positionRank: entry.positionRank === null ? null : `${entry.position ?? ''}${entry.positionRank}`,
+    age: entry.age,
+  };
+}
+
+/**
+ * A traded pick: whose it was, how that team stands today, and what the
+ * market says a pick of that round is worth generically and per tier.
+ *
+ * The standing is facts only. Where the pick will land is the league's
+ * draft-order rule applied to a final table nobody has yet, and the
+ * `projectedDraftSlot` unavailable entry forbids guessing it.
+ */
+function pickView(pick, { teamsById, seeds, headToHead, market }) {
+  const priced = market?.picks?.[`${pick.season}-${pick.round}`];
+  return {
+    pick: `${pick.season} round ${pick.round}`,
+    originalTeam: teamsById.get(pick.originalRosterId)?.name ?? `Roster ${pick.originalRosterId}`,
+    originalTeamNow: teamStandingView(teamsById.get(pick.originalRosterId), seeds, headToHead),
+    ...(market ? { market: priced ? { generic: priced.generic, tiers: priced.tiers } : null } : {}),
+  };
+}
+
+/**
+ * The market value of what one side received: players plus each pick at its
+ * generic (untiered) value. Summed here so the model compares two numbers
+ * rather than doing arithmetic, and anything unpriced is named rather than
+ * counted as zero.
+ */
+function receivedTotal(received, market, { withPicks }) {
+  let value = 0;
+  const unpriced = [];
+  for (const player of received.players) {
+    const entry = market.players[player.id];
+    if (entry) value += entry.value;
+    else unpriced.push(player.name);
+  }
+  if (withPicks) {
+    for (const pick of received.picks) {
+      const generic = market.picks[`${pick.season}-${pick.round}`]?.generic;
+      if (Number.isFinite(generic)) value += generic;
+      else unpriced.push(`${pick.season} round ${pick.round} pick`);
+    }
+  }
+  return { value, basis: withPicks ? 'players plus picks at their generic value' : 'players only', unpriced };
+}
+
+/**
+ * A side's roster as lines: projected starters and depth before and after the
+ * move, as of the week it was made. Shared by every transaction edition, so a
+ * trade and a pickup describe the acquiring roster's shape identically.
+ */
+function sideRosterView(side) {
+  if (!side.roster) return { note: side.rosterNote };
+  return {
+    asOfWeek: side.roster.asOfWeek,
+    valueBasis: side.roster.valueBasis,
+    startersBefore: starterLines(side.roster.before),
+    startersAfter: starterLines(side.roster.after),
+    depthBefore: depthLine(side.roster.before),
+    depthAfter: depthLine(side.roster.after),
+  };
+}
+
+/** Each moved player's week-by-week points and the roster that banked them. */
+const playerHistoryView = (history, describe) =>
+  history.map((item) => ({
+    player: describe(item.id),
+    weeks: item.weeks.map((w) => `week ${w.week}: ${w.team}, ${w.points}${w.started ? ', started' : ', benched'}`),
+  }));
+
+/**
+ * Every completed waiver claim and free-agent move in the week, one entry per
+ * acquiring roster, in the shape a verdict on value needs.
+ *
+ * Fit is computable and general standing is not, so what travels is the
+ * roster's shape around the move (`startsAfter`, `startedBefore`, depth), the
+ * cost against the budget and the week's rival bids (`faab`, `market`), and
+ * what each player scored afterwards. Trades are not pickups and are left to
+ * tradesView.
+ */
+function pickupsView(transactions, { teams, players, headToHead }) {
+  const teamsById = new Map(teams.map((team) => [team.rosterId, team]));
+  const seeds = currentSeeds(teams);
+  const describe = (id) => describePlayer(id, players[id]);
+
+  return transactions
+    .filter((transaction) => transaction.type === 'waiver' || transaction.type === 'free_agent')
+    .flatMap((transaction) =>
+      transaction.sides.map((side) => {
+        const startsAfter = new Map((side.roster?.received ?? []).map((item) => [item.id, item.startsAfter]));
+        const startedBefore = new Map((side.roster?.gaveUp ?? []).map((item) => [item.id, item.startedBefore]));
+        return {
+          type: transaction.type,
+          week: transaction.week,
+          completedAt: transaction.completedAt,
+          team: side.team,
+          manager: teamsById.get(side.rosterId)?.manager ?? null,
+          standing: teamStandingView(teamsById.get(side.rosterId), seeds, headToHead),
+          added: side.received.players.map((player) => ({
+            player: describe(player.id),
+            startsAfter: startsAfter.get(player.id) ?? null,
+          })),
+          dropped: side.gaveUp.players.map((player) => ({
+            player: describe(player.id),
+            startedBefore: startedBefore.get(player.id) ?? null,
+          })),
+          ...(side.faab ? { faab: side.faab } : {}),
+          ...(side.market ? { market: side.market } : {}),
+          roster: sideRosterView(side),
+          playerHistory: playerHistoryView(transaction.playerHistory, describe),
+          scoring: transaction.scoring,
+        };
+      }),
+    );
+}
+
+/**
+ * Every trade in the week, one entry per trade, in the shape a grade needs.
+ *
+ * Built from src/analysis/transactions.mjs#enrichTransactions — ids become
+ * readable lines here, the split every other view in this file makes. Picks
+ * are dropped wholesale where they are worth nothing (`withPicks` false): a
+ * redraft league re-drafts from scratch and a guillotine team may not be here
+ * to use one, so a pick there is not a small asset but no asset.
+ */
+function tradesView(transactions, { teams, players, headToHead, withPicks, market }) {
+  const teamsById = new Map(teams.map((team) => [team.rosterId, team]));
+  const seeds = currentSeeds(teams);
+  const describe = (id) => describePlayer(id, players[id]);
+  const picks = (list) => (withPicks ? { picks: list.map((pick) => pickView(pick, { teamsById, seeds, headToHead, market })) } : {});
+
+  return transactions
+    .filter((transaction) => transaction.type === 'trade')
+    .map((trade) => ({
+      week: trade.week,
+      completedAt: trade.completedAt,
+      sides: trade.sides.map((side) => {
+        const startsAfter = new Map((side.roster?.received ?? []).map((entry) => [entry.id, entry.startsAfter]));
+        const startedBefore = new Map((side.roster?.gaveUp ?? []).map((entry) => [entry.id, entry.startedBefore]));
+        return {
+          team: side.team,
+          manager: teamsById.get(side.rosterId)?.manager ?? null,
+          standing: teamStandingView(teamsById.get(side.rosterId), seeds, headToHead),
+          received: {
+            players: side.received.players.map((player) => ({
+              player: describe(player.id),
+              startsAfter: startsAfter.get(player.id) ?? null,
+              ...(market ? { market: playerMarket(player.id, market) } : {}),
+            })),
+            ...picks(side.received.picks),
+            ...(side.received.faab ? { faab: side.received.faab } : {}),
+          },
+          gaveUp: {
+            players: side.gaveUp.players.map((player) => ({
+              player: describe(player.id),
+              startedBefore: startedBefore.get(player.id) ?? null,
+              ...(market ? { market: playerMarket(player.id, market) } : {}),
+            })),
+            ...picks(side.gaveUp.picks),
+            ...(side.gaveUp.faab ? { faab: side.gaveUp.faab } : {}),
+          },
+          ...(market ? { receivedMarketTotal: receivedTotal(side.received, market, { withPicks }) } : {}),
+          roster: sideRosterView(side),
+        };
+      }),
+      playerHistory: playerHistoryView(trade.playerHistory, describe),
+      scoring: trade.scoring,
+    }));
+}
+
+/** What the market is, for the edition that quotes it. */
+function marketValuesView(market) {
+  return {
+    source: market.source,
+    settings: market.label,
+    fetchedAt: market.fetchedAt,
+    scale:
+      'Unitless trade value; higher is worth more. Compare items to each other, not to anything outside ' +
+      'this table. A `market` of null means FantasyCalc does not price that item: give it no value.',
+    caveats: market.caveats ?? [],
+  };
+}
+
 /**
  * @param {object} input
- * @param {'preseason-rankings'|'rankings'|'survival-rankings'|'preview'|'survival-preview'|'recap'|'chop-recap'|'postseason'} input.task
+ * @param {'preseason-rankings'|'rankings'|'survival-rankings'|'preview'|'survival-preview'|'recap'|'chop-recap'|'postseason'|'trade-report'} input.task
+ * @param {Array|null} input.enrichedTransactions the week's transactions from
+ *        src/pipeline.mjs#readTransactions; only read by TRANSACTION_TASKS.
+ * @param {object|null} input.marketValues from src/pipeline.mjs#readMarketValues:
+ *        a snapshot, or `{ unavailable }` when the fetch failed.
  * @param {object|null} input.eliminationLedger built by
  *        src/analysis/elimination.mjs#buildEliminationLedger; only read for a
  *        format where teams are eliminated (src/format.mjs#hasEliminations).
@@ -559,6 +796,8 @@ export function buildContext({
   faabMarket = null,
   dangerBoard = null,
   byeExposure = null,
+  enrichedTransactions = null,
+  marketValues = null,
   format = 'sleeper',
 }) {
   // Sleeper reports pairings for every league, including the formats that never
@@ -747,9 +986,47 @@ export function buildContext({
   }
 
   if (gradedPredictions) context.previousPredictions = gradedPredictions;
-  if (transactions?.length) context.transactions = transactions;
 
-  context.unavailable = describeMissingContext({ task, context, week });
+  // A transaction edition gets the full structure instead of the readable
+  // moves below. Picks travel only where they are an asset at all — the same
+  // rule futureDraftCapital follows above.
+  const market = marketValues && !marketValues.unavailable ? marketValues : null;
+  if (task === 'trade-report') {
+    const trades = tradesView(enrichedTransactions ?? [], {
+      teams,
+      players,
+      headToHead,
+      withPicks: !eliminates && hasFutureDraftCapital(league.format),
+      market,
+    });
+    if (trades.length) context.trades = trades;
+    if (market) context.marketValues = marketValuesView(market);
+  }
+  if (task === 'waiver-report') {
+    const pickups = pickupsView(enrichedTransactions ?? [], { teams, players, headToHead });
+    if (pickups.length) context.pickups = pickups;
+  }
+
+  // The readable moves only. normalizeTransactions also carries the structure
+  // a trade grade is built on (sides, roster shape, FAAB cost); that is for a
+  // transaction edition, and repeating it here would only bloat every other
+  // edition's prompt with facts it has never been asked to use.
+  if (transactions?.length && !TRANSACTION_TASKS.includes(task)) {
+    context.transactions = transactions.map(({ type, week: leg, teams: names, bid, moves }) => ({
+      type,
+      week: leg,
+      teams: names,
+      bid,
+      moves,
+    }));
+  }
+
+  context.unavailable = describeMissingContext({
+    task,
+    context,
+    week,
+    marketUnavailable: marketValues?.unavailable ?? null,
+  });
 
   return context;
 }
@@ -763,7 +1040,7 @@ export function buildContext({
  * project refuses to invent. So absence is made explicit and instructions are
  * attached to it.
  */
-function describeMissingContext({ task, context, week }) {
+function describeMissingContext({ task, context, week, marketUnavailable = null }) {
   const missing = [];
   const isRanking = RANKING_TASKS.includes(task);
 
@@ -897,13 +1174,132 @@ function describeMissingContext({ task, context, week }) {
     }
   }
 
-  if (!context.transactions) {
+  if (task === 'trade-report') {
+    missing.push(...describeMissingTradeContext({ context, marketUnavailable }));
+  } else if (task === 'waiver-report') {
+    missing.push(...describeMissingPickupContext());
+  } else if (!context.transactions) {
     missing.push({
       field: 'transactions',
       why: 'No completed transactions were found for this week.',
       instruction: 'Do not mention trades, waiver claims or free-agent moves.',
     });
   }
+
+  return missing;
+}
+
+/**
+ * What a verdict on a pickup cannot know. The edition is judged on roster fit,
+ * which is computed; how good a player is in general is opinion a model would
+ * supply from memory, so it is named here as off limits.
+ */
+function describeMissingPickupContext() {
+  return [
+    {
+      field: 'playerQuality',
+      why: 'No ranking, trade value or season-long production is included for any player, only the points each moved player scored in the weeks on disk.',
+      instruction:
+        'Judge every pickup on the roster shape around it, its cost and the points in `playerHistory`. ' +
+        'Do not state or imply how good a player is in general, where he ranks, what he did in a previous ' +
+        'season or what he is expected to do. Any claim about production that is not in the context is invented.',
+    },
+    {
+      field: 'managerMotives',
+      why: 'Nothing here records why any manager made a claim or a drop.',
+      instruction:
+        'Do not state a motive as fact. Inferring a plan from roster and standing is fine if it is ' +
+        'clearly framed as your read.',
+    },
+    {
+      field: 'projections',
+      why: 'No player projections are included, and a player picked up this week has played at most a game for his new team.',
+      instruction:
+        'Do not cite projected points. Treat a game or two in `playerHistory` as a small sample, not evidence.',
+    },
+    {
+      field: 'injuryDetail',
+      why: 'Only Sleeper injury designations (in brackets after a player) are available, not injury news.',
+      instruction: 'Do not describe an injury beyond the designation shown.',
+    },
+  ];
+}
+
+/**
+ * What a trade grade cannot know. These came out of grading a real trade by
+ * hand: each one is a fact a model reached for and did not have.
+ */
+function describeMissingTradeContext({ context, marketUnavailable }) {
+  const missing = [];
+  const formatType = context.league.format?.type;
+
+  if (!context.marketValues) {
+    missing.push({
+      field: 'marketValues',
+      why: `No trade-value market was available for this edition${marketUnavailable ? ` (${marketUnavailable})` : ''}.`,
+      instruction:
+        'Do not quote, estimate or recall any trade value, ranking or "consensus" price for a player or ' +
+        'pick. Grade on roster fit, production in `playerHistory` and the league standings only, and say ' +
+        'once that market values were unavailable.',
+    });
+  } else {
+    missing.push({
+      field: 'marketValuesAtTradeTime',
+      why: `Market values were fetched at ${context.marketValues.fetchedAt}. Values from the moment each trade was made are not available.`,
+      instruction:
+        'Say the values are current, not historical. Do not claim either side won or lost "at the time" ' +
+        'on value grounds.',
+    });
+  }
+
+  const picksMoved = (context.trades ?? []).some((trade) =>
+    trade.sides.some((side) => side.received.picks?.length),
+  );
+  if (picksMoved) {
+    missing.push({
+      field: 'projectedDraftSlot',
+      why:
+        "This league's rookie draft order depends on its own rule applied to the final standings, and " +
+        'the projection of that order is not available yet. A pick\'s Early/Mid/Late tier cannot be ' +
+        'read off its original team\'s record or points-for.',
+      instruction:
+        'Do not place any pick in a tier (Early, Mid or Late), do not name a draft slot, and do not say ' +
+        'a pick will land early or late. You may report the original team\'s record, points-for, max ' +
+        'points-for and current seed, and quote the generic and tiered market values as the range a pick ' +
+        'of that round trades for.',
+    });
+  } else if (formatType === 'redraft' || hasEliminations(context.league.format)) {
+    missing.push({
+      field: 'draftPicks',
+      why:
+        formatType === 'redraft'
+          ? 'This is a redraft league: rosters are re-drafted every season, so a future pick is not an asset.'
+          : 'Teams are eliminated from this league during the season, so a future pick is worth nothing to a team trying to survive the week.',
+      instruction: 'Do not discuss draft picks in any grade. Judge every trade on the players alone.',
+    });
+  }
+
+  missing.push(
+    {
+      field: 'managerMotives',
+      why: 'Nothing here records why any manager made a trade.',
+      instruction:
+        'Do not state a motive as fact. Inferring a plan from roster and standing is fine if it is ' +
+        'clearly framed as your read.',
+    },
+    {
+      field: 'projections',
+      why: 'No player projections are included, and a player traded recently has played only a few games for his new team.',
+      instruction:
+        'Do not cite projected points. Treat a game or two of post-trade production in `playerHistory` as ' +
+        'a small sample, not evidence.',
+    },
+    {
+      field: 'injuryDetail',
+      why: 'Only Sleeper injury designations (in brackets after a player) are available, not injury news.',
+      instruction: 'Do not describe an injury beyond the designation shown.',
+    },
+  );
 
   return missing;
 }
@@ -962,6 +1358,25 @@ export function buildPrompt({ task, context }) {
         'during the season, so there is no fixed field to rank from 1 to N and a chopped team ' +
         'cannot hold a rank. Run `survival-rankings` instead. This should already have been ' +
         'refused in src/cli.mjs; if you are calling buildPrompt directly, add the same guard there.',
+    );
+  }
+
+  // A trade report about no trades is an edition about nothing, and a model
+  // handed one will grade a trade it makes up. The transactions command
+  // refuses a quiet week first; this catches any caller that does not.
+  if (task === 'trade-report' && !context.trades?.length) {
+    throw new Error(
+      'Cannot build a trade-report: no completed trade is in the context for this week. ' +
+        'Choose a week with a trade, or skip the edition.',
+    );
+  }
+
+  // The same for a waiver report: a week with no pickup gives a model nothing
+  // to comment on, and it will comment on one it made up.
+  if (task === 'waiver-report' && !context.pickups?.length) {
+    throw new Error(
+      'Cannot build a waiver-report: no completed waiver or free-agent move is in the context for this week. ' +
+        'Choose a week with a pickup, or skip the edition.',
     );
   }
 

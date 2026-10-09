@@ -54,8 +54,11 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/analysis/elimination.mjs` | Who is still alive in a guillotine league, and who was chopped when |
 | `src/analysis/danger.mjs` | The chop line, survival margin and rolling floor for a guillotine league |
 | `src/analysis/faab.mjs` | Remaining FAAB per survivor and the player pool each chop released, for a guillotine league |
+| `src/analysis/transactions.mjs` | A transaction's grading context: each side's roster shape before and after, a claim's cost against budget, moved players' weekly points |
+| `src/analysis/standings.mjs` | Current seeds: wins, then points-for |
+| `src/fantasycalc/client.mjs` | FantasyCalc trade values: query from the league's format and scoring, fetch, normalize. FantasyCalc field names stop here, as Sleeper's stop at `src/sleeper/` |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
-| `src/store.mjs` | Snapshots, rankings, predictions, movement, grading |
+| `src/store.mjs` | Snapshots, rankings, predictions, market values, movement, grading |
 | `src/teamIdentity.mjs` | Which roster a published team name means, across renames |
 | `src/promptContext.mjs` | Assembles the model's facts and instructions |
 | `src/generate.mjs` | Optional Anthropic / OpenAI call |
@@ -622,6 +625,47 @@ That table is a transcription, so it can be wrong. It is arranged to fail in
 the safe direction: a wrong entry makes an ordinary setting appear in
 `nonDefault`, which is visible and correctable. Treating anything unrecognised
 as ordinary would hide exactly the settings the diff exists to find.
+
+### Transactions
+
+`normalizeTransactions` (`src/sleeper/normalize.mjs`) gives every completed
+move two views. `moves` holds the readable lines every edition has always
+passed along as colour, and `buildContext` still sends only those. `sides`
+holds one entry per roster, keyed by `rosterId`: what it received and what it
+gave up, as player and pick references. `team` is a display name only, for the
+reason given under "Team renames". A dropped player nobody added was released
+(`to: null`), and an added player nobody dropped came off the wire
+(`from: null`). `completedAt` is when the move cleared, which decides whose
+week a Monday-night trade's points belong to.
+
+Spent picks never reach either view (`isFuturePick`), and a transaction left
+with nothing to report is dropped. In a startup year that removes most
+"trades": pick swaps made during the startup draft, using picks the draft then
+consumed.
+
+`src/analysis/transactions.mjs#enrichTransactions` adds what a grade needs.
+`readTransactions` in `src/pipeline.mjs` assembles it from raw bundles already
+on disk and fetches nothing.
+
+- **Roster shape, as of the move.** Sleeper keeps no roster history, so the
+  roster comes from that week's matchup entry (`normalizeWeekRosters`), not
+  from today's roster, which already carries later moves. The "before" picture
+  removes what the side received and restores what it gave up, so it comes out
+  the same whether the entry was saved before the move cleared or after. Each
+  shape counts rostered players against the dedicated starting slots for each
+  position. It also solves the best lineup on points per rostered game from
+  the weeks before the move, which yields `startsAfter` / `startedBefore`: the
+  difference between filling a hole and adding depth. A week that is not on
+  disk produces `roster: null` with a note, never a guess.
+- **Claim cost.** A waiver side gets `faab`: the bid, plus its share of the
+  league budget and of what the claimant had left. The amount left is
+  replayed from every earlier transaction this season: bids spend it, and
+  FAAB sent in a trade moves it between rosters. It is not taken from today's
+  `waiverBudgetUsed`, which includes later claims.
+- **Player history.** Each moved player's points, week by week, with the
+  roster that banked them.
+- **Scoring.** The part of the scoring profile that applies to the positions
+  that moved, so a tight end in a TE-premium league carries the premium.
 
 ## State
 

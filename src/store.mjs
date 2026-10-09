@@ -11,6 +11,7 @@
  *   snapshots/<season>/week-<n>.json    normalized league + analysis
  *   rankings/<season>/<label>.json      a published ranking and its movement
  *   predictions/<season>/week-<n>.json  what we said would happen
+ *   market/<season>/week-<n>.json       trade values as fetched for that week
  */
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -130,6 +131,18 @@ export function createStore({ dataDir }) {
     },
     loadPredictions(season, week) {
       return readJson(pathFor('predictions', season, `week-${week}.json`));
+    },
+
+    /**
+     * The trade-value market a week's trades were graded against. Values move
+     * daily, so the first fetch for a week is the one that counts: a re-run
+     * reads it back and grades against the same numbers.
+     */
+    saveMarketValues(season, week, snapshot) {
+      return writeJson(pathFor('market', season, `week-${week}.json`), snapshot);
+    },
+    loadMarketValues(season, week) {
+      return readJson(pathFor('market', season, `week-${week}.json`));
     },
   };
 
