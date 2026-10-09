@@ -10,7 +10,7 @@ import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadConfig, rankEmoji, resolveRankingWeights, ROOT } from './config.mjs';
-import { describeFormat, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
+import { describeFormat, hasFutureDraftCapital, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './scoringReport.mjs';
 import { describeEliminationLedger } from './eliminationReport.mjs';
 import {
@@ -368,12 +368,17 @@ async function commandEdition(config, args, task) {
   const { league, teams, players, store, client, tradedPicks } = ctx;
   const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]));
 
-  const futureDraftCapital = normalizeFutureDraftCapital({
-    tradedPicks,
-    league,
-    teamsByRosterId,
-    roundsPerDraft: league.draftRounds,
-  });
+  // Not computed for a format without future picks: Sleeper can still report
+  // picks traded for a redraft league's own upcoming draft, so the data being
+  // present says nothing about whether the concept exists.
+  const futureDraftCapital = hasFutureDraftCapital(league.format)
+    ? normalizeFutureDraftCapital({
+        tradedPicks,
+        league,
+        teamsByRosterId,
+        roundsPerDraft: league.draftRounds,
+      })
+    : null;
 
   // A preview looks at the week about to be played; a recap and its rankings
   // look at the week that just finished.

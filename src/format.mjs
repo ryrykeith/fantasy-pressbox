@@ -72,6 +72,21 @@ export function hasEliminations(format) {
   return FORMATS_WITH_ELIMINATION.includes(format?.type);
 }
 
+/**
+ * Formats in which a draft pick is not an asset that carries over.
+ *
+ * A redraft league re-drafts every roster each season, so there is no future
+ * draft capital to hold or trade. Sleeper may still report traded picks for the
+ * league's own upcoming draft, so callers must branch on the format rather than
+ * on whether that data happens to be empty.
+ */
+export const FORMATS_WITHOUT_FUTURE_PICKS = ['redraft'];
+
+/** Do picks for future drafts exist as tradeable assets in this format? */
+export function hasFutureDraftCapital(format) {
+  return !FORMATS_WITHOUT_FUTURE_PICKS.includes(format?.type);
+}
+
 /** Where a resolved format came from. */
 export const FORMAT_SOURCES = ['declared', 'detected'];
 

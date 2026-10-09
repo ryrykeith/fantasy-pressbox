@@ -13,7 +13,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, resolveRankingWeights } from './config.mjs';
-import { hasMatchups, hasEliminations } from './format.mjs';
+import { hasMatchups, hasEliminations, hasFutureDraftCapital } from './format.mjs';
 
 const TASK_PROMPTS = {
   'preseason-rankings': 'preseason-power-rankings.md',
@@ -121,7 +121,7 @@ function describeBench(entry) {
  * `potentialPoints` stay: a team's own scoring is a fact in any format, and in
  * a format with no games it is the only one there is.
  */
-function rosterView(team, players, { headToHead = true } = {}) {
+function rosterView(team, players, { headToHead = true, taxiSlots = 0 } = {}) {
   const describe = (id) => describePlayer(id, players[id]);
   const taxi = new Set(team.taxiIds || []);
   const reserve = new Set(team.reserveIds || []);
@@ -137,7 +137,9 @@ function rosterView(team, players, { headToHead = true } = {}) {
     pointsFor: team.seasonPointsFor,
     potentialPoints: team.seasonPotentialPoints,
     roster: team.playerIds.filter((id) => !taxi.has(id) && !reserve.has(id)).map(describe),
-    taxiSquad: [...taxi].map(describe),
+    // A league with no taxi slots has no taxi squad to report, only an empty
+    // array the model might read as a squad that happens to be empty.
+    ...(taxiSlots > 0 ? { taxiSquad: [...taxi].map(describe) } : {}),
     injuredReserve: [...reserve].map(describe),
   };
 }
@@ -592,7 +594,7 @@ export function buildContext({
   // below instead, which is the only place it belongs.
   if (ranking) {
     context.teams = (eliminates ? survivingTeams(teams, eliminationLedger) : teams).map((team) =>
-      rosterView(team, players, { headToHead }),
+      rosterView(team, players, { headToHead, taxiSlots: league.taxiSlots }),
     );
   }
 
@@ -732,7 +734,9 @@ export function buildContext({
   // Nor does a format where teams are chopped: a pick for a draft you will not
   // be in is not a small asset, it is no asset, so it never reaches the
   // context and describeMissingContext says so outright.
-  if (futureDraftCapital && ranking && !eliminates) {
+  // A redraft league has no future picks at all, whatever Sleeper reports for
+  // its own upcoming draft.
+  if (futureDraftCapital && ranking && !eliminates && hasFutureDraftCapital(league.format)) {
     context.futureDraftCapital = futureDraftCapital;
   }
 
