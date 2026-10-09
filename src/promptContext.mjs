@@ -747,7 +747,19 @@ export function buildContext({
   }
 
   if (gradedPredictions) context.previousPredictions = gradedPredictions;
-  if (transactions?.length) context.transactions = transactions;
+  // The readable moves only. normalizeTransactions also carries the structure
+  // a trade grade is built on (sides, roster shape, FAAB cost); that is for a
+  // transaction edition, and repeating it here would only bloat every other
+  // edition's prompt with facts it has never been asked to use.
+  if (transactions?.length) {
+    context.transactions = transactions.map(({ type, week: leg, teams: names, bid, moves }) => ({
+      type,
+      week: leg,
+      teams: names,
+      bid,
+      moves,
+    }));
+  }
 
   context.unavailable = describeMissingContext({ task, context, week });
 

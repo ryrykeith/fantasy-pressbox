@@ -6,11 +6,17 @@
  * Each step is a separate module. This file is only the sequence.
  */
 import { createClient } from './sleeper/client.mjs';
-import { normalizeLeague, normalizeTeams } from './sleeper/normalize.mjs';
+import {
+  normalizeLeague,
+  normalizeTeams,
+  normalizeTransactions,
+  normalizeWeekRosters,
+} from './sleeper/normalize.mjs';
 import { analyzeWeek } from './analysis/week.mjs';
 import { buildEliminationLedger } from './analysis/elimination.mjs';
 import { buildDangerBoard } from './analysis/danger.mjs';
 import { buildFaabMarket } from './analysis/faab.mjs';
+import { enrichTransactions } from './analysis/transactions.mjs';
 import { byeWeekTableSource, upcomingByeExposure } from './analysis/byeExposure.mjs';
 import { hasEliminations } from './format.mjs';
 import { createStore } from './store.mjs';
@@ -150,6 +156,35 @@ export function readFaabMarket({ store, league, teams, config = null, throughWee
     ledger,
     rawWeeks: store.loadRawThrough(league.season, throughWeek),
     teamsByRosterId: new Map(teams.map((team) => [team.rosterId, team])),
+  });
+}
+
+/**
+ * One week's completed transactions with the context a grade needs
+ * (src/analysis/transactions.mjs): each side's roster before and after, the
+ * cost of a claim against what the claimant had left, and each moved player's
+ * points week by week. Fetches nothing — every week it reads is a raw bundle
+ * captureWeek already saved, through `throughWeek` (which defaults to `week`;
+ * pass a later week to follow the players past the move).
+ *
+ * `describePlayer` is the same formatter cli.mjs hands normalizeTransactions,
+ * so the readable `moves` match the ones every edition already prints.
+ */
+export function readTransactions({ store, league, teams, players, describePlayer, week, throughWeek = week }) {
+  const raw = store.loadRawThrough(league.season, throughWeek);
+  const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]));
+  const normalize = (transactions) =>
+    normalizeTransactions(transactions, { teamsByRosterId, players, describePlayer, league });
+
+  // The FAAB a claimant had left is only known from every claim before it.
+  const seasonTransactions = raw.filter((bundle) => bundle.week <= week).flatMap((b) => normalize(b.transactions));
+  return enrichTransactions({
+    transactions: seasonTransactions.filter((transaction) => transaction.week === week),
+    seasonTransactions,
+    league,
+    teams,
+    players,
+    weeks: raw.map((bundle) => ({ week: bundle.week, rosters: normalizeWeekRosters(bundle.matchups) })),
   });
 }
 
