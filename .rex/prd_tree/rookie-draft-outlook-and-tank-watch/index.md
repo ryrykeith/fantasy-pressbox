@@ -16,5 +16,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Declared rookie draft rules](./declared-rookie-draft-rules/index.md) | completed |
 | [Draft-aware trade grades](./draft-aware-trade-grades/index.md) | pending |
 | [Projected rookie draft order with pick ownership](./projected-rookie-draft-order-with-pick/index.md) | completed |
-| [Prospect board](./prospect-board/index.md) | pending |
+| [Prospect board](./prospect-board/index.md) | completed |
 | [Tank watch edition](./tank-watch-edition/index.md) | pending |
