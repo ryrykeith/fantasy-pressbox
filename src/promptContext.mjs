@@ -27,6 +27,7 @@ const TASK_PROMPTS = {
   'survival-rankings': 'survival-rankings.md',
   postseason: 'postseason-power-rankings.md',
   'trade-report': 'trade-report.md',
+  'waiver-report': 'waiver-report.md',
 };
 
 export const TASKS = Object.keys(TASK_PROMPTS);
@@ -37,7 +38,7 @@ export const TASKS = Object.keys(TASK_PROMPTS);
  * the market values a grade is anchored to — and they replace the incidental
  * `transactions` colour every other edition gets, rather than repeating it.
  */
-export const TRANSACTION_TASKS = ['trade-report'];
+export const TRANSACTION_TASKS = ['trade-report', 'waiver-report'];
 
 /**
  * Editions about a week that has not been played yet.
@@ -622,6 +623,76 @@ function receivedTotal(received, market, { withPicks }) {
 }
 
 /**
+ * A side's roster as lines: projected starters and depth before and after the
+ * move, as of the week it was made. Shared by every transaction edition, so a
+ * trade and a pickup describe the acquiring roster's shape identically.
+ */
+function sideRosterView(side) {
+  if (!side.roster) return { note: side.rosterNote };
+  return {
+    asOfWeek: side.roster.asOfWeek,
+    valueBasis: side.roster.valueBasis,
+    startersBefore: starterLines(side.roster.before),
+    startersAfter: starterLines(side.roster.after),
+    depthBefore: depthLine(side.roster.before),
+    depthAfter: depthLine(side.roster.after),
+  };
+}
+
+/** Each moved player's week-by-week points and the roster that banked them. */
+const playerHistoryView = (history, describe) =>
+  history.map((item) => ({
+    player: describe(item.id),
+    weeks: item.weeks.map((w) => `week ${w.week}: ${w.team}, ${w.points}${w.started ? ', started' : ', benched'}`),
+  }));
+
+/**
+ * Every completed waiver claim and free-agent move in the week, one entry per
+ * acquiring roster, in the shape a verdict on value needs.
+ *
+ * Fit is computable and general standing is not, so what travels is the
+ * roster's shape around the move (`startsAfter`, `startedBefore`, depth), the
+ * cost against the budget and the week's rival bids (`faab`, `market`), and
+ * what each player scored afterwards. Trades are not pickups and are left to
+ * tradesView.
+ */
+function pickupsView(transactions, { teams, players, headToHead }) {
+  const teamsById = new Map(teams.map((team) => [team.rosterId, team]));
+  const seeds = currentSeeds(teams);
+  const describe = (id) => describePlayer(id, players[id]);
+
+  return transactions
+    .filter((transaction) => transaction.type === 'waiver' || transaction.type === 'free_agent')
+    .flatMap((transaction) =>
+      transaction.sides.map((side) => {
+        const startsAfter = new Map((side.roster?.received ?? []).map((item) => [item.id, item.startsAfter]));
+        const startedBefore = new Map((side.roster?.gaveUp ?? []).map((item) => [item.id, item.startedBefore]));
+        return {
+          type: transaction.type,
+          week: transaction.week,
+          completedAt: transaction.completedAt,
+          team: side.team,
+          manager: teamsById.get(side.rosterId)?.manager ?? null,
+          standing: teamStandingView(teamsById.get(side.rosterId), seeds, headToHead),
+          added: side.received.players.map((player) => ({
+            player: describe(player.id),
+            startsAfter: startsAfter.get(player.id) ?? null,
+          })),
+          dropped: side.gaveUp.players.map((player) => ({
+            player: describe(player.id),
+            startedBefore: startedBefore.get(player.id) ?? null,
+          })),
+          ...(side.faab ? { faab: side.faab } : {}),
+          ...(side.market ? { market: side.market } : {}),
+          roster: sideRosterView(side),
+          playerHistory: playerHistoryView(transaction.playerHistory, describe),
+          scoring: transaction.scoring,
+        };
+      }),
+    );
+}
+
+/**
  * Every trade in the week, one entry per trade, in the shape a grade needs.
  *
  * Built from src/analysis/transactions.mjs#enrichTransactions — ids become
@@ -667,24 +738,10 @@ function tradesView(transactions, { teams, players, headToHead, withPicks, marke
             ...(side.gaveUp.faab ? { faab: side.gaveUp.faab } : {}),
           },
           ...(market ? { receivedMarketTotal: receivedTotal(side.received, market, { withPicks }) } : {}),
-          roster: side.roster
-            ? {
-                asOfWeek: side.roster.asOfWeek,
-                valueBasis: side.roster.valueBasis,
-                startersBefore: starterLines(side.roster.before),
-                startersAfter: starterLines(side.roster.after),
-                depthBefore: depthLine(side.roster.before),
-                depthAfter: depthLine(side.roster.after),
-              }
-            : { note: side.rosterNote },
+          roster: sideRosterView(side),
         };
       }),
-      playerHistory: trade.playerHistory.map((entry) => ({
-        player: describe(entry.id),
-        weeks: entry.weeks.map(
-          (w) => `week ${w.week}: ${w.team}, ${w.points}${w.started ? ', started' : ', benched'}`,
-        ),
-      })),
+      playerHistory: playerHistoryView(trade.playerHistory, describe),
       scoring: trade.scoring,
     }));
 }
@@ -945,6 +1002,10 @@ export function buildContext({
     if (trades.length) context.trades = trades;
     if (market) context.marketValues = marketValuesView(market);
   }
+  if (task === 'waiver-report') {
+    const pickups = pickupsView(enrichedTransactions ?? [], { teams, players, headToHead });
+    if (pickups.length) context.pickups = pickups;
+  }
 
   // The readable moves only. normalizeTransactions also carries the structure
   // a trade grade is built on (sides, roster shape, FAAB cost); that is for a
@@ -1115,6 +1176,8 @@ function describeMissingContext({ task, context, week, marketUnavailable = null 
 
   if (task === 'trade-report') {
     missing.push(...describeMissingTradeContext({ context, marketUnavailable }));
+  } else if (task === 'waiver-report') {
+    missing.push(...describeMissingPickupContext());
   } else if (!context.transactions) {
     missing.push({
       field: 'transactions',
@@ -1124,6 +1187,42 @@ function describeMissingContext({ task, context, week, marketUnavailable = null 
   }
 
   return missing;
+}
+
+/**
+ * What a verdict on a pickup cannot know. The edition is judged on roster fit,
+ * which is computed; how good a player is in general is opinion a model would
+ * supply from memory, so it is named here as off limits.
+ */
+function describeMissingPickupContext() {
+  return [
+    {
+      field: 'playerQuality',
+      why: 'No ranking, trade value or season-long production is included for any player, only the points each moved player scored in the weeks on disk.',
+      instruction:
+        'Judge every pickup on the roster shape around it, its cost and the points in `playerHistory`. ' +
+        'Do not state or imply how good a player is in general, where he ranks, what he did in a previous ' +
+        'season or what he is expected to do. Any claim about production that is not in the context is invented.',
+    },
+    {
+      field: 'managerMotives',
+      why: 'Nothing here records why any manager made a claim or a drop.',
+      instruction:
+        'Do not state a motive as fact. Inferring a plan from roster and standing is fine if it is ' +
+        'clearly framed as your read.',
+    },
+    {
+      field: 'projections',
+      why: 'No player projections are included, and a player picked up this week has played at most a game for his new team.',
+      instruction:
+        'Do not cite projected points. Treat a game or two in `playerHistory` as a small sample, not evidence.',
+    },
+    {
+      field: 'injuryDetail',
+      why: 'Only Sleeper injury designations (in brackets after a player) are available, not injury news.',
+      instruction: 'Do not describe an injury beyond the designation shown.',
+    },
+  ];
 }
 
 /**
@@ -1269,6 +1368,15 @@ export function buildPrompt({ task, context }) {
     throw new Error(
       'Cannot build a trade-report: no completed trade is in the context for this week. ' +
         'Choose a week with a trade, or skip the edition.',
+    );
+  }
+
+  // The same for a waiver report: a week with no pickup gives a model nothing
+  // to comment on, and it will comment on one it made up.
+  if (task === 'waiver-report' && !context.pickups?.length) {
+    throw new Error(
+      'Cannot build a waiver-report: no completed waiver or free-agent move is in the context for this week. ' +
+        'Choose a week with a pickup, or skip the edition.',
     );
   }
 
