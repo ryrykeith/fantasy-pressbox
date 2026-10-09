@@ -15,4 +15,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 |-------|--------|
 | [Interactive init and league workspaces](./interactive-init-and-league-workspaces/index.md) | pending |
 | [Publish preparation](./publish-preparation/index.md) | pending |
-| [Separate package assets from workspace data](./separate-package-assets-from-workspace/index.md) | pending |
+| [Separate package assets from workspace data](./separate-package-assets-from-workspace/index.md) | completed |
