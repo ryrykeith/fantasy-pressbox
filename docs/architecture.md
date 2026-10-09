@@ -146,7 +146,7 @@ generate a thin, confused edition, both commands refuse outright.
 
 Two lines of defence, both keyed off `hasMatchups`/the declared format:
 
-- `refuseGuillotineMatchupEdition` in `src/cli.mjs` runs first, before any
+- `refuseOrdinaryEditionInGuillotineLeague` in `src/cli.mjs` runs first, before any
   Sleeper call or file write. It only needs `config.leagueFormat`: guillotine
   can never be *detected* (see above), so a declaration is the only way it is
   ever true, and checking it costs nothing.
@@ -154,11 +154,222 @@ Two lines of defence, both keyed off `hasMatchups`/the declared format:
   `context.league.format`, in case some other caller reaches it directly and
   skips the CLI guard.
 
-Both name the edition that will eventually replace the one refused
-(`survival-preview`, `chop-recap`) — neither has shipped yet; they are tracked
-under the "Guillotine editions" feature. `rankings` is unaffected: a power
-ranking judges rosters, not games, so it has something to say for any format
-once its own weight set exists.
+Both name the edition that replaces the one refused (`survival-preview`,
+`chop-recap`), and both have shipped (see below). The refusal asks `TASKS`
+which is which rather than carrying its own claim, so the message would stop
+saying "not shipped yet" the week a future replacement lands, instead of
+going stale.
+
+`rankings` is refused too, but for a different reason and on a different
+test — see "The survival rankings" below. It is not matchup-shaped; a power
+ranking judges rosters, not games. What it cannot survive is a field that
+shrinks.
+
+#### The survival preview
+
+The forward-looking edition a guillotine league gets in place of the matchup
+preview. `prompts/survival-preview.md` is registered in `TASK_PROMPTS` as
+`survival-preview`, and `src/cli.mjs` exposes it as its own command.
+
+It is guarded in both directions, mirroring the matchup guard exactly:
+`refuseSurvivalEditionWithoutEliminations` in `src/cli.mjs` refuses it before
+any work begins for a league that is not declared guillotine, and `buildPrompt`
+refuses again from the resolved format via `ELIMINATION_ONLY_TASKS`. The CLI
+guard can read the declaration alone for the same reason the matchup one can:
+guillotine is the only format anyone is chopped out of and it can never be
+detected, so an undeclared league is definitively not one.
+
+Its facts are the ones the format actually turns on, and all of them come from
+analysis that already existed:
+
+| Context key | Built by | Why |
+|---|---|---|
+| `dangerBoard.lastCompletedWeek` | `src/analysis/danger.mjs` | the score it took to survive, and by how little |
+| `dangerBoard.floors` | `src/analysis/danger.mjs` | the number that predicts danger — a team dies on its bad weeks |
+| `byeExposure` | `src/analysis/byeExposure.mjs` | a bye cluster is a genuine elimination risk here |
+| `faabMarket` | `src/analysis/faab.mjs` | who can afford the next roster to hit the wire |
+| `standings`, `eliminationHistory` | `src/analysis/elimination.mjs` | the field still alive, kept apart from the field that is gone |
+
+Two filters in `dangerBoardView` (`src/promptContext.mjs`) are load-bearing:
+
+- **The week being previewed never sets the chop line.** `buildDangerBoard`
+  already skips a week that was not played, but a week *in progress* counts as
+  played — Sunday afternoon has real points on the board — and a chop line
+  drawn under a third of a week's scores is wrong in the most convincing way
+  available. So the view drops every week at or after the one being previewed,
+  and `unavailable` carries a `chopLine` entry when that leaves nothing.
+- **Floors cover only the survivors.** `rollingFloor` deliberately reports
+  every roster that ever scored, but this edition reads the list worst-first as
+  "who is in danger". A chopped team's floor is the worst in the league almost
+  by definition — it is why they went — so leaving one in puts an eliminated
+  team at the top of the list of teams to watch. `lastCompletedWeek.scoringOrder`
+  is *not* filtered: the team chopped in that week belongs in that week's
+  record, sitting on the line it failed to clear. History is not rewritten.
+
+**The called shot is a chop, not a winner.** A format with no games has nothing
+to pick the winner of, so the machine-readable block names the team expected to
+go out:
+
+```json
+[{ "week": 3, "predicted_chop": "Bye Week Blues", "reasoning": "lowest floor, three starters on bye" }]
+```
+
+`recordBlock` files it through the same `store.savePredictions` path a matchup
+preview uses, and `gradePredictions` tells the two shapes apart by their own
+fields (`predicted_chop` versus `predicted_winner`) rather than by the league's
+format — by grading time the record already says which it is, and reading that
+off the record keeps a mixed file from being scored against the wrong rule.
+
+A called chop is graded against the elimination ledger, the only thing in this
+project entitled to say a team was chopped. **A week the ledger has not settled
+is left ungraded, never scored wrong.** That is the ordinary Monday state of a
+guillotine league — the scores are in but the commissioner has not processed
+the chop, or two teams tied for lowest — and marking those wrong would both
+invent a result and punish a correct call for a commissioner's timing. `grade`
+prints the ungraded rows with their reason rather than skipping them, so a
+prediction never silently vanishes from its own grading.
+
+**Ranking weights are asked for only by editions that rank.** `RANKING_TASKS`
+in `src/promptContext.mjs` is the list that asks, and `resolveRankingWeights`
+refuses a format with no set of its own rather than borrowing another's — so
+resolving one for every edition would have blocked the survival preview on a
+decision it never reads. That mattered while `weights.guillotine` did not yet
+exist; the list is still worth keeping narrow, because the refusal it gates is
+still loud.
+
+#### The chop recap
+
+The backward-looking edition a guillotine league gets in place of the matchup
+recap. `prompts/chop-recap.md` is registered in `TASK_PROMPTS` as `chop-recap`,
+and `src/cli.mjs` exposes it as its own command. It shares `commandEdition`'s
+recap/rankings/postseason path in `src/cli.mjs` rather than getting a branch of
+its own — the only thing that path does differently for it is also read the
+danger board, which a plain recap has no format-fact to want.
+
+Guarded exactly like the survival preview, in both directions: guillotine
+refuses `recap` and points at `chop-recap` (`refuseOrdinaryEditionInGuillotineLeague`),
+and any other format refuses `chop-recap` and points back at `recap`
+(`refuseSurvivalEditionWithoutEliminations`, generalised to both directions via
+`ORDINARY_EDITION_FOR` — the reverse of the `GUILLOTINE_EDITION_FOR` map the
+first guard already used, built once so the two guards can never name
+different commands for the same pair). `buildPrompt` in `src/promptContext.mjs`
+refuses again from the resolved format, the same second line of defence every
+other elimination-only edition carries.
+
+**The one fork this task adds to code the survival preview already owns:**
+`dangerBoardView` (`src/promptContext.mjs`) computes `lastCompletedWeek` from
+weeks strictly before `beforeWeek`. A survival preview is *about* a week that
+has not been played, so it passes `beforeWeek: week` — excluding that week is
+the whole point, since its scores do not exist yet. A chop recap is *about*
+the week that just finished, and that week's own chop is the fact the edition
+exists to report, so it passes `beforeWeek: week + 1` instead — landing
+`lastCompletedWeek` on the week being recapped rather than the one before it.
+`FORWARD_LOOKING_TASKS` (`src/promptContext.mjs`, imported by `src/cli.mjs` for
+the same `resolveWeek` offset decision rather than duplicated) is what
+`buildContext` asks to choose between the two.
+
+Nothing else about the danger board changes: `lastCompletedWeek.scoringOrder`
+still carries the team that was just chopped, sitting on the line at a margin
+of exactly zero — the same "history is not rewritten" rule documented under
+the survival preview above is what makes "who nearly went" (the smallest
+nonzero margin) and "who went" (the zero) both readable off one array. The
+released pool a chop recap reports is the `releasedPools` entry whose `week`
+matches the context's own `week`; the ones before it are older chops, not this
+week's news, and the prompt file is what tells the model to tell them apart.
+
+**`survivorCount` is stated, not counted.** `context.survivorCount` is set
+directly from `eliminationLedger.survivorCount` (falling back to the full
+roster when no ledger ran) rather than left for a model to infer from the
+length of `standings` — the one number a chop recap's headline has to get
+exactly right, computed the same way `pointsLeftOnBench` and every other
+model-facing number in this project already is.
+
+**Grading reuses the survival preview's own mechanism.** A chop recap's
+`previousPredictions` comes from the identical `gradePredictions` call a plain
+recap already makes — `gradeChopPrediction` (`src/store.mjs`) tells a called
+chop apart from a called game by its own fields, not by the caller's task, so
+nothing here needed to change for the called shot a survival preview makes the
+week before to come back gradeable the week after.
+
+#### The survival rankings
+
+The power ranking a guillotine league gets in place of `rankings`.
+`prompts/survival-rankings.md` is registered in `TASK_PROMPTS` as
+`survival-rankings`, and `src/cli.mjs` exposes it as its own command. Like the
+chop recap it shares `commandEdition`'s recap/rankings path, and like the chop
+recap it is backward-looking — it ranks after a week that has been played.
+
+**Why the ordinary edition could not be reused.** `prompts/weekly-power-rankings.md`
+ranks on starting lineup, dynasty value, depth, quarterback, future draft
+capital and flexibility, and tells the model to rank every team from 1 to N.
+Three of those are wrong here at once: future draft capital does not exist for
+a team whose season can end on Sunday, dynasty value is irrelevant when the
+season ends the week you are chopped, and "every team from 1 to N" is a field
+that shrinks. The dominant factors in this format are none of the six — they
+are weekly floor, bye-week exposure and FAAB ammunition.
+
+**The weight set is the inversion, written down.** `weights.guillotine` in
+`config/rankings.yml` leads with `weekly_floor` (0.40) and carries
+`bye_exposure` and `faab_remaining`, which no other set has. It has no
+`dynasty_value` and no `future_draft_capital` — not weighted low, absent, the
+same way the redraft set expresses the same idea. There is no
+`contender_viability` either: the only way to contend in this format is to
+still be in it.
+
+**Only the field still alive is ranked.** `survivingTeams` in
+`src/promptContext.mjs` is the one answer to who is in the league, shared by
+`survivalStandingsView` and the ranking branch of `buildContext`. A chopped
+team is removed from `context.teams` entirely rather than sorted to the bottom:
+left in the list it is a team a model can rank, cite, or write about in the
+present tense. Where it does belong is `context.eliminationHistory`, in the
+week it went. `rosterView` also drops `record` **and** `pointsAgainst` for a
+format without matchups, applying to the season the rule
+`survivalStandingsView` already applied to a compact standing — points against
+are somebody else's points, and there is no somebody else here.
+
+A survival ranking gets no `context.standings`. Its `teams` already carries
+every survivor's points, and the order it publishes *is* the output; a second
+ordering sitting in the context is an invitation to print that one instead.
+
+**Two guards, in both directions, keyed on the field rather than on matchups.**
+`GUILLOTINE_EDITION_FOR` in `src/cli.mjs` gains `rankings: 'survival-rankings'`,
+so `refuseOrdinaryEditionInGuillotineLeague` and
+`refuseSurvivalEditionWithoutEliminations` pick the pairing up from the same
+map the other two editions use. `buildPrompt` carries the second line of
+defence as `FIXED_FIELD_RANKING_TASKS` — the three ranking editions written for
+a league whose field never shrinks.
+
+**Adding `weights.guillotine` removed a guard, so one had to be put back.**
+Before this edition existed, every ranking in a guillotine league failed at
+`resolveRankingWeights`, because no set existed to resolve. Shipping the set
+turned that loud failure into a silent success for `preseason-rankings` and
+`postseason`, which have no guillotine version of their own — a preseason
+ranking would have been steered by a floor nobody has yet, and a postseason
+ranking describes a postseason this format does not have.
+`GUILLOTINE_REFUSAL_BECAUSE` in `src/cli.mjs` refuses both by name — it is the
+list of what a guillotine league cannot run *and* the reason for each, kept
+together so a task cannot be refused without an explanation or explained
+without being refused. The refusal is a decision now, not a side effect of a
+missing config key.
+
+**Bye exposure is re-read rather than taken from the capture.** `captureWeek`
+computes exposure from the week it captured, which is right for a survival
+preview (the week it is about has not been played). A survival ranking is about
+a week that *has* been played, so those byes are history — counting them would
+report the past as risk and push a genuinely upcoming week off the end of the
+report. `readByeExposure` therefore takes `fromWeek` separately from
+`throughWeek`: how far the ledger knows is not the same question as which week
+the risk starts in. It still fetches nothing.
+
+**The rank emoji table now runs to 18.** A guillotine league normally starts
+with one team per NFL regular-season week, and `rankEmoji` (`src/config.mjs`)
+repeats the last entry past the end of the table — so a twelve-entry default
+printed the same emoji for ranks 13 through 18 and the bottom of the table
+stopped meaning anything. The first twelve entries are unchanged, so a 12-team
+league prints exactly what it always did. `config/editorial.yml` and
+`DEFAULT_EDITORIAL` in `src/config.mjs` both carry the table and must stay in
+step; the file is what a real run reads, the constant is only the fallback for
+a missing one.
 
 #### The elimination ledger
 
