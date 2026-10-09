@@ -20,6 +20,7 @@ import { buildEliminationLedger } from './analysis/elimination.mjs';
 import { buildDangerBoard } from './analysis/danger.mjs';
 import { buildFaabMarket, weekBids } from './analysis/faab.mjs';
 import { enrichTransactions } from './analysis/transactions.mjs';
+import { buildRosterWindow } from './analysis/rosterWindow.mjs';
 import { byeWeekTableSource, upcomingByeExposure } from './analysis/byeExposure.mjs';
 import {
   MarketValuesError,
@@ -312,6 +313,24 @@ export function readDraftOrder({ league, teams, config = null, tradedPicks = [] 
     season: projectedDraftSeason(league),
   });
   return projectDraftOrder({ league, teams, rule, picks, roundOrder: config?.rookieDraft?.rounds ?? null });
+}
+
+/**
+ * Each team's age structure and production by age band
+ * (src/analysis/rosterWindow.mjs), from the weeks already on disk. Fetches
+ * nothing. Null for a format with no future draft capital: a redraft roster
+ * has no window to look through.
+ */
+export function readRosterWindow({ store, league, teams, players, throughWeek, ageBandEdges }) {
+  if (!hasFutureDraftCapital(league.format)) return null;
+  return buildRosterWindow({
+    teams,
+    players,
+    weeks: store
+      .loadRawThrough(league.season, throughWeek)
+      .map((bundle) => ({ week: bundle.week, rosters: normalizeWeekRosters(bundle.matchups) })),
+    ageBandEdges,
+  });
 }
 
 /** Fetch one week, save the raw bundle and the analyzed snapshot. */

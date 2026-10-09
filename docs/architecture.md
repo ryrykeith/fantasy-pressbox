@@ -56,6 +56,7 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/analysis/danger.mjs` | The chop line, survival margin and rolling floor for a guillotine league |
 | `src/analysis/faab.mjs` | Remaining FAAB per survivor and the player pool each chop released, for a guillotine league |
 | `src/analysis/transactions.mjs` | A transaction's grading context: each side's roster shape before and after, a claim's cost against budget, moved players' weekly points |
+| `src/analysis/rosterWindow.mjs` | Per-position age summaries, starter age, and season points by age band, for a dynasty roster |
 | `src/analysis/standings.mjs` | Current seeds: wins, then points-for |
 | `src/analysis/playoffField.mjs` | The projected playoff field and the bubble that decides it |
 | `src/tankWatch.mjs` | The tank-watch edition: its refusals (dynasty only, declared rule, start week) and the race/stakes/cliff/movement view of the projected draft order |
