@@ -24,6 +24,7 @@
  * every later move, and grading against it would invent context.
  */
 import { normalizePlayer } from '../sleeper/normalize.mjs';
+import { claimMarket } from './faab.mjs';
 import { bestLineup, eligiblePositions } from './lineup.mjs';
 
 const round1 = (value) => Math.round(value * 10) / 10;
@@ -165,14 +166,14 @@ function faabRemainingAfter(seasonTransactions, waiverBudget) {
   // A league that never set a budget has no balance to report, not a zero one.
   if (waiverBudget === null || waiverBudget === undefined) return after;
   for (const transaction of [...seasonTransactions].sort(chronological)) {
-    const here = new Map();
     for (const side of transaction.sides ?? []) {
       const current = balance.get(side.rosterId) ?? waiverBudget;
-      const next = current + side.received.faab - side.gaveUp.faab - (side.waiverBid ?? 0);
-      balance.set(side.rosterId, next);
-      here.set(side.rosterId, next);
+      balance.set(side.rosterId, current + side.received.faab - side.gaveUp.faab - (side.waiverBid ?? 0));
     }
-    if (transaction.id !== null) after.set(transaction.id, here);
+    // Every roster seen so far, not just this transaction's: the market a
+    // claim was made in includes teams that sat the week out. A roster not in
+    // the snapshot has not moved FAAB yet and still holds the full budget.
+    if (transaction.id !== null) after.set(transaction.id, new Map(balance));
   }
   return after;
 }
@@ -244,6 +245,11 @@ export function scoringContext(scoring, positions) {
  * @param weeks               `[{ week, rosters }]` with rosters from
  *                            normalizeWeekRosters, every week on disk — before
  *                            the move for its shape, after it for its history
+ * @param market              `{ bids, releasedPools }`: the week's bids from
+ *                            faab.mjs#weekBids (won and lost) and, in a
+ *                            guillotine league, buildFaabMarket's pools. Gives
+ *                            each waiver claim a `market` beside its `faab`
+ *                            cost; omitted, claims carry no market.
  * @param seasonTransactions  every normalized transaction this season so far,
  *                            for the FAAB each claimant had left; defaults to
  *                            `transactions` alone
@@ -255,6 +261,7 @@ export function enrichTransactions({
   players = {},
   weeks = [],
   seasonTransactions = null,
+  market = null,
 }) {
   const names = new Map(teams.map((team) => [team.rosterId, team.name]));
   const teamName = (rosterId) => names.get(rosterId) ?? `Roster ${rosterId}`;
@@ -290,6 +297,21 @@ export function enrichTransactions({
             waiverBudget: league.waiverBudget ?? null,
             remainingAfter: remaining.get(transaction.id)?.get(side.rosterId) ?? null,
           });
+          const added = side.received.players[0]?.id;
+          const won = market?.bids.find(
+            (bid) => bid.outcome === 'won' && bid.rosterId === side.rosterId && bid.playerId === added,
+          );
+          if (won) {
+            const budget = league.waiverBudget ?? null;
+            enriched.market = {
+              ...claimMarket({ bid: won, bids: market.bids, releasedPools: market.releasedPools ?? [] }),
+              balances: teams.map((team) => ({
+                rosterId: team.rosterId,
+                team: team.name,
+                remaining: budget === null ? null : (remaining.get(transaction.id)?.get(team.rosterId) ?? budget),
+              })),
+            };
+          }
         }
         return enriched;
       }),

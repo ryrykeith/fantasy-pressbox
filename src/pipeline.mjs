@@ -15,7 +15,7 @@ import {
 import { analyzeWeek } from './analysis/week.mjs';
 import { buildEliminationLedger } from './analysis/elimination.mjs';
 import { buildDangerBoard } from './analysis/danger.mjs';
-import { buildFaabMarket } from './analysis/faab.mjs';
+import { buildFaabMarket, weekBids } from './analysis/faab.mjs';
 import { enrichTransactions } from './analysis/transactions.mjs';
 import { byeWeekTableSource, upcomingByeExposure } from './analysis/byeExposure.mjs';
 import { hasEliminations } from './format.mjs';
@@ -178,7 +178,15 @@ export function readTransactions({ store, league, teams, players, describePlayer
 
   // The FAAB a claimant had left is only known from every claim before it.
   const seasonTransactions = raw.filter((bundle) => bundle.week <= week).flatMap((b) => normalize(b.transactions));
+  // The week's losing bids exist only in the raw entries, and a chop pool only
+  // in a format with eliminations.
+  const thisWeek = raw.find((bundle) => bundle.week === week);
+  const faab = readFaabMarket({ store, league, teams, throughWeek: week });
   return enrichTransactions({
+    market: {
+      bids: weekBids({ transactions: thisWeek?.transactions ?? [], week, players, teamsByRosterId }),
+      releasedPools: faab?.releasedPools ?? [],
+    },
     transactions: seasonTransactions.filter((transaction) => transaction.week === week),
     seasonTransactions,
     league,
