@@ -35,6 +35,11 @@ Weigh three things for every team, in this order:
    `draftCapital.seasons`. Picks are upside on top of a roster, not a
    substitute for one. See the guard below.
 
+`editorial.rankingWeights` says how much each factor counts, as guidance. It
+is this edition's own set: production from young players and the age window
+outweigh draft capital, and this week's form counts for little. Let it settle
+close calls, and do not print the numbers.
+
 ## The guard against over-projection
 
 Forward-looking does not mean youth worship. These rules decide close calls.

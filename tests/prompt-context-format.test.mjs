@@ -25,7 +25,12 @@ const REDRAFT_WEIGHTS = {
 // Both formats every test in this file resolves against. resolveRankingWeights
 // throws for any format missing here, so this must cover every testLeague()
 // format type used below, not just the ones a given test is asserting on.
-const FORMAT_WEIGHTS = { dynasty: DYNASTY_WEIGHTS, redraft: REDRAFT_WEIGHTS };
+// `future_stock` is not a format: it is the future-stock edition's own set.
+const FORMAT_WEIGHTS = {
+  dynasty: DYNASTY_WEIGHTS,
+  redraft: REDRAFT_WEIGHTS,
+  future_stock: { roster_age_window: 0.6, future_draft_capital: 0.4 },
+};
 
 /** Minimal config: just enough of the editorial/rankings shape buildContext reads. */
 function testConfig({ weights = FORMAT_WEIGHTS } = {}) {

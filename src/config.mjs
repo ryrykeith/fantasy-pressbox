@@ -107,6 +107,23 @@ const DEFAULT_RANKING_WEIGHTS = {
     // pick for a draft it will not be in and a player it will not get to
     // start are both worth exactly zero this week.
   },
+  // The `future-stock` edition's set. Not a league format: only that edition
+  // reads it, and that edition is dynasty-only (src/futureStock.mjs). It lives
+  // here so it is validated and overridden like the others.
+  future_stock: {
+    // Production from players young enough to keep producing, then age. Picks
+    // and youth are upside on top of a roster that scores, not a substitute.
+    sustainable_production: 0.25,
+    // Where the roster sits on each position's age curve. The dynasty set has
+    // no age factor at all.
+    roster_age_window: 0.25,
+    // Double the dynasty set's 0.10, still below the two factors above.
+    future_draft_capital: 0.2,
+    dynasty_value: 0.15,
+    quarterback: 0.1,
+    // Current form is evidence about a roster here, not the thing ranked.
+    starting_lineup: 0.05,
+  },
 };
 
 const DEFAULT_RANKINGS = {
@@ -134,7 +151,12 @@ const DEFAULT_GUILLOTINE = { eliminations: {} };
 const DEFAULT_ROOKIE_DRAFT = { order: null, rounds: null, tank_watch: { start_week: null } };
 
 /** Per-format weight maps: a partial override in rankings.yml replaces the whole set, never merges into it. */
-const RANKING_WEIGHT_REPLACE_KEYS = ['weights.dynasty', 'weights.redraft', 'weights.guillotine'];
+const RANKING_WEIGHT_REPLACE_KEYS = [
+  'weights.dynasty',
+  'weights.redraft',
+  'weights.guillotine',
+  'weights.future_stock',
+];
 
 /** How far a weight set's sum may drift from 1.0 before it is treated as wrong, to absorb float rounding. */
 const WEIGHT_SUM_TOLERANCE = 1e-6;
@@ -186,6 +208,15 @@ export function resolveRankingWeights(rankings, formatType) {
       `Add weights.${formatType} to config/rankings.yml — write out every key it needs; a partial ` +
       'set is not accepted.',
   );
+}
+
+/**
+ * The weight set for the future stock edition. Like resolveRankingWeights it
+ * never borrows another set: trimming `weights.future_stock` out of
+ * config/rankings.yml is an error naming it, not a quiet fall back to dynasty.
+ */
+export function resolveFutureStockWeights(rankings) {
+  return resolveRankingWeights(rankings, 'future_stock');
 }
 
 /** Reads a dotted path (`"weights.redraft"`) out of a plain object. */

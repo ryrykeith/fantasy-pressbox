@@ -16,6 +16,10 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+import { loadConfig, resolveFutureStockWeights, validateRankingWeights } from '../src/config.mjs';
 
 import { FUTURE_STOCK_TASK, refuseFutureStock } from '../src/futureStock.mjs';
 import { buildContext, buildPrompt, TASKS } from '../src/promptContext.mjs';
@@ -32,6 +36,7 @@ import {
 } from './fixtures/league-2026-week04.mjs';
 
 const CONFIG_DRAFT = { order: RULE, rounds: null };
+const FUTURE_STOCK_WEIGHTS = { roster_age_window: 0.6, future_draft_capital: 0.4 };
 
 /** Five starters per team: position and age. Names are invented. */
 const LINEUPS = {
@@ -116,7 +121,7 @@ function testConfig() {
       banned_phrases: [],
       awards: {},
     },
-    rankings: { weights: {}, weekly: {} },
+    rankings: { weights: { future_stock: FUTURE_STOCK_WEIGHTS, dynasty: { starting_lineup: 1 } }, weekly: {} },
     rookieDraft: CONFIG_DRAFT,
   };
 }
@@ -333,3 +338,58 @@ test('the prompt ranks on three seasons and carries the guard against over-proje
   ];
   for (const guard of guards) assert.match(prompt, guard);
 });
+
+/* ------------------------------------------------------ weights and the CLI */
+
+test('the edition is handed its own weight set, not the dynasty one', () => {
+  const ctx = context();
+  assert.deepEqual(ctx.editorial.rankingWeights, FUTURE_STOCK_WEIGHTS);
+  assert.match(buildPrompt({ task: FUTURE_STOCK_TASK, context: ctx }), /editorial\.rankingWeights/);
+});
+
+test('a config with no future_stock set is refused rather than ranked on the dynasty weights', () => {
+  const config = { ...testConfig(), rankings: { weights: { dynasty: { starting_lineup: 1 } }, weekly: {} } };
+  assert.throws(
+    () =>
+      buildContext({
+        task: FUTURE_STOCK_TASK,
+        config,
+        league: { ...LEAGUE, startingSlots: [], benchSlots: 0, taxiSlots: 0 },
+        teams: TEAMS,
+        players,
+        week: 4,
+      }),
+    /weights\.future_stock/,
+  );
+});
+
+test('config/rankings.yml ships a future_stock set that validates, sums to 1.0 and has an age factor', () => {
+  const { rankings } = loadConfig();
+  const weights = resolveFutureStockWeights(rankings);
+  const sum = Object.values(weights).reduce((total, value) => total + value, 0);
+  assert.ok(Math.abs(sum - 1) < 1e-6, `sums to ${sum}`);
+  assert.doesNotThrow(() => validateRankingWeights(rankings.weights));
+  assert.ok(weights.roster_age_window > 0, 'an age factor, which the dynasty set lacks');
+  assert.equal(rankings.weights.dynasty.roster_age_window, undefined);
+  assert.ok(weights.future_draft_capital > rankings.weights.dynasty.future_draft_capital);
+  assert.ok(weights.starting_lineup < rankings.weights.dynasty.starting_lineup);
+});
+
+const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));
+
+test('--help documents the command with an example', () => {
+  const { stdout } = spawnSync(process.execPath, [cli, '--help'], { encoding: 'utf8' });
+  assert.match(stdout, /^ {2}future-stock {2,}Rank teams/m);
+  assert.match(stdout, /node src\/cli\.mjs future-stock --week \d+ --generate/);
+});
+
+for (const formatType of ['redraft', 'guillotine']) {
+  test(`the command refuses a declared ${formatType} league before contacting Sleeper`, () => {
+    const result = spawnSync(process.execPath, [cli, 'future-stock'], {
+      encoding: 'utf8',
+      env: { ...process.env, SLEEPER_LEAGUE_ID: '1', LEAGUE_FORMAT: formatType },
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /`future-stock` is a dynasty edition/);
+  });
+}

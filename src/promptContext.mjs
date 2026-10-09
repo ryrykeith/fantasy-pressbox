@@ -12,7 +12,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, resolveRankingWeights } from './config.mjs';
+import { ROOT, resolveFutureStockWeights, resolveRankingWeights } from './config.mjs';
 import { hasMatchups, hasEliminations, hasFutureDraftCapital } from './format.mjs';
 import { renderFormatBlocks } from './promptTemplate.mjs';
 import { currentSeeds } from './analysis/standings.mjs';
@@ -353,6 +353,10 @@ function editorialView(config, format, task) {
     ...(RANKING_TASKS.includes(task)
       ? { rankingWeights: resolveRankingWeights(config.rankings, formatType) }
       : {}),
+    // The future stock edition has its own set rather than its league
+    // format's: the dynasty set has no age factor and weighs this week's form
+    // far more than a forward-looking ranking should.
+    ...(task === FUTURE_STOCK_TASK ? { rankingWeights: resolveFutureStockWeights(config.rankings) } : {}),
     movementGuidance: config.rankings.weekly,
     bannedPhrases: config.editorial.banned_phrases ?? [],
     awards: awardsView(config.editorial.awards ?? {}, hasMatchups(format)),

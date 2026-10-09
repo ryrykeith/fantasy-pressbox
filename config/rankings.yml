@@ -64,6 +64,23 @@ weights:
     depth: 0.10                   # injury survivability — one hole is how a
                                    # floor collapses
 
+  future_stock:
+    # Used only by the `future-stock` edition, which is dynasty-only. Not a
+    # league format: the key is the edition's name. It ranks who is set up for
+    # the next three seasons, so it leans on age and picks and treats this
+    # week's form as evidence, not the thing ranked. Picks and youth are upside
+    # on top of production, never a substitute for it — hence production and
+    # age outweigh capital.
+    sustainable_production: 0.25  # points scored by players young enough to
+                                   # keep scoring (demonstrated, not projected)
+    roster_age_window: 0.25       # where the roster sits on each position's
+                                   # age curve; the dynasty set has no age
+                                   # factor at all
+    future_draft_capital: 0.20    # double the dynasty set's 0.10
+    dynasty_value: 0.15           # what the assets are worth long term
+    quarterback: 0.10             # weighted heavily in Superflex leagues
+    starting_lineup: 0.05         # current form: far less than dynasty's 0.30
+
 weekly:
   # How far a team should normally move in one week. One Sunday is a very
   # small sample and the rankings should act like it.
