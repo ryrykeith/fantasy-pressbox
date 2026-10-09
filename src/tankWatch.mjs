@@ -10,7 +10,7 @@
  * absence becomes an `unavailable` entry with an instruction, as everywhere
  * else in src/promptContext.mjs.
  */
-import { draftOrderMovement, pickLabel } from './analysis/draftOrder.mjs';
+import { draftOrderMovement, pickLabel, roundOrderInWords } from './analysis/draftOrder.mjs';
 import { DRAFT_ORDER_CONFIG_FILE, draftOrderInWords, requireDraftOrderRule } from './rookieDraft.mjs';
 import { prospectBoardUnavailable } from './prospectBoard.mjs';
 
@@ -153,8 +153,8 @@ function raceView(draftOrder) {
 
 /**
  * Every pick in the projected draft held by someone other than the team whose
- * finish decides it. Only round 1 carries a projected pick number; see
- * src/analysis/draftOrder.mjs for why later rounds do not.
+ * finish decides it. Later rounds carry a pick number only when the league
+ * has declared whether they run linear or snake (config/rookie-draft.yml).
  */
 function stakesView(draftOrder) {
   return draftOrder.slots.flatMap((slot) =>
@@ -165,7 +165,7 @@ function stakesView(draftOrder) {
         round: round.round,
         originalTeam: slot.originalTeam,
         ownedBy: round.owner,
-        projectedPick: round.round === 1 ? slot.pick : null,
+        projectedPick: round.pick ?? null,
       })),
   );
 }
@@ -213,6 +213,7 @@ export function tankWatchView({ draftOrder, rule, teamCount, playoffTeams, previ
     status: draftOrder.status,
     rule: draftOrderInWords(rule, { teamCount, playoffTeams }),
     topPicks: `${pickLabel(1, 1)}-${pickLabel(1, draftOrder.topLine)}`,
+    ...(roundOrderInWords(draftOrder.roundOrder) ? { laterRounds: roundOrderInWords(draftOrder.roundOrder) } : {}),
     race: raceView(draftOrder),
     stakes: stakesView(draftOrder),
     cliff: cliffView(draftOrder),
@@ -256,8 +257,7 @@ export function tankWatchUnavailable({ tankWatch, prize, week }) {
     });
   }
 
-  missing.push(
-    {
+  if (!tankWatch.laterRounds) missing.push({
       field: 'laterRoundPickNumbers',
       why:
         "The league has not declared whether later rounds run in the same order or snake, so only round 1 " +
@@ -265,7 +265,8 @@ export function tankWatchUnavailable({ tankWatch, prize, week }) {
       instruction:
         'Give pick numbers (like 1.02) for round 1 only. Name a later-round pick by its round and original ' +
         'team, never as 2.07 or similar.',
-    },
+    },);
+  missing.push(
     {
       field: 'pickTradeHistory',
       why: 'Who holds each pick is known; when it was traded and what was given for it are not included.',

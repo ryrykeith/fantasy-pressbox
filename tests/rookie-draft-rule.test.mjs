@@ -184,11 +184,17 @@ test('a playoff split without a known playoff field size is refused', () => {
 /* ------------------------------------------------------------ doctor */
 
 test('the rule reads in plain words, with pick ranges once the league is known', () => {
-  assert.deepEqual(describeDraftOrder(THIS_LEAGUE_RULE, { teamCount: 12, playoffTeams: 6 }), [
+  assert.deepEqual(describeDraftOrder(THIS_LEAGUE_RULE, { teamCount: 12, playoffTeams: 6, rounds: 'linear' }), [
     'Rookie draft order declared in config/rookie-draft.yml:',
     '  picks 1-6: the 6 teams that miss the playoffs, lowest max points-for first',
     '  picks 7-12: the 6 playoff teams, lowest max points-for first',
+    "  later rounds: linear, every round in round 1's order (1.07, 2.07, 3.07)",
   ]);
+});
+
+test('an undeclared round order reads as a missing setting, saying what it would unlock', () => {
+  const lines = describeDraftOrder(THIS_LEAGUE_RULE, { teamCount: 12, playoffTeams: 6 });
+  assert.match(lines.at(-1), /later rounds .*not declared.*linear or snake/);
 });
 
 test('an undeclared rule reads as a missing setting, naming where to set it', () => {
@@ -228,9 +234,13 @@ test('a league with no rookie-draft file declares no rule', () => {
   });
 });
 
-test('the shipped config/rookie-draft.yml is readable and declares nothing', () => {
+// This repository runs one league, and its rule is committed here on purpose:
+// until league workspaces land, config/ is that league's config. The test
+// guards that what is committed parses, rather than that it is empty.
+test('the committed config/rookie-draft.yml is readable and declares a projectable rule', () => {
   const config = loadConfig({ envPath: NO_ENV_FILE, rookieDraftPath: join(ROOT, 'config', 'rookie-draft.yml') });
-  assert.equal(config.rookieDraft.order, null);
+  assert.deepEqual(config.rookieDraft.order, THIS_LEAGUE_RULE);
+  assert.equal(config.rookieDraft.rounds, 'linear');
 });
 
 test('a misspelled rule stops the run at config load, naming the file', () => {

@@ -47,7 +47,27 @@
 #       direction: ascending
 #
 # Run `node src/cli.mjs doctor` after editing to see the rule in plain words.
+#
+# This league: the six teams that miss the playoffs take picks 1-6 by max
+# points-for, lowest first; the six playoff teams take 7-12 the same way.
 order:
+  - teams: non_playoff
+    sort: max_points_for
+    direction: ascending
+  - teams: playoff
+    sort: max_points_for
+    direction: ascending
+
+# How rounds after the first are ordered.
+#
+#   linear   every round runs in round 1's order: the team at 1.07 also picks
+#            2.07, 3.07 and so on
+#   snake    even rounds run in reverse: 1.07 is followed by 2.06 in a 12-team
+#            draft, then 3.07
+#
+# Sleeper does not say which a rookie draft will be. Leave it empty and only
+# round 1 picks get numbers; later-round picks are named by round and team.
+rounds: linear
 
 # The tank watch (node src/cli.mjs tank-watch).
 #

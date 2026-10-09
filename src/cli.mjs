@@ -322,6 +322,7 @@ async function commandDoctor(config) {
     for (const line of describeDraftOrder(config.rookieDraft.order, {
       teamCount: teams.length,
       playoffTeams: league.playoffTeams,
+      rounds: config.rookieDraft.rounds ?? null,
     })) {
       say(`  ${line}`);
     }
