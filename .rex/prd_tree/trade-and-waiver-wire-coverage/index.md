@@ -14,5 +14,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Trade report edition](./trade-report-edition/index.md) | pending |
-| [Transaction analysis](./transaction-analysis/index.md) | pending |
+| [Transaction analysis](./transaction-analysis/index.md) | completed |
 | [Waiver wire edition](./waiver-wire-edition/index.md) | pending |
