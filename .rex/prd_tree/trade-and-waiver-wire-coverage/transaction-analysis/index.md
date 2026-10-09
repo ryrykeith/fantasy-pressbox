@@ -14,5 +14,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Enrich transaction normalization with roster and need context](./enrich-transaction-normalization-with.md) | pending |
+| [Enrich transaction normalization with roster and need context](./enrich-transaction-normalization-with.md) | completed |
 | [Waiver and FAAB market context](./waiver-and-faab-market-context.md) | pending |
