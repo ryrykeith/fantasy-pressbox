@@ -692,6 +692,8 @@ async function commandEdition(config, args, task) {
     draftOrder,
     previousTankWatch,
     prospectBoard,
+    rosterWindow,
+    pickCapital,
     format,
   });
 
