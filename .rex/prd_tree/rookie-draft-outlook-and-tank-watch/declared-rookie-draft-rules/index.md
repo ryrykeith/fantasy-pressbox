@@ -14,5 +14,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Declare the rookie draft order rule](./declare-the-rookie-draft-order-rule.md) | in_progress |
+| [Declare the rookie draft order rule](./declare-the-rookie-draft-order-rule.md) | completed |
 | [Project the playoff field from current standings](./project-the-playoff-field-from-current.md) | pending |
