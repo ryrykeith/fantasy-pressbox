@@ -19,7 +19,7 @@ import { applyEnvFile } from './lib/env.mjs';
 import { parseDeclaredFormatType } from './format.mjs';
 import { parseDeclaredEliminations } from './analysis/elimination.mjs';
 import { byeWeekTableSource, parseByeWeekTable } from './analysis/byeExposure.mjs';
-import { parseDeclaredDraftOrder } from './rookieDraft.mjs';
+import { parseDeclaredDraftOrder, parseDeclaredRoundOrder } from './rookieDraft.mjs';
 import { parseProspectBoard } from './prospectBoard.mjs';
 import { parseTankWatchStartWeek } from './tankWatch.mjs';
 
@@ -131,7 +131,7 @@ const DEFAULT_GUILLOTINE = { eliminations: {} };
  * default, because Sleeper does not report one and any default this tool
  * picked would put picks in the wrong slots for some league.
  */
-const DEFAULT_ROOKIE_DRAFT = { order: null, tank_watch: { start_week: null } };
+const DEFAULT_ROOKIE_DRAFT = { order: null, rounds: null, tank_watch: { start_week: null } };
 
 /** Per-format weight maps: a partial override in rankings.yml replaces the whole set, never merges into it. */
 const RANKING_WEIGHT_REPLACE_KEYS = ['weights.dynasty', 'weights.redraft', 'weights.guillotine'];
@@ -291,6 +291,9 @@ export function loadConfig({
   const rookieDraftOrder = parseDeclaredDraftOrder(rookieDraft.order, {
     source: `order in ${rookieDraftPath}`,
   });
+  const rookieDraftRounds = parseDeclaredRoundOrder(rookieDraft.rounds, {
+    source: `rounds in ${rookieDraftPath}`,
+  });
   const tankWatchStartWeek = parseTankWatchStartWeek(rookieDraft.tank_watch?.start_week, {
     source: `tank_watch.start_week in ${rookieDraftPath}`,
   });
@@ -329,7 +332,7 @@ export function loadConfig({
     // no draft order can be projected (requireDraftOrderRule). The tank
     // watch's start week is null unless declared, meaning the regular
     // season's midpoint (src/tankWatch.mjs#resolveTankWatchStartWeek).
-    rookieDraft: { order: rookieDraftOrder, tankWatch: { startWeek: tankWatchStartWeek } },
+    rookieDraft: { order: rookieDraftOrder, rounds: rookieDraftRounds, tankWatch: { startWeek: tankWatchStartWeek } },
   };
 }
 

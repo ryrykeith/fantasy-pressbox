@@ -54,6 +54,32 @@ export function pickLabel(round, slot) {
   return `${round}.${String(slot).padStart(2, '0')}`;
 }
 
+/**
+ * A pick's number in any round, or null when it cannot be known.
+ *
+ * Round 1 is always the projected slot. Later rounds follow the declared round
+ * order (src/rookieDraft.mjs#DRAFT_ROUND_ORDERS): the same slot when linear,
+ * reversed in even rounds when it snakes, and unnumbered when undeclared.
+ */
+export function pickNumber(round, slot, { teamCount, roundOrder = null }) {
+  const position = positionInRound(round, slot, { teamCount, roundOrder });
+  return position === null ? null : pickLabel(round, position);
+}
+
+/** Where the team with a given round-1 slot picks within `round`, or null when undeclared. */
+export function positionInRound(round, slot, { teamCount, roundOrder = null }) {
+  if (round === 1 || roundOrder === 'linear') return slot;
+  if (roundOrder === 'snake') return round % 2 === 1 ? slot : teamCount + 1 - slot;
+  return null;
+}
+
+/** The declared round order in words, for a model to read. Null when undeclared. */
+export function roundOrderInWords(roundOrder) {
+  if (roundOrder === 'linear') return "linear: every round runs in round 1's order (1.07, 2.07, 3.07)";
+  if (roundOrder === 'snake') return 'snake: even rounds run in reverse order';
+  return null;
+}
+
 /** The draft season the current standings decide. */
 export function projectedDraftSeason(league) {
   return String(Number(league.season) + 1);
@@ -157,6 +183,7 @@ export function projectDraftOrder({
   picks = [],
   topLine = TOP_PICKS_LINE,
   bubbleGames = 0,
+  roundOrder = null,
 }) {
   requireDraftOrderRule(rule);
   const field = projectPlayoffField({ league, teams });
@@ -204,7 +231,13 @@ export function projectDraftOrder({
       topLine: topLineDistance(ordered, index, topLine),
       rounds: Array.from({ length: rounds }, (_, i) => {
         const ownerRosterId = owner(i + 1, team.rosterId);
-        return { round: i + 1, ownerRosterId, owner: name(ownerRosterId), traded: ownerRosterId !== team.rosterId };
+        return {
+          round: i + 1,
+          pick: pickNumber(i + 1, index + 1, { teamCount: ordered.length, roundOrder }),
+          ownerRosterId,
+          owner: name(ownerRosterId),
+          traded: ownerRosterId !== team.rosterId,
+        };
       }),
     };
   });
@@ -214,6 +247,7 @@ export function projectDraftOrder({
     status: field.status,
     topLine,
     rounds,
+    roundOrder,
     slots,
     cliff: buildCliff({ rule, sizes, teams, field, playoffIds, slots, holding, bubbleGames }),
   };

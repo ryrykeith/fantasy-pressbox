@@ -311,7 +311,7 @@ export function readDraftOrder({ league, teams, config = null, tradedPicks = [] 
     roundsPerDraft: league.draftRounds,
     season: projectedDraftSeason(league),
   });
-  return projectDraftOrder({ league, teams, rule, picks });
+  return projectDraftOrder({ league, teams, rule, picks, roundOrder: config?.rookieDraft?.rounds ?? null });
 }
 
 /** Fetch one week, save the raw bundle and the analyzed snapshot. */

@@ -82,6 +82,30 @@ function oneOf(source, label, value, valid) {
  * command rather than surfacing weeks later in the one edition that projects
  * picks.
  */
+/**
+ * How picks after round 1 are numbered.
+ *
+ * linear: every round runs in round 1's order, so the team picking 7th in round
+ *         1 picks 7th in every round (1.07, 2.07, 3.07 ...).
+ * snake:  even rounds run in reverse, so 1.07 is followed by 2.06 in a
+ *         12-team draft, then 3.07.
+ *
+ * Sleeper does not say which a rookie draft will be, so it is declared. Until
+ * it is, only round 1 picks get numbers.
+ */
+export const DRAFT_ROUND_ORDERS = ['linear', 'snake'];
+
+/** Absent means "not declared" and returns null; anything else must be a known order. */
+export function parseDeclaredRoundOrder(value, { source = `rounds in ${DRAFT_ORDER_CONFIG_FILE}` } = {}) {
+  if (value === undefined || value === null || value === '') return null;
+  const text = String(value).trim().toLowerCase();
+  if (DRAFT_ROUND_ORDERS.includes(text)) return text;
+  throw new Error(
+    `${source} is "${String(value).trim()}". Use linear (every round in round 1's order) or snake ` +
+      '(even rounds reversed), or leave it empty to number round 1 picks only.',
+  );
+}
+
 export function parseDeclaredDraftOrder(value, { source = `order in ${DRAFT_ORDER_CONFIG_FILE}` } = {}) {
   if (value === undefined || value === null) return null;
   if (!Array.isArray(value) || value.length === 0) {
@@ -213,7 +237,7 @@ export function draftOrderGroupSizes(rule, { teamCount, playoffTeams }) {
  * Pick ranges are shown when the league's size is known; otherwise each group
  * is described without them.
  */
-export function describeDraftOrder(rule, { teamCount, playoffTeams } = {}) {
+export function describeDraftOrder(rule, { teamCount, playoffTeams, rounds = null } = {}) {
   if (!rule) {
     return [
       `Rookie draft order ✗ not declared — set \`order\` in ${DRAFT_ORDER_CONFIG_FILE} ` +
@@ -223,6 +247,11 @@ export function describeDraftOrder(rule, { teamCount, playoffTeams } = {}) {
   return [
     `Rookie draft order declared in ${DRAFT_ORDER_CONFIG_FILE}:`,
     ...draftOrderInWords(rule, { teamCount, playoffTeams }).map((line) => `  ${line}`),
+    rounds === 'linear'
+      ? "  later rounds: linear, every round in round 1's order (1.07, 2.07, 3.07)"
+      : rounds === 'snake'
+        ? '  later rounds: snake, even rounds in reverse'
+        : '  later rounds ✗ not declared — set `rounds` to linear or snake to number picks after round 1',
   ];
 }
 

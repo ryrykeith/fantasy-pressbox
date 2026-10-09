@@ -13,6 +13,7 @@
  * Only the draft this season's standings decide is projected. Only round 1 has
  * pick numbers, for the reason src/analysis/draftOrder.mjs gives.
  */
+import { pickNumber, positionInRound, roundOrderInWords } from './analysis/draftOrder.mjs';
 import { draftOrderInWords } from './rookieDraft.mjs';
 import { PLAYOFF_SIDE_IN_WORDS } from './tankWatch.mjs';
 import { prospectBoardUnavailable } from './prospectBoard.mjs';
@@ -44,14 +45,32 @@ export function pickProjection(pick, { draftOrder, board = null }) {
   const slot = draftOrder.slots.find((entry) => entry.originalRosterId === pick.originalRosterId);
   if (!slot) return null;
 
+  const numbering = { teamCount: draftOrder.slots.length, roundOrder: draftOrder.roundOrder ?? null };
   const base = {
-    projectedPick: pick.round === 1 ? slot.pick : null,
+    projectedPick: pickNumber(pick.round, slot.slot, numbering),
     of: draftOrder.slots.length,
     ...(PLAYOFF_SIDE_IN_WORDS[slot.groupTeams] ? { originalTeamSide: PLAYOFF_SIDE_IN_WORDS[slot.groupTeams] } : {}),
   };
-  if (pick.round !== 1) return { ...base, originalTeamRound1Pick: slot.pick };
+  if (base.projectedPick === null) return { ...base, originalTeamRound1Pick: slot.pick };
 
   const cliff = draftOrder.cliff.find((entry) => entry.originalRosterId === pick.originalRosterId);
+  if (pick.round !== 1) {
+    // The prospect board is a first-round class board, so later rounds carry the
+    // cliff but no prospects. Moves are counted within the pick's own round,
+    // which in a snake draft runs the other way in even rounds.
+    if (!cliff) return base;
+    const now = positionInRound(pick.round, cliff.slot, numbering);
+    const ifCrossed = positionInRound(pick.round, cliff.slotIfCrossed, numbering);
+    return {
+      ...base,
+      ifOriginalTeamCrosses: {
+        pick: pickNumber(pick.round, cliff.slotIfCrossed, numbering),
+        picksMoved: now - ifCrossed,
+        gamesFromLine: cliff.gamesFromLine,
+        swappedWith: cliff.swappedWith.originalTeam,
+      },
+    };
+  }
   const around = prospectsAroundPick(board, slot.slot).map(boardLine);
   const aroundIfCrossed = cliff ? prospectsAroundPick(board, cliff.slotIfCrossed).map(boardLine) : [];
   return {
@@ -78,6 +97,7 @@ export function draftProjectionView(draftOrder, { rule, teamCount, playoffTeams,
     status: draftOrder.status,
     asOfWeek: asOfWeek ?? null,
     rule: draftOrderInWords(rule, { teamCount, playoffTeams }),
+    ...(roundOrderInWords(draftOrder.roundOrder) ? { laterRounds: roundOrderInWords(draftOrder.roundOrder) } : {}),
   };
 }
 
@@ -173,7 +193,7 @@ export function tradePicksUnavailable({ picks, draftProjection, board }) {
       'at the time. Grade the pick on where it projects now.',
   });
 
-  if (projected.some((pick) => pick.round !== 1)) {
+  if (!draftProjection.laterRounds && projected.some((pick) => pick.round !== 1)) {
     missing.push({
       field: 'laterRoundPickNumbers',
       why:
