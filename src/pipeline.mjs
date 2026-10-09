@@ -18,6 +18,12 @@ import { buildDangerBoard } from './analysis/danger.mjs';
 import { buildFaabMarket, weekBids } from './analysis/faab.mjs';
 import { enrichTransactions } from './analysis/transactions.mjs';
 import { byeWeekTableSource, upcomingByeExposure } from './analysis/byeExposure.mjs';
+import {
+  MarketValuesError,
+  fetchMarketValues,
+  marketValueQuery,
+  normalizeMarketValues,
+} from './fantasycalc/client.mjs';
 import { hasEliminations } from './format.mjs';
 import { createStore } from './store.mjs';
 import { loadByeWeekTable } from './config.mjs';
@@ -194,6 +200,45 @@ export function readTransactions({ store, league, teams, players, describePlayer
     players,
     weeks: raw.map((bundle) => ({ week: bundle.week, rosters: normalizeWeekRosters(bundle.matchups) })),
   });
+}
+
+/**
+ * The trade-value market for a week (src/fantasycalc/client.mjs), fetched
+ * once and then read back from disk.
+ *
+ * The first fetch for a week is saved and every later run reuses it, so
+ * re-running a trade report grades against the same numbers rather than
+ * whatever the market says that afternoon. `refresh` fetches again anyway.
+ *
+ * A failed fetch never fails the edition: it returns `{ unavailable }` with the
+ * reason, and src/promptContext.mjs turns that into an `unavailable` entry
+ * telling the model not to quote any value.
+ */
+export async function readMarketValues({ store, league, teams, week, refresh = false, fetchImpl = fetch }) {
+  if (!refresh) {
+    const saved = store.loadMarketValues(league.season, week);
+    if (saved) return saved;
+  }
+  const query = marketValueQuery({ format: league.format, teamCount: teams.length });
+  try {
+    const { players, picks } = normalizeMarketValues(await fetchMarketValues(query, { fetchImpl }));
+    const snapshot = {
+      source: 'FantasyCalc',
+      label: query.label,
+      fetchedAt: new Date().toISOString(),
+      week,
+      params: query.params,
+      caveats: query.caveats,
+      players,
+      picks,
+    };
+    store.saveMarketValues(league.season, week, snapshot);
+    return snapshot;
+  } catch (error) {
+    // Only a market that could not be read degrades; a bug still throws.
+    if (!(error instanceof MarketValuesError)) throw error;
+    return { unavailable: error.message };
+  }
 }
 
 /**

@@ -55,8 +55,10 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/analysis/danger.mjs` | The chop line, survival margin and rolling floor for a guillotine league |
 | `src/analysis/faab.mjs` | Remaining FAAB per survivor and the player pool each chop released, for a guillotine league |
 | `src/analysis/transactions.mjs` | A transaction's grading context: each side's roster shape before and after, a claim's cost against budget, moved players' weekly points |
+| `src/analysis/standings.mjs` | Current seeds: wins, then points-for |
+| `src/fantasycalc/client.mjs` | FantasyCalc trade values: query from the league's format and scoring, fetch, normalize. FantasyCalc field names stop here, as Sleeper's stop at `src/sleeper/` |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
-| `src/store.mjs` | Snapshots, rankings, predictions, movement, grading |
+| `src/store.mjs` | Snapshots, rankings, predictions, market values, movement, grading |
 | `src/teamIdentity.mjs` | Which roster a published team name means, across renames |
 | `src/promptContext.mjs` | Assembles the model's facts and instructions |
 | `src/generate.mjs` | Optional Anthropic / OpenAI call |
