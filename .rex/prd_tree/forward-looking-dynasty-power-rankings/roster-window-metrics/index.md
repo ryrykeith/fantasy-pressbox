@@ -14,5 +14,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Roster age and production-window aggregates](./roster-age-and-production-window.md) | pending |
+| [Roster age and production-window aggregates](./roster-age-and-production-window.md) | completed |
 | [Three-year pick capital horizon](./three-year-pick-capital-horizon.md) | pending |
