@@ -17,5 +17,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Redraft ranking weights and prompt guidance](./redraft-ranking-weights-and-prompt.md) | pending |
+| [Redraft ranking weights and prompt guidance](./redraft-ranking-weights-and-prompt.md) | in_progress |
 | [Suppress dynasty-only context in redraft leagues](./suppress-dynasty-only-context-in.md) | completed |

@@ -14,6 +14,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, resolveRankingWeights } from './config.mjs';
 import { hasMatchups, hasEliminations, hasFutureDraftCapital } from './format.mjs';
+import { renderFormatBlocks } from './promptTemplate.mjs';
 
 const TASK_PROMPTS = {
   'preseason-rankings': 'preseason-power-rankings.md',
@@ -71,10 +72,15 @@ const FIXED_FIELD_RANKING_TASKS = ['preseason-rankings', 'rankings', 'postseason
  */
 export const RANKING_TASKS = [...FIXED_FIELD_RANKING_TASKS, 'survival-rankings'];
 
-function readPrompt(file) {
+/**
+ * Reads a prompt file and resolves its format-conditional sections (see
+ * src/promptTemplate.mjs) for `formatType`. A file with no such sections reads
+ * the same for every format, so `formatType` may be omitted for it.
+ */
+function readPrompt(file, formatType) {
   const path = join(ROOT, 'prompts', file);
   if (!existsSync(path)) throw new Error(`Missing prompt file: prompts/${file}`);
-  const text = readFileSync(path, 'utf8').trim();
+  const text = renderFormatBlocks(readFileSync(path, 'utf8').trim(), formatType, file);
   if (!text) throw new Error(`Prompt file prompts/${file} is empty.`);
   return text;
 }
@@ -974,11 +980,11 @@ export function buildPrompt({ task, context }) {
     '',
     '---',
     '',
-    readPrompt('system.md'),
+    readPrompt('system.md', context.league.format?.type),
     '',
     '---',
     '',
-    readPrompt(file),
+    readPrompt(file, context.league.format?.type),
     '',
     '---',
     '',
@@ -999,10 +1005,14 @@ export function buildPrompt({ task, context }) {
   ].join('\n');
 }
 
-export function systemPromptOnly() {
-  return readPrompt('system.md');
+/** The system prompt alone, resolved for the league's format type. */
+export function systemPromptOnly(formatType) {
+  return readPrompt('system.md', formatType);
 }
 
-export function taskPromptOnly(task) {
-  return readPrompt(TASK_PROMPTS[task]);
+/** One edition's instructions alone, resolved for the league's format type. */
+export function taskPromptOnly(task, formatType) {
+  const file = TASK_PROMPTS[task];
+  if (!file) throw new Error(`Unknown task "${task}". Known tasks: ${TASKS.join(', ')}`);
+  return readPrompt(file, formatType);
 }

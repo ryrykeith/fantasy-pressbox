@@ -64,6 +64,42 @@ evidence rules are materially different:
 Collapsing these into one prompt with conditionals invites the preseason
 edition to leak knowledge it should not have.
 
+## Format-conditional sections
+
+League format is the opposite case. A redraft ranking and a dynasty ranking
+follow the same evidence rules, structure and house style; they differ only in
+a few passages: dynasty asset value, age curves and future draft capital.
+Those passages are wrapped in delimited blocks inside the shared prompt file:
+
+```
+<!-- format: dynasty -->
+## Draft capital
+...
+<!-- end format -->
+```
+
+A block may name several formats (`<!-- format: dynasty, redraft -->`). Text
+outside any block applies to every format.
+
+**Decision: conditional blocks in one file, not one file per format.** Per-format
+copies would duplicate the house style (structure, tiers, the JSON tail) across
+files that would drift apart the first time someone edited one and not the
+other. Blocks keep one file per edition, and the HTML-comment markers keep the
+exceptions visibly fenced off.
+
+The blocks are resolved by `src/promptTemplate.mjs` when the prompt is built,
+from `context.league.format.type`, so the model never sees a block that is not
+for its league. It is not asked to skip the dynasty passage; it never reads it.
+Malformed markup is refused rather than guessed at: an unknown format name, an
+unclosed, nested or stray marker, or a file with blocks rendered without a
+format. `tests/prompt-format-blocks.test.mjs` renders every prompt file for
+every format, and checks that the redraft ranking instructions contain no
+dynasty-only vocabulary.
+
+In a redraft league, age is still a fair factor where it bears on this season
+(an ageing running back losing touches), but never as an argument about what
+a player is worth later.
+
 ## The output contract
 
 ### Post separation

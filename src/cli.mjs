@@ -537,8 +537,8 @@ async function commandEdition(config, args, task) {
   say(`Generating with ${describeProvider(config.ai)}...`);
   const result = await generate({
     ai: config.ai,
-    system: systemPromptOnly(),
-    user: [taskPromptOnly(task), '', '# LEAGUE CONTEXT', '', '```json', JSON.stringify(context, null, 2), '```'].join('\n'),
+    system: systemPromptOnly(context.league.format?.type),
+    user: [taskPromptOnly(task, context.league.format?.type), '', '# LEAGUE CONTEXT', '', '```json', JSON.stringify(context, null, 2), '```'].join('\n'),
   });
 
   const body = stripJsonBlock(result.text);
