@@ -135,13 +135,32 @@ function noSlotEntry(why, scope) {
 
 /**
  * What a trade grade does not know about the traded picks, each with its
- * instruction.
+ * instruction: everything projectedPicksUnavailable says, plus the fact that
+ * the projection is today's and not the one either manager traded on.
  *
  * @param picks           every pick that moved in the edition's trades
  * @param draftProjection draftProjectionView, or null when no order is projected
  * @param board           the board as it reached the context (tradeProspectBoard), or null
  */
 export function tradePicksUnavailable({ picks, draftProjection, board }) {
+  return projectedPicksUnavailable({ picks, draftProjection, board, tradeTime: true });
+}
+
+/**
+ * What any edition does not know about a set of future picks it places at a
+ * projected slot: which drafts are not projected at all (no tier, no slot),
+ * that a projected slot is not settled, which later-round picks have no
+ * number, and what the prospect board may and may not be used to say.
+ *
+ * Shared by the trade report and the future stock edition, so a pick is
+ * described under the same rules wherever it appears.
+ *
+ * @param picks           every pick the edition places, as { season, round }
+ * @param draftProjection draftProjectionView, or null when no order is projected
+ * @param board           the board as it reached the context (tradeProspectBoard), or null
+ * @param tradeTime       the edition grades trades, so say the slot is today's, not the trade day's
+ */
+export function projectedPicksUnavailable({ picks, draftProjection, board, tradeTime = false }) {
   if (!picks.length) return [];
   if (!draftProjection) {
     return [
@@ -185,13 +204,15 @@ export function tradePicksUnavailable({ picks, draftProjection, board }) {
     });
   }
 
-  missing.push({
-    field: 'projectedSlotAtTradeTime',
-    why: 'The projection is from the current standings, not the standings on the day each trade was made.',
-    instruction:
-      'Do not say what either manager expected a pick to be when they traded it, or that a slot was known ' +
-      'at the time. Grade the pick on where it projects now.',
-  });
+  if (tradeTime) {
+    missing.push({
+      field: 'projectedSlotAtTradeTime',
+      why: 'The projection is from the current standings, not the standings on the day each trade was made.',
+      instruction:
+        'Do not say what either manager expected a pick to be when they traded it, or that a slot was known ' +
+        'at the time. Grade the pick on where it projects now.',
+    });
+  }
 
   if (!draftProjection.laterRounds && projected.some((pick) => pick.round !== 1)) {
     missing.push({

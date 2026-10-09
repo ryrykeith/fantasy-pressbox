@@ -396,6 +396,7 @@ Run them all from inside the project folder.
 | `node src/cli.mjs survival-rankings` | Build the power rankings for a guillotine league — the teams still alive, ranked on the floor that keeps them there. Guillotine leagues only; it replaces `rankings`. |
 | `node src/cli.mjs preseason-rankings` | Build preseason rankings, ignoring all results. |
 | `node src/cli.mjs tank-watch` | Build the tank watch: the race for next season's top rookie picks, who owns them, and which picks jump if their team crosses the playoff line. Dynasty leagues only. It needs a declared draft order (see `config/rookie-draft.yml`) and opens from the middle of the regular season. |
+| `node src/cli.mjs future-stock` | Rank every team on the next three seasons rather than this week: production by age band, each position's age curve, and priced future picks, with its own weight set (`weights.future_stock` in `config/rankings.yml`). Dynasty leagues only; it refuses redraft and guillotine leagues. Not recorded, so it prints no movement arrows. |
 | `node src/cli.mjs fetch` | Just download and save a week of league data. |
 | `node src/cli.mjs record <file> --task <name>` | File a finished edition you pasted back from a chat. |
 | `node src/cli.mjs check <file>` | Check a file of posts against the Sleeper length limit. |

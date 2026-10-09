@@ -78,6 +78,42 @@ later injuries or later roster changes — even when generated after week 1.
 Their value is that they are a sealed prediction, and that only works if the
 ignorance is honest.
 
+### Future stock: ranking the next three seasons
+
+The `future-stock` edition (`prompts/future-stock.md`) is a second dynasty
+ranking with a different question: which teams are set up for the next three
+seasons, not who is strongest now. It refuses redraft and guillotine leagues.
+In those formats there is no multi-season window to rank.
+
+The hard part is not projecting too much. The edition must not turn into youth
+worship. The prompt carries these rules as judgement, because no computation
+can decide them:
+
+- **The ideal is current production with a sustainable age curve.** It is not
+  the youngest roster or the one with the most picks.
+- **Youth without production is potential, not value.** The production split
+  by age band (`src/analysis/rosterWindow.mjs`) is what tells young-and-good
+  apart from young. The model must cite it for every team.
+- **Ageing is position-aware.** A 29-year-old running back and a 29-year-old
+  quarterback are not comparable.
+- **A projected pick is still a projection.** A projected top-three 1st is real
+  capital. It still never outweighs a productive young core, and the guard
+  covers picks as much as players. Only the draft this season's standings
+  decide is placed at a slot or tier. A later draft's picks never are. Board
+  prospects are named only as the board ranks them, with its source.
+
+**The motivating case.** In the operator's league after week 4, Taco Tuesday
+is a contender: 2-2 and a playoff seed, with points from an older core. It holds
+no 2027 1st or 2nd. Rebuild Szn is 1-3 with the league's lowest points-for. It holds
+its own 1st, projected 1.02, and Taco Tuesday' 1st, projected 1.07. That pick
+becomes 1.02 if Taco Tuesday misses the playoffs. The edition must put Taco
+Tuesday near the bottom whatever its record. Its points come from players who
+are leaving, and it has nothing to replace them with. Rebuild Szn's two 1sts are
+real upside. They do not lift Rebuild Szn above a team whose young starters are
+already scoring. `tests/future-stock.test.mjs` builds this league and checks
+that each of those facts reaches the context and that the prompt states each
+rule.
+
 ## Tone
 
 Confident, analytical, funny, dry, slightly petty, occasionally absurd,

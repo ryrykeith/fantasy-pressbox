@@ -8,6 +8,7 @@
 import { createClient } from './sleeper/client.mjs';
 import {
   futurePickOwnership,
+  isFuturePick,
   normalizeLeague,
   normalizeTeams,
   normalizeTransactions,
@@ -20,6 +21,8 @@ import { buildEliminationLedger } from './analysis/elimination.mjs';
 import { buildDangerBoard } from './analysis/danger.mjs';
 import { buildFaabMarket, weekBids } from './analysis/faab.mjs';
 import { enrichTransactions } from './analysis/transactions.mjs';
+import { buildRosterWindow } from './analysis/rosterWindow.mjs';
+import { buildPickCapital, pickCapitalSeasons } from './analysis/pickCapital.mjs';
 import { byeWeekTableSource, upcomingByeExposure } from './analysis/byeExposure.mjs';
 import {
   MarketValuesError,
@@ -312,6 +315,53 @@ export function readDraftOrder({ league, teams, config = null, tradedPicks = [] 
     season: projectedDraftSeason(league),
   });
   return projectDraftOrder({ league, teams, rule, picks, roundOrder: config?.rookieDraft?.rounds ?? null });
+}
+
+/**
+ * Each team's future draft capital across the tradeable drafts, priced
+ * (src/analysis/pickCapital.mjs). Fetches nothing: `market` is the week's
+ * readMarketValues result (or null), so a caller without a market still gets
+ * every team's picks, unpriced.
+ *
+ * The horizon is the seasons Sleeper reports a future pick moving in plus the
+ * seasons the market prices, never a fixed count. Ownership is
+ * futurePickOwnership per season, so a team absent from Sleeper's traded picks
+ * holds its full complement. Null for a format with no future draft capital,
+ * for the reason src/cli.mjs gives at normalizeFutureDraftCapital.
+ */
+export function readPickCapital({ league, teams, tradedPicks = [], market = null, config = null }) {
+  if (!hasFutureDraftCapital(league.format)) return null;
+  const future = tradedPicks.filter((pick) => isFuturePick(pick, league));
+  const priced = Object.values(market?.picks ?? {}).filter((pick) => isFuturePick(pick, league));
+  const seasons = pickCapitalSeasons({
+    tradedSeasons: future.map((pick) => String(pick.season)),
+    pricedSeasons: priced.map((pick) => String(pick.season)),
+    nextDraft: projectedDraftSeason(league),
+  });
+  const rosterIds = teams.map((team) => team.rosterId);
+  const picks = seasons.flatMap((season) =>
+    futurePickOwnership({ tradedPicks: future, rosterIds, roundsPerDraft: league.draftRounds, season }),
+  );
+  const draftOrder = readDraftOrder({ league, teams, config, tradedPicks: future });
+  return buildPickCapital({ teams, seasons, picks, market, draftOrder });
+}
+
+/**
+ * Each team's age structure and production by age band
+ * (src/analysis/rosterWindow.mjs), from the weeks already on disk. Fetches
+ * nothing. Null for a format with no future draft capital: a redraft roster
+ * has no window to look through.
+ */
+export function readRosterWindow({ store, league, teams, players, throughWeek, ageBandEdges }) {
+  if (!hasFutureDraftCapital(league.format)) return null;
+  return buildRosterWindow({
+    teams,
+    players,
+    weeks: store
+      .loadRawThrough(league.season, throughWeek)
+      .map((bundle) => ({ week: bundle.week, rosters: normalizeWeekRosters(bundle.matchups) })),
+    ageBandEdges,
+  });
 }
 
 /** Fetch one week, save the raw bundle and the analyzed snapshot. */
