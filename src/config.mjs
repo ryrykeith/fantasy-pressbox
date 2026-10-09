@@ -30,7 +30,7 @@
  * Run from a checkout's own folder the two are the same directory, which is
  * how a cloned repository covering one league keeps working unchanged.
  */
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, readdirSync, realpathSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseYaml } from './lib/yaml.mjs';
@@ -78,6 +78,38 @@ export function resolveWorkspaceRoot({ flag, env = process.env, cwd = process.cw
 /** The workspace's own config folder: the league's rookie-draft, guillotine and prospect files. */
 export function workspaceConfigDir(workspaceRoot) {
   return join(workspaceRoot, 'config');
+}
+
+/** The workspace's optional prompts folder: files in it shadow the shipped prompts of the same name. */
+export function workspacePromptsDir(workspaceRoot) {
+  return join(workspaceRoot, 'prompts');
+}
+
+/**
+ * True when the workspace IS the package folder, as in a clone run from its own
+ * root. There is then nothing to override: the "workspace copy" of a file would
+ * be the shipped file read a second time, and doctor would report every shipped
+ * file as a local override.
+ */
+function workspaceIsPackage(workspaceRoot) {
+  return realpathSync(workspaceRoot) === realpathSync(PACKAGE_ROOT);
+}
+
+/**
+ * Lists the workspace's prompt overrides against the shipped prompts.
+ *
+ * `overridden` are workspace files that shadow a shipped prompt of the same
+ * name; `unmatched` are workspace .md files that shadow nothing — nearly always
+ * a misspelt name, which would otherwise fail silently by never being read.
+ */
+export function describePromptOverrides(promptsDir) {
+  if (!promptsDir) return { overridden: [], unmatched: [] };
+  const shipped = new Set(readdirSync(join(PACKAGE_ROOT, 'prompts')));
+  const local = readdirSync(promptsDir).filter((file) => file.endsWith('.md')).sort();
+  return {
+    overridden: local.filter((file) => shipped.has(file)),
+    unmatched: local.filter((file) => !shipped.has(file)),
+  };
 }
 
 const DEFAULT_EDITORIAL = {
@@ -326,14 +358,20 @@ export function readYamlFile(path, fallback, { replaceKeys = [] } = {}) {
   }
 }
 
-function deepMerge(base, override) {
+function deepMerge(base, override, trail = []) {
   const result = { ...base };
   for (const [key, value] of Object.entries(override)) {
     if (value === null || value === undefined) continue;
-    result[key] =
-      typeof value === 'object' && !Array.isArray(value) && typeof base?.[key] === 'object'
-        ? deepMerge(base[key], value)
-        : value;
+    const here = [...trail, key].join('.');
+    const baseValue = base?.[key];
+    const isMap = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
+    // A setting that is a table in the layer below cannot become a bare value
+    // (`output: oops`): the merge would replace the whole table and a later read
+    // would fail somewhere unrelated. Say which setting is wrong instead.
+    if (isMap(baseValue) && !isMap(value)) {
+      throw new Error(`${here} must be a table of settings, not ${JSON.stringify(value)}`);
+    }
+    result[key] = isMap(value) && isMap(baseValue) ? deepMerge(baseValue, value, [...trail, key]) : value;
   }
   return result;
 }
@@ -347,8 +385,9 @@ function bool(value, fallback) {
  * Loads a run's settings for the league in `workspaceRoot`.
  *
  * League-specific files (.env, rookie-draft.yml, guillotine.yml) are read from
- * the workspace. The editorial and ranking defaults are read from the package;
- * a workspace overriding them is a separate step. data/ and output/ default
+ * the workspace only. The editorial and ranking defaults are read from the
+ * package, then a workspace config/editorial.yml or rankings.yml is layered on
+ * top; a workspace prompts/ folder is returned as `promptsDir`. data/ and output/ default
  * into the workspace, and a relative DATA_DIR or OUTPUT_DIR is taken from it
  * too, so a league folder means the same thing whichever shell runs it.
  */
@@ -359,16 +398,33 @@ export function loadConfig({
   editorialPath = join(PACKAGE_ROOT, 'config', 'editorial.yml'),
   guillotinePath = join(workspaceConfigDir(workspaceRoot), 'guillotine.yml'),
   rookieDraftPath = join(workspaceConfigDir(workspaceRoot), 'rookie-draft.yml'),
+  workspaceEditorialPath = join(workspaceConfigDir(workspaceRoot), 'editorial.yml'),
+  workspaceRankingsPath = join(workspaceConfigDir(workspaceRoot), 'rankings.yml'),
+  workspacePromptsPath = workspacePromptsDir(workspaceRoot),
 } = {}) {
   applyEnvFile(envPath);
   const env = process.env;
 
-  const editorial = readYamlFile(editorialPath, DEFAULT_EDITORIAL, {
-    replaceKeys: ['ranking_emoji', 'awards', 'banned_phrases'],
-  });
-  const rankings = readYamlFile(rankingsPath, DEFAULT_RANKINGS, {
-    replaceKeys: RANKING_WEIGHT_REPLACE_KEYS,
-  });
+  // Layers, lowest first: built-in defaults, the shipped file, the workspace's
+  // copy. Each is read by the same readYamlFile with the same replaceKeys, so a
+  // workspace that writes out a ranking_emoji table or a weight set replaces it
+  // outright, exactly as the shipped file does over the built-ins. A workspace
+  // that is the package folder has no layer of its own.
+  const own = !workspaceIsPackage(workspaceRoot);
+  const editorialOverride = own && existsSync(workspaceEditorialPath) ? workspaceEditorialPath : null;
+  const rankingsOverride = own && existsSync(workspaceRankingsPath) ? workspaceRankingsPath : null;
+  const promptsDir = own && existsSync(workspacePromptsPath) ? workspacePromptsPath : null;
+
+  const editorialOptions = { replaceKeys: ['ranking_emoji', 'awards', 'banned_phrases'] };
+  const shippedEditorial = readYamlFile(editorialPath, DEFAULT_EDITORIAL, editorialOptions);
+  const editorial = editorialOverride
+    ? readYamlFile(editorialOverride, shippedEditorial, editorialOptions)
+    : shippedEditorial;
+  const rankingsOptions = { replaceKeys: RANKING_WEIGHT_REPLACE_KEYS };
+  const shippedRankings = readYamlFile(rankingsPath, DEFAULT_RANKINGS, rankingsOptions);
+  const rankings = rankingsOverride
+    ? readYamlFile(rankingsOverride, shippedRankings, rankingsOptions)
+    : shippedRankings;
   // Every set the file defines is checked, not only the one this league uses
   // — see the comment on validateRankingWeights.
   validateRankingWeights(rankings.weights);
@@ -404,6 +460,18 @@ export function loadConfig({
 
   return {
     workspaceRoot,
+    // Which workspace files were read (null: absent, so the shipped default or
+    // built-in applied). doctor reports these so a confusing output can be
+    // traced to a local file.
+    sources: {
+      env: existsSync(envPath) ? envPath : null,
+      rookieDraft: existsSync(rookieDraftPath) ? rookieDraftPath : null,
+      guillotine: existsSync(guillotinePath) ? guillotinePath : null,
+      editorialOverride,
+      rankingsOverride,
+    },
+    // The workspace prompts folder, or null when there is none to consult.
+    promptsDir,
     leagueId: (env.SLEEPER_LEAGUE_ID || '').trim(),
     season: env.SLEEPER_SEASON ? String(env.SLEEPER_SEASON).trim() : null,
     week: env.FANTASY_WEEK ? Number.parseInt(env.FANTASY_WEEK, 10) : null,

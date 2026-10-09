@@ -64,6 +64,28 @@ workspace's config folder.
 Run from a checkout's own folder, the two roots are the same directory, which
 is how a cloned repository covering one league keeps working unchanged.
 
+### Workspace overrides
+
+A workspace may adjust the shipped defaults without copying the package:
+
+- `config/editorial.yml` and `config/rankings.yml` in the workspace are layered
+  over the shipped files with the same `readYamlFile` and the same
+  `replaceKeys` (a `ranking_emoji` table or a weight set replaces, the rest
+  merges). The merged weights are still checked to sum to 1.0, and a setting
+  that is a table in the shipped file cannot be overridden by a bare value.
+- `prompts/<name>.md` in the workspace shadows the shipped prompt of the same
+  name; every other prompt still comes from the package. `readPrompt` reads
+  either through `renderFormatBlocks`, so an override's `<!-- format: -->`
+  blocks resolve exactly as the shipped prompt's do.
+- League-specific files (`.env`, `rookie-draft.yml`, `guillotine.yml`,
+  `prospects.<year>.yml`) are never layered: they come from the workspace only.
+- When the workspace is the package folder there is nothing to override, so none
+  is reported.
+
+`doctor` prints where `.env`, `rookie-draft.yml` and `guillotine.yml` were read
+from, lists each overridden config file and prompt with its path, and flags a
+workspace prompt whose name matches no shipped prompt (it would never be read).
+
 ## Module map
 
 | Path | Responsibility |

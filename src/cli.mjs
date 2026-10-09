@@ -13,6 +13,7 @@ import {
   loadConfig,
   loadProspectBoard,
   PACKAGE_ROOT,
+  describePromptOverrides,
   rankEmoji,
   resolveRankingWeights,
   resolveWorkspaceRoot,
@@ -284,6 +285,34 @@ function writeOutput(config, name, body) {
 
 /* ---------------------------------------------------------------- commands */
 
+/**
+ * Where each league setting was read from, and which shipped defaults this
+ * workspace overrides — so a confusing output can be traced to a local file.
+ */
+function describeLocalSettings(config) {
+  const { sources } = config;
+  const from = (path) => (path ? `read from ${path}` : 'not found — nothing declared');
+  const lines = [
+    `  League settings    .env ${sources.env ? `read from ${sources.env}` : 'not found'}`,
+    `                     rookie-draft.yml ${from(sources.rookieDraft)}`,
+    `                     guillotine.yml ${from(sources.guillotine)}`,
+  ];
+  const overrides = [];
+  if (sources.editorialOverride) overrides.push(`config/editorial.yml (${sources.editorialOverride})`);
+  if (sources.rankingsOverride) overrides.push(`config/rankings.yml (${sources.rankingsOverride})`);
+  const { overridden, unmatched } = describePromptOverrides(config.promptsDir);
+  for (const file of overridden) overrides.push(`prompts/${file} (${join(config.promptsDir, file)})`);
+  lines.push(
+    overrides.length
+      ? `  Local overrides    ${overrides.join('\n                     ')}`
+      : '  Local overrides    none — using the shipped defaults',
+  );
+  for (const file of unmatched) {
+    lines.push(`                     ✗ ${join(config.promptsDir, file)} matches no shipped prompt, so it is never read`);
+  }
+  return lines;
+}
+
 async function commandDoctor(config) {
   say('Fantasy Pressbox check\n');
   const major = Number.parseInt(process.versions.node.split('.')[0], 10);
@@ -301,6 +330,7 @@ async function commandDoctor(config) {
       return !existsSync(path) || readFileSync(path, 'utf8').trim() === '';
     });
   say(`  Prompt files       ${missingPrompts.length ? `✗ empty or missing: ${missingPrompts.join(', ')}` : '✓'}`);
+  for (const line of describeLocalSettings(config)) say(line);
 
   // Every set in config/rankings.yml was already checked to sum to 1.0 when
   // config was loaded — loadConfig throws before doctor gets this far if one
@@ -718,7 +748,7 @@ async function commandEdition(config, args, task) {
     format,
   });
 
-  const prompt = buildPrompt({ task, context });
+  const prompt = buildPrompt({ task, context, promptsDir: config.promptsDir });
   const base =
     task === 'preseason-rankings'
       ? `${league.season}-preseason-rankings`
@@ -751,8 +781,8 @@ async function commandEdition(config, args, task) {
   say(`Generating with ${describeProvider(config.ai)}...`);
   const result = await generate({
     ai: config.ai,
-    system: systemPromptOnly(context.league.format?.type),
-    user: [taskPromptOnly(task, context.league.format?.type), '', '# LEAGUE CONTEXT', '', '```json', JSON.stringify(context, null, 2), '```'].join('\n'),
+    system: systemPromptOnly(context.league.format?.type, { promptsDir: config.promptsDir }),
+    user: [taskPromptOnly(task, context.league.format?.type, { promptsDir: config.promptsDir }), '', '# LEAGUE CONTEXT', '', '```json', JSON.stringify(context, null, 2), '```'].join('\n'),
   });
 
   const body = stripJsonBlock(result.text);
