@@ -13,6 +13,7 @@ import { loadConfig, rankEmoji, resolveRankingWeights, ROOT } from './config.mjs
 import { describeFormat, hasFutureDraftCapital, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './scoringReport.mjs';
 import { describeEliminationLedger } from './eliminationReport.mjs';
+import { describeDraftOrder } from './rookieDraft.mjs';
 import {
   openLeague,
   resolveWeek,
@@ -301,6 +302,18 @@ async function commandDoctor(config) {
   // saved weeks yet simply has nothing to report.
   for (const line of describeEliminationLedger(readEliminationLedger({ ...ctx, throughWeek: week }))) {
     say(`  ${line}`);
+  }
+
+  // The declared rookie draft order, for the formats where picks carry over.
+  // Sleeper cannot report this rule, so doctor says plainly what was declared
+  // — or that nothing was, which means no draft order can be projected.
+  if (hasFutureDraftCapital(league.format)) {
+    for (const line of describeDraftOrder(config.rookieDraft.order, {
+      teamCount: teams.length,
+      playoffTeams: league.playoffTeams,
+    })) {
+      say(`  ${line}`);
+    }
   }
 
   reportRankEmoji(config, teams.length);

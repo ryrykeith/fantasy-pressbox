@@ -47,6 +47,7 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/lib/env.mjs` | `.env` parsing, so secrets need no dependency |
 | `src/config.mjs` | Merges flags, env, `config/*.yml` and defaults |
 | `src/format.mjs` | The league format taxonomy: valid types, declaration parsing, resolution |
+| `src/rookieDraft.mjs` | The declared rookie draft order rule (`config/rookie-draft.yml`): parsing, group sizes, plain-words description, and the refusal to project an order without one |
 | `src/sleeper/client.mjs` | HTTP only. Retries, friendly errors, player-file cache |
 | `src/sleeper/normalize.mjs` | Sleeper shapes → league concepts |
 | `src/analysis/lineup.mjs` | Optimal lineup solving |

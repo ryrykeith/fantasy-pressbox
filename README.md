@@ -603,6 +603,31 @@ pick one.
 
 Run `node src/cli.mjs doctor` after editing to see the ledger it read.
 
+### `config/rookie-draft.yml` — how the rookie draft is ordered
+
+For dynasty leagues. Sleeper does not say how your rookie draft is ordered, so
+until you write the rule here, Fantasy Pressbox will not project where any pick
+lands. The rule is a list of groups that pick in turn:
+
+```yaml
+order:
+  - teams: non_playoff      # the teams that miss the playoffs pick first...
+    sort: max_points_for    # ...ordered by max points-for...
+    direction: ascending    # ...lowest first
+  - teams: playoff
+    sort: max_points_for
+    direction: ascending
+```
+
+`teams` is `non_playoff`, `playoff` or `all`. `sort` is `max_points_for`,
+`points_for` or `record`. `direction` is `ascending` (lowest first) or
+`descending`. How many teams are in each group comes from your league's number
+of playoff teams in Sleeper. A `lottery` sort is recognised but not supported
+yet, so a league with one can't be projected. A value that isn't on these lists
+stops the command and lists the valid ones.
+
+Run `node src/cli.mjs doctor` after editing to see the rule in plain words.
+
 ### `prompts/` — what it writes
 
 One Markdown file per edition, plus `system.md`, which defines the voice and

@@ -1,0 +1,50 @@
+# ============================================================================
+# Rookie draft settings — how next season's rookie draft is ordered.
+#
+# Only matters in a league where future picks are real assets (dynasty). It is
+# what lets Fantasy Pressbox say where a pick is projected to land.
+# ============================================================================
+
+# The draft order rule.
+#
+# WHY THIS FILE EXISTS
+# Sleeper does not report how a rookie draft is ordered. Your league's settings
+# carry the number of rounds and playoff teams, and nothing about whether picks
+# go by max points-for, by record or by a lottery. Guessing would put picks in
+# the wrong slots for any league that does something else, so until you write
+# the rule down here, no draft order is projected at all.
+#
+# HOW TO WRITE IT
+# A list of groups, picking in turn. Each group says:
+#
+#   teams:      non_playoff   the teams that miss the playoffs
+#               playoff       the teams that make them
+#               all           every team, ignoring the playoffs
+#   sort:       max_points_for   the most a roster could have scored with its
+#                                best possible lineup each week
+#               points_for       what it actually scored
+#               record           wins and losses
+#               lottery          recognised, but not yet supported: a league
+#                                with a lottery cannot be projected yet
+#   direction:  ascending    lowest value picks first (worst record first)
+#               descending   highest value picks first
+#
+# How many teams are in each group comes from your league's number of playoff
+# teams in Sleeper — you do not write it here.
+#
+# Example: the teams that miss the playoffs pick first, ordered lowest to
+# highest max points-for; then the playoff teams, also lowest to highest max
+# points-for. In a 12-team league with 6 playoff teams that is picks 1-6, then
+# picks 7-12 — and a non-playoff team with a high max points-for still picks
+# before any playoff team with a lower one.
+#
+#   order:
+#     - teams: non_playoff
+#       sort: max_points_for
+#       direction: ascending
+#     - teams: playoff
+#       sort: max_points_for
+#       direction: ascending
+#
+# Run `node src/cli.mjs doctor` after editing to see the rule in plain words.
+order:
