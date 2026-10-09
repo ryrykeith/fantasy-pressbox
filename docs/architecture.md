@@ -57,6 +57,7 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/analysis/faab.mjs` | Remaining FAAB per survivor and the player pool each chop released, for a guillotine league |
 | `src/analysis/transactions.mjs` | A transaction's grading context: each side's roster shape before and after, a claim's cost against budget, moved players' weekly points |
 | `src/analysis/rosterWindow.mjs` | Per-position age summaries, starter age, and season points by age band, for a dynasty roster |
+| `src/analysis/pickCapital.mjs` | Future pick capital across the tradeable drafts: each held pick priced (projected Early/Mid/Late tier for the draft the standings decide, generic round value otherwise, unpriced when the market lists none), per season and summed, net against each team's own picks |
 | `src/analysis/standings.mjs` | Current seeds: wins, then points-for |
 | `src/analysis/playoffField.mjs` | The projected playoff field and the bubble that decides it |
 | `src/tankWatch.mjs` | The tank-watch edition: its refusals (dynasty only, declared rule, start week) and the race/stakes/cliff/movement view of the projected draft order |
