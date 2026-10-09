@@ -20,6 +20,7 @@ import { parseDeclaredFormatType } from './format.mjs';
 import { parseDeclaredEliminations } from './analysis/elimination.mjs';
 import { byeWeekTableSource, parseByeWeekTable } from './analysis/byeExposure.mjs';
 import { parseDeclaredDraftOrder } from './rookieDraft.mjs';
+import { parseProspectBoard } from './prospectBoard.mjs';
 
 export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -359,6 +360,28 @@ export function loadByeWeekTable({ season, configDir = join(ROOT, 'config') } = 
   }
 
   return parseByeWeekTable(parsed, { season, source });
+}
+
+/**
+ * Reads and validates the declared prospect board for a draft class
+ * (src/prospectBoard.mjs).
+ *
+ * Returns null when no file is declared: an absent board is a state editions
+ * handle (the model is told no prospect may be discussed), not an error. An
+ * invalid one throws, naming the file. Season-specific, so not part of
+ * `loadConfig()` — the draft year is known only once a league has been opened.
+ */
+export function loadProspectBoard({ draftYear, configDir = join(ROOT, 'config') } = {}) {
+  const path = join(configDir, `prospects.${draftYear}.yml`);
+  if (!existsSync(path)) return null;
+
+  let parsed;
+  try {
+    parsed = parseYaml(readFileSync(path, 'utf8'));
+  } catch (error) {
+    throw new Error(`Could not read ${path}: ${error.message}`);
+  }
+  return parseProspectBoard(parsed, { draftYear, source: path });
 }
 
 /** The emoji that precedes a team at a given rank, e.g. 1 -> 🥇. */

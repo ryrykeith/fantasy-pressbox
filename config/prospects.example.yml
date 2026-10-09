@@ -1,0 +1,44 @@
+# ============================================================================
+# Prospect board — the prospects headlining a rookie draft class.
+#
+# THIS IS AN EXAMPLE. Every name, school and source below is invented. This
+# file is never loaded. To declare a real board, copy it to
+#
+#   config/prospects.<draftYear>.yml        e.g. config/prospects.2027.yml
+#
+# and fill it in yourself, from sources you have checked.
+# ============================================================================
+#
+# WHY IT IS DECLARED
+# FantasyCalc prices picks but carries no college players, and devy sites have
+# no API and can be stale. If Fantasy Pressbox guessed at the class it would
+# print confident hype nobody can trace. So the class is whatever you write
+# here, with where each claim came from.
+#
+# RULES
+#   - Every entry needs a source: a publication name and/or a URL. The
+#     publication may call someone "the consensus 1.01" only because a sourced
+#     board here says so.
+#   - A prospect not on the board is not discussed. Editions tell the model so.
+#   - `updated` is required: the date you last checked the board, as
+#     YYYY-MM-DD. `node src/cli.mjs doctor` reports the board's age and warns
+#     once it is over 45 days old. Refresh it a few times a season.
+#   - Ranks are whole numbers from 1 and must not repeat.
+#   - `note` is optional and should be short.
+#   - draftYear must match the year in the file name.
+
+draftYear: 2027
+updated: 2026-01-15
+
+entries:
+  - rank: 1
+    name: Example Prospect One
+    position: WR
+    school: Example State
+    note: Invented entry, shown only to illustrate the shape
+    source: Example Dynasty Weekly, https://example.com/2027-board
+  - rank: 2
+    name: Example Prospect Two
+    position: QB
+    school: Sample University
+    source: Example Rookie Rankings

@@ -628,6 +628,20 @@ stops the command and lists the valid ones.
 
 Run `node src/cli.mjs doctor` after editing to see the rule in plain words.
 
+### `config/prospects.<year>.yml` — who headlines the rookie class
+
+For dynasty leagues. Nothing in Sleeper or the pick market knows the college
+players, so the class is whatever you write down, with where each claim came
+from. Copy `config/prospects.example.yml` (all invented names) to
+`config/prospects.2027.yml` and fill in your own board. It needs `draftYear`, an
+`updated` date, and ranked entries, each with `rank`, `name`, `position`,
+`school`, an optional short `note`, and a `source` (a publication and/or URL).
+
+A missing source, a repeated rank, or a missing `updated` date stops the command
+with a message naming the entry. A prospect who isn't on the board is not
+discussed. `node src/cli.mjs doctor` reports the board's age and warns once it
+is over 45 days old.
+
 ### `prompts/` — what it writes
 
 One Markdown file per edition, plus `system.md`, which defines the voice and

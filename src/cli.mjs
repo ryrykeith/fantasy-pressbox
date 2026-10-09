@@ -9,11 +9,12 @@
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { loadConfig, rankEmoji, resolveRankingWeights, ROOT } from './config.mjs';
+import { loadConfig, loadProspectBoard, rankEmoji, resolveRankingWeights, ROOT } from './config.mjs';
 import { describeFormat, hasFutureDraftCapital, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './scoringReport.mjs';
 import { describeEliminationLedger } from './eliminationReport.mjs';
 import { describeDraftOrder } from './rookieDraft.mjs';
+import { describeProspectBoard } from './prospectBoard.mjs';
 import {
   openLeague,
   resolveWeek,
@@ -313,6 +314,19 @@ async function commandDoctor(config) {
       playoffTeams: league.playoffTeams,
     })) {
       say(`  ${line}`);
+    }
+  }
+
+  // The prospect board for the coming rookie class, in the same formats. An
+  // invalid file is reported here rather than aborting the rest of doctor.
+  if (hasFutureDraftCapital(league.format)) {
+    const draftYear = Number.parseInt(league.season, 10) + 1;
+    try {
+      for (const line of describeProspectBoard(loadProspectBoard({ draftYear }), { draftYear })) {
+        say(`  ${line}`);
+      }
+    } catch (error) {
+      say(`  Prospect board ✗ ${error.message}`);
     }
   }
 
