@@ -117,6 +117,9 @@ export function buildPickCapital({ teams, seasons, picks, market = null, draftOr
         unpricedPicks: held.filter((pick) => pick.price.value === null).length,
         picks: held.map((pick) => ({
           round: pick.round,
+          // The id travels beside the name so a view can project the pick
+          // (src/tradePicks.mjs#pickProjection) without matching on names.
+          originalRosterId: pick.originalRosterId,
           originalTeam: teamName(pick.originalRosterId),
           ...pick.price,
         })),

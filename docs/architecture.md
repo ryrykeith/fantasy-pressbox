@@ -63,6 +63,7 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/tankWatch.mjs` | The tank-watch edition: its refusals (dynasty only, declared rule, start week) and the race/stakes/cliff/movement view of the projected draft order |
 | `src/analysis/draftOrder.mjs` | The projected rookie draft order: each slot's original team and current owner, the cliff a bubble team's pick falls off, week-over-week movement |
 | `src/tradePicks.mjs` | A traded pick at its projected slot for the trade report: slot, cliff, the board prospects around it, and what is still unknown |
+| `src/futureStock.mjs` | The future-stock edition: its refusal (dynasty only) and each team's age, production-by-age and priced pick capital, with held picks placed at their projected slot |
 | `src/fantasycalc/client.mjs` | FantasyCalc trade values: query from the league's format and scoring, fetch, normalize. FantasyCalc field names stop here, as Sleeper's stop at `src/sleeper/` |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
 | `src/store.mjs` | Snapshots, rankings, predictions, market values, movement, grading |
@@ -768,6 +769,30 @@ only the entries some traded pick is around, each with its source.
 - The prospect board entry (`prospectBoard` or `prospectsNotOnBoard`).
 - `boardRankIsNotAvailability`: the board ranks the class. It is not a mock
   draft.
+
+All but `projectedSlotAtTradeTime` come from `projectedPicksUnavailable`,
+which the future stock edition shares.
+
+### Future stock
+
+`src/futureStock.mjs` holds the `future-stock` edition's gate and facts.
+`refuseFutureStock` refuses any format but dynasty and says why. `buildPrompt`
+refuses as well, and also refuses when the context has no roster window or
+pick capital.
+
+`futureStockView` adds two blocks to each team's roster view. `window` comes
+from `readRosterWindow`: per-position ages, the starting lineup's age, and
+starter points split by age band, all as lines. `draftCapital` comes from
+`readPickCapital`: picks held per season and over the horizon, with values
+when a market exists. Each held pick of the projected draft goes through
+`pickProjection`, the same as a traded pick in the trade report, so it carries
+`projectedPick`, `ifOriginalTeamCrosses` and `boardAroundPick`. Picks for
+later drafts get no tier and no slot. `context.prospectBoard` carries only the
+entries some held 1st is around (`tradeProspectBoard`).
+
+The edition gets no standings table and no transaction colour. Its `teams`
+already carries every record, and its subject is who holds which pick. It is
+not recorded, so it has no movement.
 
 ## State
 

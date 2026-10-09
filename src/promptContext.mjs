@@ -19,6 +19,7 @@ import { currentSeeds } from './analysis/standings.mjs';
 import { prospectBoardView } from './prospectBoard.mjs';
 import { TANK_WATCH_TASK, tankWatchPrize, tankWatchUnavailable, tankWatchView } from './tankWatch.mjs';
 import { draftProjectionView, pickProjection, tradePicksUnavailable, tradeProspectBoard } from './tradePicks.mjs';
+import { FUTURE_STOCK_TASK, futureStockUnavailable, futureStockView, refuseFutureStock } from './futureStock.mjs';
 
 const TASK_PROMPTS = {
   'preseason-rankings': 'preseason-power-rankings.md',
@@ -32,6 +33,7 @@ const TASK_PROMPTS = {
   'trade-report': 'trade-report.md',
   'waiver-report': 'waiver-report.md',
   [TANK_WATCH_TASK]: 'tank-watch.md',
+  [FUTURE_STOCK_TASK]: 'future-stock.md',
 };
 
 export const TASKS = Object.keys(TASK_PROMPTS);
@@ -46,11 +48,11 @@ export const TRANSACTION_TASKS = ['trade-report', 'waiver-report'];
 
 /**
  * Editions that get no incidental `transactions` colour. A transaction edition
- * carries the full structure instead. A tank watch is about who holds which
- * pick, and the generic "do not mention trades" absence would forbid the very
- * ownership it reports.
+ * carries the full structure instead. A tank watch and a future stock edition
+ * are about who holds which pick, and the generic "do not mention trades"
+ * absence would forbid the very ownership they report.
  */
-const WITHOUT_TRANSACTION_COLOUR = [...TRANSACTION_TASKS, TANK_WATCH_TASK];
+const WITHOUT_TRANSACTION_COLOUR = [...TRANSACTION_TASKS, TANK_WATCH_TASK, FUTURE_STOCK_TASK];
 
 /**
  * Editions about a week that has not been played yet.
@@ -780,7 +782,7 @@ function marketValuesView(market) {
 
 /**
  * @param {object} input
- * @param {'preseason-rankings'|'rankings'|'survival-rankings'|'preview'|'survival-preview'|'recap'|'chop-recap'|'postseason'|'trade-report'} input.task
+ * @param {string} input.task one of TASKS
  * @param {Array|null} input.enrichedTransactions the week's transactions from
  *        src/pipeline.mjs#readTransactions; only read by TRANSACTION_TASKS.
  * @param {object|null} input.marketValues from src/pipeline.mjs#readMarketValues:
@@ -802,6 +804,10 @@ function marketValuesView(market) {
  *        one (store.loadPreviousTankWatch), for movement.
  * @param {object|null} input.prospectBoard the declared board for the draft
  *        class (src/config.mjs#loadProspectBoard), or null when none exists.
+ * @param {object|null} input.rosterWindow from src/pipeline.mjs#readRosterWindow;
+ *        only read by a future stock edition.
+ * @param {object|null} input.pickCapital from src/pipeline.mjs#readPickCapital;
+ *        only read by a future stock edition.
  */
 export function buildContext({
   task,
@@ -826,6 +832,8 @@ export function buildContext({
   draftOrder = null,
   previousTankWatch = null,
   prospectBoard = null,
+  rosterWindow = null,
+  pickCapital = null,
   format = 'sleeper',
 }) {
   // Sleeper reports pairings for every league, including the formats that never
@@ -903,10 +911,12 @@ export function buildContext({
       });
     }
     if (byeExposure?.length) context.byeExposure = byeExposureView(byeExposure, players);
-  } else if (!ranking && task !== TANK_WATCH_TASK) {
+  } else if (!ranking && task !== TANK_WATCH_TASK && task !== FUTURE_STOCK_TASK) {
     // A tank watch is left out: its draft order already carries every team's
     // record and points, and a second ordering on a different key (wins
     // first, not the rule's sort) invites the model to print that one instead.
+    // A future stock edition's `teams` carries every record too, and a
+    // standings table would invite ranking on this season alone.
     context.standings = teams
       .slice()
       .sort(
@@ -1086,6 +1096,31 @@ export function buildContext({
     if (prize) context.prospectBoard = prospectBoardView(prize);
   }
 
+  // Every team with its roster, its age structure, where its points came from
+  // and the picks it holds, in one entry, so a verdict on a team reads off one
+  // place. Absent outside dynasty or without the window and the capital;
+  // buildPrompt refuses the edition then.
+  let futureStock = null;
+  if (task === FUTURE_STOCK_TASK && rosterWindow && pickCapital && hasFutureDraftCapital(league.format) && !eliminates) {
+    futureStock = futureStockView({ teams, rosterWindow, pickCapital, draftOrder, board: prospectBoard });
+    context.teams = teams.map((team) => ({
+      ...rosterView(team, players, { headToHead, taxiSlots: league.taxiSlots }),
+      ...futureStock.byRosterId.get(team.rosterId),
+    }));
+    context.rosterWindow = futureStock.window;
+    context.draftCapital = futureStock.draftCapital;
+    if (draftOrder) {
+      context.draftProjection = draftProjectionView(draftOrder, {
+        rule: config.rookieDraft?.order,
+        teamCount: teams.length,
+        playoffTeams: league.playoffTeams,
+        asOfWeek: league.lastScoredWeek ?? week,
+      });
+    }
+    prize = futureStock.prize;
+    if (prize) context.prospectBoard = prospectBoardView(prize);
+  }
+
   if (transactions?.length && !WITHOUT_TRANSACTION_COLOUR.includes(task)) {
     context.transactions = transactions.map(({ type, week: leg, teams: names, bid, moves }) => ({
       type,
@@ -1103,6 +1138,8 @@ export function buildContext({
     marketUnavailable: marketValues?.unavailable ?? null,
     prize,
     tradedPicks,
+    futureStock,
+    pickMarketUnavailable: pickCapital?.marketUnavailable ?? null,
   });
 
   return context;
@@ -1117,7 +1154,16 @@ export function buildContext({
  * project refuses to invent. So absence is made explicit and instructions are
  * attached to it.
  */
-function describeMissingContext({ task, context, week, marketUnavailable = null, prize = null, tradedPicks = [] }) {
+function describeMissingContext({
+  task,
+  context,
+  week,
+  marketUnavailable = null,
+  prize = null,
+  tradedPicks = [],
+  futureStock = null,
+  pickMarketUnavailable = null,
+}) {
   const missing = [];
   const isRanking = RANKING_TASKS.includes(task);
 
@@ -1257,6 +1303,19 @@ function describeMissingContext({ task, context, week, marketUnavailable = null,
     missing.push(...describeMissingPickupContext());
   } else if (task === TANK_WATCH_TASK) {
     if (context.tankWatch) missing.push(...tankWatchUnavailable({ tankWatch: context.tankWatch, prize, week }));
+  } else if (task === FUTURE_STOCK_TASK) {
+    if (futureStock) {
+      missing.push(
+        ...futureStockUnavailable({
+          window: futureStock.window,
+          draftCapital: futureStock.draftCapital,
+          heldPicks: futureStock.heldPicks,
+          draftProjection: context.draftProjection ?? null,
+          prize,
+          marketUnavailable: pickMarketUnavailable,
+        }),
+      );
+    }
   } else if (!context.transactions) {
     missing.push({
       field: 'transactions',
@@ -1466,6 +1525,19 @@ export function buildPrompt({ task, context }) {
       throw new Error(
         'Cannot build a tank-watch: no projected rookie draft order is in the context. Declare the rule in ' +
           'config/rookie-draft.yml and run the edition through src/cli.mjs.',
+      );
+    }
+  }
+
+  // A future stock edition ranks a multi-season window, which only a dynasty
+  // league has, from the roster window and the pick capital. src/cli.mjs
+  // refuses the format first; this catches a caller that reaches here directly.
+  if (task === FUTURE_STOCK_TASK) {
+    refuseFutureStock({ formatType: context.league.format?.type ?? 'unknown' });
+    if (!context.rosterWindow || !context.draftCapital) {
+      throw new Error(
+        `Cannot build a ${FUTURE_STOCK_TASK}: the roster window and the draft capital are not in the context. ` +
+          'Pass readRosterWindow and readPickCapital (src/pipeline.mjs) to buildContext.',
       );
     }
   }

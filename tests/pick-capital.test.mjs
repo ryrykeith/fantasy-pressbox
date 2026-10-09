@@ -129,6 +129,7 @@ test("the projected draft's 1sts are priced at their projected tier and labelled
   assert.deepEqual(firsts, [
     {
       round: 1,
+      originalRosterId: REBUILD_SZN,
       originalTeam: 'Rebuild Szn',
       projectedPick: '1.02',
       tier: 'Early',
@@ -137,6 +138,7 @@ test("the projected draft's 1sts are priced at their projected tier and labelled
     },
     {
       round: 1,
+      originalRosterId: TACO_TUESDAY,
       originalTeam: 'Taco Tuesday',
       projectedPick: '1.07',
       tier: 'Mid',
@@ -149,7 +151,13 @@ test("the projected draft's 1sts are priced at their projected tier and labelled
 test('later rounds of the projected draft use the generic value until the round order is declared', () => {
   const loweredExpectations2027 = seasonRow(teamRow(capital(), LOWERED_EXPECTATIONS), '2027');
   const jdSecond = loweredExpectations2027.picks.find((pick) => pick.round === 2 && pick.originalTeam === 'Taco Tuesday');
-  assert.deepEqual(jdSecond, { round: 2, originalTeam: 'Taco Tuesday', value: 2500, basis: 'generic' });
+  assert.deepEqual(jdSecond, {
+    round: 2,
+    originalRosterId: TACO_TUESDAY,
+    originalTeam: 'Taco Tuesday',
+    value: 2500,
+    basis: 'generic',
+  });
 
   // A snake order puts the 1.07 team at 2.06: still Mid.
   const snake = capital({ config: { rookieDraft: { order: RULE, rounds: 'snake' } } });
@@ -158,6 +166,7 @@ test('later rounds of the projected draft use the generic value until the round 
   );
   assert.deepEqual(snakeSecond, {
     round: 2,
+    originalRosterId: TACO_TUESDAY,
     originalTeam: 'Taco Tuesday',
     projectedPick: '2.06',
     tier: 'Mid',
@@ -169,13 +178,25 @@ test('later rounds of the projected draft use the generic value until the round 
 test('a later draft uses the generic round value', () => {
   const rebuildSzn2028 = seasonRow(teamRow(capital(), REBUILD_SZN), '2028');
   const first = rebuildSzn2028.picks.find((pick) => pick.round === 1);
-  assert.deepEqual(first, { round: 1, originalTeam: 'Rebuild Szn', value: 5500, basis: 'generic' });
+  assert.deepEqual(first, {
+    round: 1,
+    originalRosterId: REBUILD_SZN,
+    originalTeam: 'Rebuild Szn',
+    value: 5500,
+    basis: 'generic',
+  });
 });
 
 test('a pick the market does not price is unpriced, never given a value', () => {
   const jd2027 = seasonRow(teamRow(capital(), TACO_TUESDAY), '2027');
   const fifth = jd2027.picks.find((pick) => pick.round === 5);
-  assert.deepEqual(fifth, { round: 5, originalTeam: 'Taco Tuesday', value: null, basis: 'unpriced' });
+  assert.deepEqual(fifth, {
+    round: 5,
+    originalRosterId: TACO_TUESDAY,
+    originalTeam: 'Taco Tuesday',
+    value: null,
+    basis: 'unpriced',
+  });
   assert.equal(jd2027.unpricedPicks, 1);
   assert.equal(teamRow(capital(), TACO_TUESDAY).horizon.unpricedPicks, 2);
 });
@@ -226,7 +247,13 @@ test('without a declared draft order the projected draft is priced generically',
   const result = capital({ config: null });
   assert.equal(result.projectedDraft, null);
   const first = seasonRow(teamRow(result, REBUILD_SZN), '2027').picks.find((pick) => pick.round === 1);
-  assert.deepEqual(first, { round: 1, originalTeam: 'Rebuild Szn', value: 6000, basis: 'generic' });
+  assert.deepEqual(first, {
+    round: 1,
+    originalRosterId: REBUILD_SZN,
+    originalTeam: 'Rebuild Szn',
+    value: 6000,
+    basis: 'generic',
+  });
 });
 
 test('a tier the market does not list falls back to the generic value', () => {
