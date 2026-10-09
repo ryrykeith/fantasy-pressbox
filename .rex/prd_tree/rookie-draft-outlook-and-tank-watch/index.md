@@ -17,4 +17,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Draft-aware trade grades](./draft-aware-trade-grades/index.md) | pending |
 | [Projected rookie draft order with pick ownership](./projected-rookie-draft-order-with-pick/index.md) | completed |
 | [Prospect board](./prospect-board/index.md) | completed |
-| [Tank watch edition](./tank-watch-edition/index.md) | pending |
+| [Tank watch edition](./tank-watch-edition/index.md) | completed |
