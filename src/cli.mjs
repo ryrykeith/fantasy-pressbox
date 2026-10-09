@@ -19,6 +19,8 @@ import {
   captureWeek,
   readEliminationLedger,
   readByeExposure,
+  readTransactions,
+  readMarketValues,
 } from './pipeline.mjs';
 import { normalizeTransactions, normalizeFutureDraftCapital } from './sleeper/normalize.mjs';
 import {
@@ -26,6 +28,7 @@ import {
   RANKING_TASKS,
   ELIMINATION_ONLY_TASKS,
   FORWARD_LOOKING_TASKS,
+  TRANSACTION_TASKS,
   buildContext,
   buildPrompt,
   systemPromptOnly,
@@ -59,6 +62,7 @@ Commands
   rankings                      Build the weekly power rankings
   survival-rankings             Build the weekly survival rankings (guillotine leagues)
   preseason-rankings            Build preseason rankings (ignores all results)
+  transactions                  Grade the week's trades (quiet weeks are skipped)
   record <file>                 File a finished edition you pasted back from a chat
   check <file>                  Check a file of finished posts against the length limit
   grade                         Score last week's predictions against what happened
@@ -69,6 +73,7 @@ Options
   --task <name>                 Which edition a recorded file is (used with record)
   --generate                    Call the AI provider in .env and write finished posts
   --refresh-players             Re-download the NFL player list instead of using the cache
+  --refresh-market              Fetch trade values again instead of reusing the week's saved ones
   --help                        Show this message
 
 Examples
@@ -79,6 +84,7 @@ Examples
   node src/cli.mjs survival-preview --week 3
   node src/cli.mjs chop-recap --week 3
   node src/cli.mjs survival-rankings --week 3
+  node src/cli.mjs transactions --week 3 --generate
 `;
 
 function parseArgs(argv) {
@@ -88,6 +94,7 @@ function parseArgs(argv) {
     if (token === '--help' || token === '-h') args.help = true;
     else if (token === '--generate') args.generate = true;
     else if (token === '--refresh-players') args.refreshPlayers = true;
+    else if (token === '--refresh-market') args.refreshMarket = true;
     else if (token === '--week') args.week = Number.parseInt(argv[++i], 10);
     else if (token === '--format') args.format = argv[++i];
     else if (token === '--task') args.task = argv[++i];
@@ -355,6 +362,41 @@ async function commandFetch(config, args) {
  * Previews, recaps and rankings differ only in which week they are about and
  * which history they need, so they share one path.
  */
+/**
+ * What a week's transactions hold, section by section.
+ *
+ * The transactions command is one command for every kind of transaction
+ * coverage rather than one per kind, so the edition has to know which sections
+ * have something in them. Today only trades have an edition; `pickups` is
+ * counted anyway so a quiet week and a trade-less week are told apart.
+ *
+ * `enriched` is src/pipeline.mjs#readTransactions output.
+ */
+export function summarizeTransactionWeek(enriched) {
+  const list = enriched ?? [];
+  const trades = list.filter((transaction) => transaction.type === 'trade').length;
+  return { trades, pickups: list.length - trades, total: list.length };
+}
+
+/**
+ * The line printed when a transaction edition has nothing to be about, or null
+ * when it does. A quiet week is a result, not an error: the command exits zero
+ * and writes nothing, because a model handed an edition about nothing grades
+ * something it made up.
+ */
+export function describeQuietTransactionWeek(summary, week) {
+  if (summary.total === 0) {
+    return `Week ${week} has no completed transactions, so there is nothing to write about. No edition was built.`;
+  }
+  if (summary.trades === 0) {
+    return (
+      `Week ${week} has ${summary.pickups} waiver or free-agent move(s) but no trades, and ` +
+      'only trades have an edition so far. No edition was built.'
+    );
+  }
+  return null;
+}
+
 async function commandEdition(config, args, task) {
   requireLeagueId(config);
   refuseOrdinaryEditionInGuillotineLeague(config, task);
@@ -384,6 +426,7 @@ async function commandEdition(config, args, task) {
   // look at the week that just finished.
   const offset = FORWARD_LOOKING_TASKS.includes(task) ? 0 : -1;
   const { week, source } = await resolveWeek({ client, league, config, requested: args.week, offset });
+  const isTransactionEdition = TRANSACTION_TASKS.includes(task);
   say(`Building ${task} for week ${week} (week chosen from ${source}).`);
 
   let weekAnalysis = null;
@@ -398,6 +441,8 @@ async function commandEdition(config, args, task) {
   let faabMarket = null;
   let dangerBoard = null;
   let byeExposure = null;
+  let enrichedTransactions = null;
+  let marketValues = null;
 
   if (task === 'preseason-rankings') {
     say('Preseason edition: regular-season results are deliberately excluded.');
@@ -412,7 +457,21 @@ async function commandEdition(config, args, task) {
       league,
     });
 
-    if (task === 'preview') {
+    if (isTransactionEdition) {
+      // Everything a transaction edition reads is a raw bundle captureWeek has
+      // just saved. A quiet week is settled before the market is fetched, so
+      // a week with nothing in it costs no network call and writes no file.
+      enrichedTransactions = readTransactions({ store, league, teams, players, describePlayer, week });
+      const quiet = describeQuietTransactionWeek(summarizeTransactionWeek(enrichedTransactions), week);
+      if (quiet) {
+        say(quiet);
+        return 0;
+      }
+      marketValues = await readMarketValues({ store, league, teams, week, refresh: args.refreshMarket });
+      if (marketValues.unavailable) {
+        warn(`Trade values could not be fetched (${marketValues.unavailable}). Grades will not quote a market.`);
+      }
+    } else if (task === 'preview') {
       // The week has not been played, so the preview gets the pairings plus
       // last week's results — never this week's partial scores.
       upcomingAnalysis = captured.analysis;
@@ -477,7 +536,7 @@ async function commandEdition(config, args, task) {
   // name kept as `formerly`, so a rename reads as a rename and not as a team
   // that appeared from nowhere while another vanished.
   const previousRankings =
-    task === 'preseason-rankings'
+    task === 'preseason-rankings' || isTransactionEdition
       ? null
       : presentPreviousRankings(store.loadPreviousRankings(league.season, week), teamIdentityFor(ctx));
   if (previousRankings) {
@@ -501,6 +560,8 @@ async function commandEdition(config, args, task) {
     previousRankings,
     gradedPredictions,
     transactions,
+    enrichedTransactions,
+    marketValues,
     futureDraftCapital,
     eliminationLedger,
     faabMarket,
@@ -544,6 +605,13 @@ async function commandEdition(config, args, task) {
   const body = stripJsonBlock(result.text);
   const outPath = writeOutput(config, `${base}-${format}.txt`, body);
   say(`Posts written to ${outPath}`);
+
+  // A transaction edition ends with no machine-readable block: there is no
+  // prediction to grade and no ranking to carry movement from.
+  if (isTransactionEdition) {
+    reportLengths(body, config, format);
+    return 0;
+  }
 
   const block = extractJsonBlock(result.text);
   recordBlock({ store, league, week, task, block, previousRankings, say, teams });
@@ -823,6 +891,8 @@ async function main() {
       return commandEdition(config, args, 'survival-rankings');
     case 'preseason-rankings':
       return commandEdition(config, args, 'preseason-rankings');
+    case 'transactions':
+      return commandEdition(config, args, 'trade-report');
     case 'record':
       return commandRecord(config, args);
     case 'check':
