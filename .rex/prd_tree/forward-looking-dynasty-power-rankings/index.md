@@ -14,4 +14,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Future stock edition](./future-stock-edition/index.md) | pending |
-| [Roster window metrics](./roster-window-metrics/index.md) | pending |
+| [Roster window metrics](./roster-window-metrics/index.md) | completed |
