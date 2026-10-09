@@ -646,12 +646,24 @@ export function buildContext({
   }
 
   if (previousRankings) {
+    const renamed = (previousRankings.rankings || []).some((entry) => entry.formerly);
     context.previousRankings = {
       label: previousRankings.label ?? null,
       publishedFor: previousRankings.week ?? null,
+      // Only said when it applies: a rename is news, and a standing note about
+      // renames that did not happen invites the model to look for one.
+      ...(renamed
+        ? {
+            note:
+              'Teams are listed under the names they go by now. "formerly" is the name a team ' +
+              'was ranked under last time: it is the same team, renamed. Measure its movement ' +
+              'from that rank, and the rename is fair game to mention.',
+          }
+        : {}),
       rankings: (previousRankings.rankings || []).map((entry) => ({
         rank: entry.rank,
         team: entry.team,
+        ...(entry.formerly ? { formerly: entry.formerly } : {}),
       })),
     };
   }

@@ -56,6 +56,7 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/analysis/faab.mjs` | Remaining FAAB per survivor and the player pool each chop released, for a guillotine league |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
 | `src/store.mjs` | Snapshots, rankings, predictions, movement, grading |
+| `src/teamIdentity.mjs` | Which roster a published team name means, across renames |
 | `src/promptContext.mjs` | Assembles the model's facts and instructions |
 | `src/generate.mjs` | Optional Anthropic / OpenAI call |
 | `src/validate.mjs` | Post splitting and length checking |
@@ -652,6 +653,32 @@ week 1 results, later transactions, later injuries or later roster changes.
 
 This is why `data/snapshots/` is append-only and why `store.mjs` never
 overwrites a past week with current data.
+
+### Team renames
+
+Sleeper managers rename their teams whenever they like, often mid-season.
+Published history is written in the names that were printed, because that is
+what the league read, so the same roster can appear under different names in
+different weeks. Matching on names alone turned a renamed team into one ranked
+first out of nowhere while another vanished.
+
+The roster id is the only identity that survives a rename, so anything that
+compares history matches on it (`src/teamIdentity.mjs`):
+
+- **Recording** pins every name in a ranking or prediction block to its roster
+  before filing, keeps the published name beside it, and refuses a name that
+  matches no team rather than filing a typo as a new team.
+- **Reading older files** that carry only names resolves each name as it was
+  meant *that week*, from that week's snapshot, then from current names, then
+  from the manager's username, which is what Sleeper shows until a team is
+  named. A name two rosters have both held is never guessed.
+- **The prompt** lists last week's ranking under current names, with
+  `formerly` holding the published name, so the model reads a rename as a
+  rename.
+- **Grading** compares rosters, so a rename between a called shot and its
+  result cannot strand the prediction or mark a correct chop call wrong.
+
+No published file is rewritten to achieve this; the resolution happens on read.
 
 ## Separating analysis from prose
 

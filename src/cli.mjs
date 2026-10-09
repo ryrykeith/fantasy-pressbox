@@ -35,6 +35,12 @@ import {
 import { generate, describeProvider, detectProvider } from './generate.mjs';
 import { checkPosts, extractJsonBlock, stripJsonBlock } from './validate.mjs';
 import { gradePredictions, withMovement, movementLabel } from './store.mjs';
+import {
+  createTeamIdentity,
+  attachRosterIds,
+  presentPreviousRankings,
+  describeUnresolved,
+} from './teamIdentity.mjs';
 
 const HELP = `
 Fantasy Pressbox — AI league coverage from your Sleeper data
@@ -454,6 +460,7 @@ async function commandEdition(config, args, task) {
       const saved = store.loadPredictions(league.season, week);
       gradedPredictions = gradePredictions(saved?.predictions, captured.analysis, {
         eliminationLedger,
+        identity: teamIdentityFor(ctx),
       });
       if (gradedPredictions) {
         say(`Grading week ${week} predictions: ${gradedPredictions.correct}/${gradedPredictions.total} correct.`);
@@ -461,10 +468,19 @@ async function commandEdition(config, args, task) {
     }
   }
 
+  // Shown to the model under the names teams go by now, with the published
+  // name kept as `formerly`, so a rename reads as a rename and not as a team
+  // that appeared from nowhere while another vanished.
   const previousRankings =
-    task === 'preseason-rankings' ? null : store.loadPreviousRankings(league.season, week);
+    task === 'preseason-rankings'
+      ? null
+      : presentPreviousRankings(store.loadPreviousRankings(league.season, week), teamIdentityFor(ctx));
   if (previousRankings) {
     say(`Measuring movement against "${previousRankings.label ?? 'previous'}" rankings.`);
+    for (const { from, to } of previousRankings.renamed) say(`  Renamed since then: ${from} → ${to}`);
+    if (previousRankings.unresolved.length) {
+      say(`  Could not match to any current team: ${previousRankings.unresolved.join(', ')}`);
+    }
   }
 
   const context = buildContext({
@@ -525,7 +541,7 @@ async function commandEdition(config, args, task) {
   say(`Posts written to ${outPath}`);
 
   const block = extractJsonBlock(result.text);
-  recordBlock({ store, league, week, task, block, previousRankings, say });
+  recordBlock({ store, league, week, task, block, previousRankings, say, teams });
 
   reportLengths(body, config, format);
   return 0;
@@ -540,18 +556,26 @@ async function commandEdition(config, args, task) {
  *
  * Exported so a test can watch what it writes without a real store on disk.
  */
-export function recordBlock({ store, league, week, task, block, previousRankings, say }) {
+export function recordBlock({ store, league, week, task, block, previousRankings, say, teams = null }) {
   if (!Array.isArray(block) || block.length === 0) {
     say('No machine-readable block found in the output — nothing recorded for next week.');
     return false;
   }
+
+  // With the league's teams to hand, every name in the block is pinned to a
+  // roster id before anything is saved, because team names change mid-season
+  // and roster ids do not. A name that matches no team is refused outright:
+  // filing it would silently turn a typo into a "new" team with no history.
+  // Without teams (a bare call, as in some tests) names are filed as written.
+  const identity = teams ? teamIdentityFor({ teams, store, league }) : null;
 
   // Both previews make a called shot and both file it the same way. What is
   // being called differs — a winner where games are played, the week's chop
   // where they are not — but that is a difference gradePredictions reads off
   // the record's own fields, so the storage path does not need to know.
   if (task === 'preview' || task === 'survival-preview') {
-    const path = store.savePredictions(league.season, week, block);
+    const filed = identity ? pinPredictionsToRosters(block, identity) : block;
+    const path = store.savePredictions(league.season, week, filed);
     say(`Recorded ${block.length} predictions → ${path}`);
     say(
       task === 'survival-preview'
@@ -569,13 +593,25 @@ export function recordBlock({ store, league, week, task, block, previousRankings
     const seasonLong = task === 'preseason-rankings' || task === 'postseason';
     const label =
       task === 'preseason-rankings' ? 'preseason' : task === 'postseason' ? 'final' : `week-${week}`;
-    const ranked = withMovement(
-      block
-        .filter((entry) => entry && entry.team)
-        .map((entry, index) => ({ rank: Number(entry.rank) || index + 1, team: String(entry.team) }))
-        .sort((a, b) => a.rank - b.rank),
-      previousRankings ?? store.loadPreviousRankings(league.season, week),
-    );
+    let ordered = block
+      .filter((entry) => entry && entry.team)
+      .map((entry, index) => ({ rank: Number(entry.rank) || index + 1, team: String(entry.team) }))
+      .sort((a, b) => a.rank - b.rank);
+    let previous = previousRankings ?? store.loadPreviousRankings(league.season, week);
+    if (identity) {
+      const pinned = attachRosterIds(ordered, identity);
+      if (pinned.unresolved.length) throw new Error(describeUnresolved(pinned.unresolved, identity));
+      ordered = pinned.entries;
+      // Last week's file is read as published; its names are resolved as they
+      // were meant that week, so a team renamed since still lines up.
+      if (previous) {
+        previous = {
+          ...previous,
+          rankings: attachRosterIds(previous.rankings, identity, { week: previous.week ?? null }).entries,
+        };
+      }
+    }
+    const ranked = withMovement(ordered, previous);
     const path = store.saveRankings(league.season, label, {
       season: String(league.season),
       label,
@@ -616,6 +652,45 @@ function reportLengths(body, config, format) {
  * Without this, the copy-and-paste workflow has no memory: rankings would
  * never show movement and predictions would never be graded.
  */
+/** Resolves published team names to rosters for this league and season. */
+function teamIdentityFor({ teams, store, league }) {
+  return createTeamIdentity({
+    teams,
+    history: typeof store.loadTeamNameHistory === 'function' ? store.loadTeamNameHistory(league.season) : [],
+  });
+}
+
+/**
+ * Adds the roster behind every team a prediction names.
+ *
+ * The names stay exactly as published — they are what the recap quotes back —
+ * and the roster ids ride alongside so the grade does not depend on nobody
+ * renaming their team before the result is in.
+ */
+function pinPredictionsToRosters(predictions, identity) {
+  const unresolved = [];
+  const roster = (name) => {
+    if (name === undefined || name === null) return undefined;
+    const id = identity.rosterIdFor(name);
+    if (id === null) unresolved.push(name);
+    return id;
+  };
+  const pinned = predictions.map((prediction) => {
+    if (!prediction || typeof prediction !== 'object') return prediction;
+    const extra = {};
+    if (prediction.predicted_chop !== undefined) {
+      extra.predicted_chop_roster = roster(prediction.predicted_chop);
+    } else {
+      extra.roster_a = roster(prediction.team_a);
+      extra.roster_b = roster(prediction.team_b);
+      extra.predicted_winner_roster = roster(prediction.predicted_winner);
+    }
+    return { ...prediction, ...extra };
+  });
+  if (unresolved.length) throw new Error(describeUnresolved([...new Set(unresolved)], identity));
+  return pinned;
+}
+
 async function commandRecord(config, args) {
   requireLeagueId(config);
   const file = args._[1];
@@ -650,6 +725,7 @@ async function commandRecord(config, args) {
     block,
     previousRankings: null,
     say,
+    teams: ctx.teams,
   });
   reportLengths(stripJsonBlock(text), config, 'sleeper');
   return recorded ? 0 : 1;
@@ -671,6 +747,7 @@ async function commandGrade(config, args) {
   const captured = await captureWeek({ ...ctx, week });
   const saved = ctx.store.loadPredictions(ctx.league.season, week);
   const graded = gradePredictions(saved?.predictions, captured.analysis, {
+    identity: teamIdentityFor(ctx),
     eliminationLedger: captured.elimination ?? null,
   });
   if (!graded) {
