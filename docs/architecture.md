@@ -58,6 +58,7 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/analysis/transactions.mjs` | A transaction's grading context: each side's roster shape before and after, a claim's cost against budget, moved players' weekly points |
 | `src/analysis/standings.mjs` | Current seeds: wins, then points-for |
 | `src/analysis/playoffField.mjs` | The projected playoff field and the bubble that decides it |
+| `src/tankWatch.mjs` | The tank-watch edition: its refusals (dynasty only, declared rule, start week) and the race/stakes/cliff/movement view of the projected draft order |
 | `src/analysis/draftOrder.mjs` | The projected rookie draft order: each slot's original team and current owner, the cliff a bubble team's pick falls off, week-over-week movement |
 | `src/fantasycalc/client.mjs` | FantasyCalc trade values: query from the league's format and scoring, fetch, normalize. FantasyCalc field names stop here, as Sleeper's stop at `src/sleeper/` |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
@@ -703,6 +704,34 @@ from history rather than recomputed from today's standings. The saved
 projection is only as old as the run that captured it. Re-capturing a past
 week rewrites its snapshot from the standings at that moment, the same as the
 snapshot's `teams`.
+
+### Tank watch
+
+`src/tankWatch.mjs` holds the `tank-watch` edition's gates and facts.
+`refuseTankWatch` refuses a league that is not dynasty, a missing rule
+(through `requireDraftOrderRule`), and a week before the start week unless
+`--early` is passed. The start week is `tank_watch.start_week` in
+`config/rookie-draft.yml`, or the regular season's midpoint
+(`resolveTankWatchStartWeek`). The CLI runs the gate twice: before Sleeper is
+contacted, with the declared format, and again with the resolved format and
+week. `buildPrompt` refuses as well, as a second line of defence.
+
+`tankWatchView` turns the projection into the context block:
+
+- `race`: the first group's picks, with their gaps.
+- `stakes`: every pick held by someone other than its original team, in every
+  round.
+- `cliff`: the bubble picks that would move if their team crossed the line.
+- `order`: the whole of round 1.
+- `movement`: change since the previous tank watch.
+
+The prize is the top `topLine` entries of the prospect board, run through
+`prospectBoardView`. With no board, `prospectBoardUnavailable` says nothing
+about the class may be said.
+
+Movement is measured against `data/tank-watch/<season>/week-<n>.json`, which is
+written when the prompt is built. That makes it the projection the last tank
+watch actually reported, not a later re-capture of that week's snapshot.
 
 ## State
 

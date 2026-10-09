@@ -48,3 +48,13 @@
 #
 # Run `node src/cli.mjs doctor` after editing to see the rule in plain words.
 order:
+
+# The tank watch (node src/cli.mjs tank-watch).
+#
+# start_week is the first completed week the tank watch covers. Before then it
+# refuses to run (pass --early to run it anyway), because a draft order after
+# three games is mostly noise. Leave it empty to open the tank watch at the
+# middle of your regular season: with playoffs starting in week 15, that is
+# after week 7.
+tank_watch:
+  start_week:

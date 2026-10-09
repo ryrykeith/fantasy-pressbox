@@ -220,7 +220,19 @@ export function describeDraftOrder(rule, { teamCount, playoffTeams } = {}) {
         'to project where picks will land',
     ];
   }
+  return [
+    `Rookie draft order declared in ${DRAFT_ORDER_CONFIG_FILE}:`,
+    ...draftOrderInWords(rule, { teamCount, playoffTeams }).map((line) => `  ${line}`),
+  ];
+}
 
+/**
+ * One line per group of a declared rule, in plain words: "picks 1-6: the 6
+ * teams that miss the playoffs, lowest max points-for first". Shared by doctor
+ * and by the editions that explain the rule to a model, so both say it the
+ * same way.
+ */
+export function draftOrderInWords(rule, { teamCount, playoffTeams } = {}) {
   // Without a usable playoff field size the groups are still worth showing,
   // just without pick numbers; draftOrderGroupSizes refuses loudly wherever a
   // projection actually depends on them.
@@ -228,16 +240,13 @@ export function describeDraftOrder(rule, { teamCount, playoffTeams } = {}) {
     ? draftOrderGroupSizes(rule, { teamCount, playoffTeams })
     : null;
 
-  return [
-    `Rookie draft order declared in ${DRAFT_ORDER_CONFIG_FILE}:`,
-    ...rule.groups.map((group, index) => {
-      const slot = sizes?.[index];
-      const picks = slot ? `picks ${slot.firstPick}-${slot.lastPick}: ` : `group ${index + 1}: `;
-      const who = TEAMS_IN_WORDS[group.teams](slot?.size).replace(/\s+/g, ' ');
-      const how = UNSUPPORTED_DRAFT_ORDER_SORTS.includes(group.sort)
-        ? `by ${group.sort} (not yet supported — no draft order can be projected)`
-        : SORT_IN_WORDS[group.sort][group.direction];
-      return `  ${picks}${who}, ${how}`;
-    }),
-  ];
+  return rule.groups.map((group, index) => {
+    const slot = sizes?.[index];
+    const picks = slot ? `picks ${slot.firstPick}-${slot.lastPick}: ` : `group ${index + 1}: `;
+    const who = TEAMS_IN_WORDS[group.teams](slot?.size).replace(/\s+/g, ' ');
+    const how = UNSUPPORTED_DRAFT_ORDER_SORTS.includes(group.sort)
+      ? `by ${group.sort} (not yet supported — no draft order can be projected)`
+      : SORT_IN_WORDS[group.sort][group.direction];
+    return `${picks}${who}, ${how}`;
+  });
 }

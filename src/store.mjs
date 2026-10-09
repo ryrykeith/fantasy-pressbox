@@ -12,6 +12,7 @@
  *   rankings/<season>/<label>.json      a published ranking and its movement
  *   predictions/<season>/week-<n>.json  what we said would happen
  *   market/<season>/week-<n>.json       trade values as fetched for that week
+ *   tank-watch/<season>/week-<n>.json   the draft order a tank watch reported
  */
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -143,6 +144,33 @@ export function createStore({ dataDir }) {
     },
     loadMarketValues(season, week) {
       return readJson(pathFor('market', season, `week-${week}.json`));
+    },
+
+    /**
+     * The draft order a tank watch reported, saved when the edition is built.
+     * Kept apart from the week's snapshot so the next tank watch measures
+     * movement against what the last one actually printed, however many weeks
+     * ago that was.
+     */
+    saveTankWatch(season, week, draftOrder) {
+      return writeJson(pathFor('tank-watch', season, `week-${week}.json`), {
+        season: String(season),
+        week,
+        savedAt: new Date().toISOString(),
+        draftOrder,
+      });
+    },
+    /** The most recent tank watch strictly before `beforeWeek`, or null. */
+    loadPreviousTankWatch(season, beforeWeek) {
+      const dir = join(dataDir, 'tank-watch', String(season));
+      if (!existsSync(dir)) return null;
+      const latest = readdirSync(dir)
+        .map((file) => /^week-(\d+)\.json$/.exec(file))
+        .filter(Boolean)
+        .map((match) => Number.parseInt(match[1], 10))
+        .filter((week) => week < beforeWeek)
+        .sort((a, b) => b - a)[0];
+      return latest === undefined ? null : readJson(pathFor('tank-watch', season, `week-${latest}.json`));
     },
   };
 

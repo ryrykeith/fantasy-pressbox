@@ -46,6 +46,12 @@ import {
   presentPreviousRankings,
   describeUnresolved,
 } from './teamIdentity.mjs';
+import {
+  TANK_WATCH_EARLY_FLAG,
+  TANK_WATCH_TASK,
+  refuseTankWatch,
+  resolveTankWatchStartWeek,
+} from './tankWatch.mjs';
 
 const HELP = `
 Fantasy Pressbox — AI league coverage from your Sleeper data
@@ -65,6 +71,7 @@ Commands
   survival-rankings             Build the weekly survival rankings (guillotine leagues)
   preseason-rankings            Build preseason rankings (ignores all results)
   transactions                  Grade the week's trades (quiet weeks are skipped)
+  tank-watch                    Build the rookie draft tank watch (dynasty leagues, second half)
   record <file>                 File a finished edition you pasted back from a chat
   check <file>                  Check a file of finished posts against the length limit
   grade                         Score last week's predictions against what happened
@@ -76,6 +83,7 @@ Options
   --generate                    Call the AI provider in .env and write finished posts
   --refresh-players             Re-download the NFL player list instead of using the cache
   --refresh-market              Fetch trade values again instead of reusing the week's saved ones
+  --early                       Run the tank watch before its start week
   --help                        Show this message
 
 Examples
@@ -87,6 +95,7 @@ Examples
   node src/cli.mjs chop-recap --week 3
   node src/cli.mjs survival-rankings --week 3
   node src/cli.mjs transactions --week 3 --generate
+  node src/cli.mjs tank-watch --week 9
 `;
 
 function parseArgs(argv) {
@@ -97,6 +106,7 @@ function parseArgs(argv) {
     else if (token === '--generate') args.generate = true;
     else if (token === '--refresh-players') args.refreshPlayers = true;
     else if (token === '--refresh-market') args.refreshMarket = true;
+    else if (token === TANK_WATCH_EARLY_FLAG) args.early = true;
     else if (token === '--week') args.week = Number.parseInt(argv[++i], 10);
     else if (token === '--format') args.format = argv[++i];
     else if (token === '--task') args.task = argv[++i];
@@ -428,6 +438,11 @@ async function commandEdition(config, args, task) {
   requireLeagueId(config);
   refuseOrdinaryEditionInGuillotineLeague(config, task);
   refuseSurvivalEditionWithoutEliminations(config, task);
+  const isTankWatch = task === TANK_WATCH_TASK;
+  // The declared format and rule are enough to refuse a tank watch before
+  // Sleeper is contacted. The resolved format and the week are checked again
+  // once the league is open.
+  if (isTankWatch) refuseTankWatch({ formatType: config.leagueFormat, rule: config.rookieDraft.order });
   const format = args.format || 'sleeper';
   if (!['sleeper', 'imessage'].includes(format)) {
     throw new Error(`--format must be "sleeper" or "imessage", got "${format}".`);
@@ -454,6 +469,17 @@ async function commandEdition(config, args, task) {
   const offset = FORWARD_LOOKING_TASKS.includes(task) ? 0 : -1;
   const { week, source } = await resolveWeek({ client, league, config, requested: args.week, offset });
   const isTransactionEdition = TRANSACTION_TASKS.includes(task);
+  if (isTankWatch) {
+    refuseTankWatch({
+      formatType: league.format.type,
+      rule: config.rookieDraft.order,
+      week,
+      // --early skips the start week entirely, including working one out.
+      startWeek: args.early
+        ? null
+        : resolveTankWatchStartWeek({ declared: config.rookieDraft.tankWatch.startWeek, league }),
+    });
+  }
   say(`Building ${task} for week ${week} (week chosen from ${source}).`);
 
   let weekAnalysis = null;
@@ -470,6 +496,9 @@ async function commandEdition(config, args, task) {
   let byeExposure = null;
   let enrichedTransactions = null;
   let marketValues = null;
+  let draftOrder = null;
+  let previousTankWatch = null;
+  let prospectBoard = null;
 
   if (task === 'preseason-rankings') {
     say('Preseason edition: regular-season results are deliberately excluded.');
@@ -498,6 +527,30 @@ async function commandEdition(config, args, task) {
       if (marketValues.unavailable) {
         warn(`Trade values could not be fetched (${marketValues.unavailable}). Grades will not quote a market.`);
       }
+    } else if (isTankWatch) {
+      // The refusals above leave one way for the projection to be missing: a
+      // league that does not report its number of playoff teams.
+      draftOrder = captured.draftOrder ?? null;
+      if (!draftOrder) {
+        throw new Error(
+          'The rookie draft order could not be projected: the league does not report how many teams make the playoffs.',
+        );
+      }
+      // Sleeper reports standings only as they are now, so an earlier --week
+      // still gets today's order.
+      if (Number.isInteger(league.lastScoredWeek) && week !== league.lastScoredWeek) {
+        warn(
+          `Note: the draft order is projected from the standings after week ${league.lastScoredWeek}, ` +
+            `not week ${week}. Sleeper only reports the current standings.`,
+        );
+      }
+      previousTankWatch = store.loadPreviousTankWatch(league.season, week);
+      say(
+        previousTankWatch
+          ? `Measuring movement against the week ${previousTankWatch.week} tank watch.`
+          : 'No earlier tank watch this season: no movement to report.',
+      );
+      prospectBoard = loadProspectBoard({ draftYear: Number(draftOrder.draftSeason) });
     } else if (task === 'preview') {
       // The week has not been played, so the preview gets the pairings plus
       // last week's results — never this week's partial scores.
@@ -563,7 +616,7 @@ async function commandEdition(config, args, task) {
   // name kept as `formerly`, so a rename reads as a rename and not as a team
   // that appeared from nowhere while another vanished.
   const previousRankings =
-    task === 'preseason-rankings' || isTransactionEdition
+    task === 'preseason-rankings' || isTransactionEdition || isTankWatch
       ? null
       : presentPreviousRankings(store.loadPreviousRankings(league.season, week), teamIdentityFor(ctx));
   if (previousRankings) {
@@ -594,6 +647,9 @@ async function commandEdition(config, args, task) {
     faabMarket,
     dangerBoard,
     byeExposure,
+    draftOrder,
+    previousTankWatch,
+    prospectBoard,
     format,
   });
 
@@ -604,6 +660,11 @@ async function commandEdition(config, args, task) {
       : `${league.season}-week${String(week).padStart(2, '0')}-${task}`;
   const promptPath = writeOutput(config, `${base}-prompt.md`, prompt);
   say(`\nPrompt written to ${promptPath}`);
+
+  // Saved when the prompt is built, not when posts come back, so the next
+  // tank watch measures movement from this one in the paste-into-a-chat
+  // workflow too. A re-run for the same week replaces it.
+  if (isTankWatch) say(`Projection saved for the next tank watch → ${store.saveTankWatch(league.season, week, draftOrder)}`);
 
   if (!args.generate) {
     if (!detectProvider(config.ai)) {
@@ -633,9 +694,9 @@ async function commandEdition(config, args, task) {
   const outPath = writeOutput(config, `${base}-${format}.txt`, body);
   say(`Posts written to ${outPath}`);
 
-  // A transaction edition ends with no machine-readable block: there is no
-  // prediction to grade and no ranking to carry movement from.
-  if (isTransactionEdition) {
+  // A transaction edition and a tank watch end with no machine-readable block:
+  // there is no prediction to grade and no ranking to carry movement from.
+  if (isTransactionEdition || isTankWatch) {
     reportLengths(body, config, format);
     return 0;
   }
@@ -920,6 +981,8 @@ async function main() {
       return commandEdition(config, args, 'preseason-rankings');
     case 'transactions':
       return commandEdition(config, args, 'trade-report');
+    case TANK_WATCH_TASK:
+      return commandEdition(config, args, TANK_WATCH_TASK);
     case 'record':
       return commandRecord(config, args);
     case 'check':
