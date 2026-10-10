@@ -17,4 +17,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Package metadata and publishable layout](./package-metadata-and-publishable-layout.md) | pending |
-| [Rewrite the docs for the package workflow](./rewrite-the-docs-for-the-package.md) | pending |
+| [Rewrite the docs for the package workflow](./rewrite-the-docs-for-the-package.md) | completed |
