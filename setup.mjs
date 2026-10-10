@@ -621,7 +621,8 @@ main()
     if (error.name === 'NoMoreInput') {
       console.error(
         red('\nSetup needs an answer to every question, and input ended early.\n') +
-          'Run it directly in a terminal so it can ask you:  npm run setup\n',
+          'Run it directly in a terminal so it can ask you:  fantasy-pressbox init\n' +
+          '(from a clone of the repository:  npm run setup)\n',
       );
       process.exit(1);
     }

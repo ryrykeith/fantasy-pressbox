@@ -18,8 +18,10 @@ comes from your league's real data.
 - [How it works](#how-it-works)
 - [Results vary between runs](#the-same-prompt-will-not-give-the-same-answer-twice)
 - [Requirements](#requirements)
-- [Installation](#installation-step-by-step)
-- [Setup](#setup)
+- [Install](#install-step-by-step)
+- [Set up your league](#set-up-your-league)
+- [What your league format changes](#what-your-league-format-changes)
+- [Your first edition](#your-first-edition)
 - [Your weekly routine](#your-weekly-routine)
 - [Commands](#commands)
 - [Two ways to write the posts](#two-ways-to-write-the-posts)
@@ -34,7 +36,7 @@ comes from your league's real data.
 
 ## What you get
 
-Four kinds of content, all built from your league's real data:
+Every edition is built from your league's real data:
 
 | Edition | What it is |
 |---|---|
@@ -42,6 +44,10 @@ Four kinds of content, all built from your league's real data:
 | **Weekly previews** | One post per matchup, with a called shot on the winner and the score. |
 | **Weekly recaps** | The autopsy: who won, who left points on the bench, who got exposed. Plus awards. |
 | **Weekly power rankings** | A fresh 1-to-N with movement arrows against last week. |
+| **Trade report** | A grade for every trade completed in the week, with the trade market's values and, in dynasty leagues, where each traded pick is projected to land. |
+| **Survival preview, chop recap, survival rankings** | The guillotine league versions of the three weekly editions: who is near the chop line, who got chopped, who is safest. |
+| **Tank watch** | Dynasty leagues, second half of the season: the race for next year's top rookie picks and who owns them. |
+| **Future stock** | Dynasty leagues: every team ranked on the next three seasons rather than this week. |
 
 Here is the kind of thing it produces — this is real output from a real
 league, and every number in it came out of Sleeper:
@@ -156,7 +162,8 @@ spreadsheet, not a publication.
 
 ## Requirements
 
-**One thing: Node.js, version 18 or newer.** That's it.
+**One thing: Node.js, version 18 or newer.** It comes with `npm`, which is how
+Fantasy Pressbox is installed.
 
 There are no other packages to install. No Python, no database, no account to
 create, and no Sleeper password — Sleeper's data is public and read-only.
@@ -166,9 +173,9 @@ You only need an AI API key if you want the posts written automatically. See
 
 ---
 
-## Installation, step by step
+## Install, step by step
 
-If you have never done this before, follow all four steps. It takes about ten
+If you have never done this before, follow all three steps. It takes about ten
 minutes, and you only do it once.
 
 ```mermaid
@@ -178,15 +185,15 @@ flowchart TD
     B --> C{"Type node --version<br/>Is it v18 or higher?"}
     C -->|"No"| A2["Close the window,<br/>open a new one, try again"]
     A2 --> C
-    C -->|"Yes"| D["3. Download the project,<br/>then cd fantasy-pressbox"]
-    D --> E["4. Run npm run setup<br/>and answer a few questions"]
-    E --> F{"Run the doctor command.<br/>Does it show your league name?"}
+    C -->|"Yes"| D["3. npm install -g fantasy-pressbox"]
+    D --> E["Set up your league:<br/>fantasy-pressbox init"]
+    E --> F{"Run doctor.<br/>Does it show your league name?"}
     F -->|"No"| G["See Troubleshooting"]
-    F -->|"Yes"| H(["Ready to run your first edition"])
+    F -->|"Yes"| H(["Ready for your first edition"])
 ```
-The four steps in words: install Node.js, open a terminal and confirm Node
-works, download the project and move into its folder, then run setup and check
-it with `doctor`.
+The steps in words: install Node.js, open a terminal and confirm Node works,
+install Fantasy Pressbox with npm, then set up your league and check it with
+`doctor`.
 
 ### Step 1 — Install Node.js
 
@@ -214,43 +221,47 @@ You should see something like `v22.14.0`. Any number 18 or higher is fine.
 > window was open before you installed it. Close the window, open a new one,
 > and try again.
 
-### Step 3 — Get the project onto your computer
-
-If you have `git`, this is one command:
+### Step 3 — Install Fantasy Pressbox
 
 ```bash
-git clone https://github.com/ryrykeith/fantasy-pressbox.git
+npm install -g fantasy-pressbox
 ```
 
-If you don't, go to the project page on GitHub, click the green **Code**
-button, choose **Download ZIP**, and unzip it wherever you like.
-
-Then move into the folder — this tells the terminal which project you mean:
+The `-g` makes `fantasy-pressbox` a command you can run from any folder. Check
+it worked:
 
 ```bash
-cd fantasy-pressbox
+fantasy-pressbox --help
 ```
 
-> **Tip:** you can type `cd ` (with a space) and then drag the folder from
-> Finder or File Explorer onto the terminal window, which fills in the path
-> for you.
+You should see the list of commands.
 
-### Step 4 — Run setup
+> **If you get a permissions error** (`EACCES`) on a Mac or Linux, your Node
+> install keeps global packages somewhere your user cannot write. The fix
+> most people use is to install Node through a version manager such as
+> [nvm](https://github.com/nvm-sh/nvm); don't reach for `sudo`.
 
-```bash
-npm run setup
-```
-
-That's the install finished. The next section covers what setup asks you.
+Updating later is the same command. Your leagues live in their own folders
+(next section), so an update never touches them.
 
 ---
 
-## Setup
+## Set up your league
 
-`npm run setup` (the same as `node src/cli.mjs init`) is an interactive
-questionnaire. It checks your computer, asks a handful of questions in plain
-language, and sets up a folder for your league. Press Enter to accept any
-answer shown in brackets.
+Each league gets a folder of its own, holding its settings, its history and
+its output. Make one with `init`:
+
+```bash
+fantasy-pressbox init --workspace ~/leagues/my-league
+```
+
+Use any folder name you like. `init` creates the folder and asks a handful of
+questions in plain language. Press Enter to accept any answer shown in
+brackets.
+
+> Without `--workspace`, `init` sets up **the folder you are in**. That is
+> fine if you made an empty folder and moved into it first; it is not what you
+> want in your home folder.
 
 It asks for:
 
@@ -267,16 +278,13 @@ You can paste the entire address — setup pulls the ID out of it. It then
 checks the ID against Sleeper and shows you the league's name, season and
 number of teams, so you know immediately if you grabbed the wrong number.
 
-**2. Where your league's folder goes.** Each league gets a folder of its own,
-outside the project folder, holding its settings, history and output. Setup
-offers `~/leagues/<your league's name>`; press Enter to take it. (Run with
-`--workspace <folder>`, or from inside a league folder, and it uses that
-folder instead without asking.)
+**2. What the publication should call your league.** Sleeper's name is offered.
 
 **3. What kind of league it is.** Dynasty, redraft or guillotine. Setup offers
 what Sleeper reports, but Sleeper cannot tell a guillotine league (also called
 chopped or elimination) from an ordinary one, so if yours is one, choose it
-here.
+here. [What your league format changes](#what-your-league-format-changes)
+explains what each choice does.
 
 **4. Whether the scoring is right.** Setup shows the scoring Sleeper reports:
 PPR, any tight end premium, the passing touchdown value and superflex. Every
@@ -297,19 +305,106 @@ post length limit (900 characters is a safe default).
 
 Your answers are saved to a file called `.env` in the league folder. That file
 stays on your computer. Setup checks the folder loads before it finishes, so
-every command works straight away with no editing. You can re-run setup any
-time to change your answers: what you answered before is offered again, nothing
-is replaced without asking, and your previous settings are backed up first.
+every command works straight away with no editing.
 
-When it finishes, check everything works, from inside the league folder:
+Run `init` again on the same folder any time to change your answers: what you
+answered before is offered again, nothing is replaced without asking, and your
+previous settings are backed up first. A folder that already holds a different
+league is not taken over without asking.
+
+When it finishes, move into the league folder and check everything works:
 
 ```bash
-cd ~/leagues/<your league's name>
-node <path to fantasy-pressbox>/src/cli.mjs doctor
+cd ~/leagues/my-league
+fantasy-pressbox doctor
 ```
 
-Setup prints that command with the real path filled in. You should see your
-league name, your team count, and your league format.
+You should see your league name, your team count, and your league format.
+
+> Setup's closing message prints commands as `node <path>/src/cli.mjs doctor`.
+> That is the same program as `fantasy-pressbox doctor`; use whichever you
+> like.
+
+---
+
+## What your league format changes
+
+Setup asks for the format because it decides which editions make sense and
+how teams are judged. It is saved as `LEAGUE_FORMAT` in `.env`.
+
+| | Dynasty | Redraft | Guillotine |
+|---|---|---|---|
+| **Detected from Sleeper?** | Yes | Yes | **No — must be declared** |
+| **Weekly editions** | `preview`, `recap`, `rankings` | `preview`, `recap`, `rankings` | `survival-preview`, `chop-recap`, `survival-rankings` |
+| **Rankings judge** | This season and the long term: starting lineup, dynasty value, depth, quarterback, future picks | This season only: starting lineup, depth, contender status | Not being last: weekly floor, bye-week exposure, remaining FAAB |
+| **Extra editions** | `tank-watch`, `future-stock` | — | — |
+| **League config** | `rookie-draft.yml`, a prospect board | — | `guillotine.yml` |
+
+**Why guillotine has to be declared.** In a guillotine league the lowest
+scorer each week is eliminated, and the commissioner does that by hand:
+removing the chopped team's owner and dropping its players to waivers.
+Sleeper's data still describes an ordinary head-to-head league, with matchups
+that mean nothing. So Fantasy Pressbox only treats a league as guillotine when
+you say so.
+
+Once it knows, it throws Sleeper's meaningless pairings away rather than
+printing them. `preview`, `recap` and `rankings` refuse to run and name the
+edition that replaces them. `doctor` prints the format the tool is using and
+whether it was declared or detected.
+
+`tank-watch` and `future-stock` look at future rookie drafts, so they refuse
+redraft and guillotine leagues.
+
+---
+
+## Your first edition
+
+From inside your league folder (or with `--workspace ~/leagues/my-league` added
+to each command):
+
+**1. Build the prompt.** Before the season starts, run the preseason rankings;
+once games are being played, run the week's rankings (or `survival-rankings`
+in a guillotine league):
+
+```bash
+fantasy-pressbox rankings
+```
+
+It works out which week it is from Sleeper, saves that week's data, and writes
+a file into the league folder's `output/` folder. It tells you which one:
+`Prompt written to …`.
+
+**2. Get the posts written.** Open [ChatGPT](https://chatgpt.com) or
+[Claude](https://claude.ai) and start a **new chat**. Either drag the file in
+as an attachment, or open it and copy the whole thing into the message box.
+On a Mac, this puts the entire file on your clipboard in one step:
+
+```bash
+cat output/2026-week04-rankings-prompt.md | pbcopy
+```
+
+The file carries everything needed — your league, the scores, the house style
+— so there is nothing to explain and nothing to type alongside it. Send it.
+
+**3. Post it.** The reply is split into separate posts, divided by a line
+containing `%%%`. Post each chunk separately in your Sleeper league chat — the
+chat there does not render formatting and rejects very long messages, which is
+why the content is already broken up for you.
+
+**4. Record it.** Copy the whole reply into a text file in `output/` and file
+it:
+
+```bash
+fantasy-pressbox record output/my-rankings.txt --task rankings
+```
+
+That freezes the order your league actually saw, so next week's rankings show
+movement arrows against it. (`--task preseason-rankings` for the preseason
+edition.)
+
+That's a full edition. If you set up an API key, add `--generate` to step 1
+and it does steps 2 and 4 for you; see
+[Two ways to write the posts](#two-ways-to-write-the-posts).
 
 ---
 
@@ -329,121 +424,124 @@ flowchart TB
         B2 --> B3["Run: rankings"]
         B3 --> B4["Paste, then post"]
         B4 --> B5["Run: record, task rankings<br/>(so next week shows movement)"]
+        B5 --> B6["Optional: transactions<br/>(if anyone traded)"]
     end
     T --> U
 ```
-Twice a week, for your league folder. Thursday you build previews and record
+Twice a week, from your league folder. Thursday you build previews and record
 the picks; Tuesday you build the recap and the rankings, and record the new
-order. The two `record` steps are what give the publication its memory — skip
-them and you lose graded predictions and movement arrows.
+order. In a guillotine league the three editions are `survival-preview`,
+`chop-recap` and `survival-rankings`; the routine is the same.
 
-The commands below are written as run from the project folder. Point them at
-your league in one of three ways: add `--workspace ~/leagues/<name>` to each,
-set `PRESSBOX_WORKSPACE=~/leagues/<name>` once in your terminal, or run them
-from inside the league folder with the full path to `src/cli.mjs` (setup prints
-it for you).
+### Don't skip `record`
+
+The two `record` steps are the ones people forget, and they are what give the
+publication its memory:
+
+- **Without the preview recorded**, there are no picks to grade, so the recap
+  cannot say how the predictions did.
+- **Without the rankings recorded**, next week measures movement against the
+  last ranking that *was* recorded — two or three weeks old — and every arrow
+  quietly describes the wrong span. This has happened: one missed week threw
+  off a whole season's movement arrows.
+
+Each edition prints which ranking it is measuring movement against
+(`Measuring movement against "week-3" rankings.`). If that isn't last week,
+you missed a `record`.
+
+Team renames are handled for you. Managers rename teams whenever they like;
+`record` pins every name to its Sleeper roster, so a renamed team keeps its
+history and its arrow. Each edition lists the renames it noticed. A name in
+the reply that matches no team at all is refused rather than filed as a new
+team — fix the typo in your file and run `record` again.
 
 ### Thursday — before the games
 
 ```bash
-node src/cli.mjs preview
+fantasy-pressbox preview
 ```
 
-This writes a file into the `output` folder. Give that file to
-[ChatGPT](https://chatgpt.com) or [Claude](https://claude.ai) — either drag it
-in as an attachment, or open it and copy the whole thing into the message box.
-
-On a Mac, this puts the entire file on your clipboard in one step:
+Paste the file into a new chat, post the previews, then copy the reply into a
+file and record it, so next week can grade the picks:
 
 ```bash
-cat output/2026-week02-preview-prompt.md | pbcopy
-```
-
-Start a **new chat** rather than continuing an old one. The file carries
-everything needed — your league, the scores, the house style — so there is
-nothing to explain and nothing to type alongside it.
-
-Send it. You'll get back a set of previews, one per matchup, each short enough
-to post in Sleeper.
-
-Copy the reply into a file and record it, so next week can grade the picks:
-
-```bash
-node src/cli.mjs record output/my-previews.txt --task preview
+fantasy-pressbox record output/my-previews.txt --task preview
 ```
 
 ### Tuesday — after the games
 
 ```bash
-node src/cli.mjs recap
+fantasy-pressbox recap
 ```
 
 Same routine. This one grades last week's predictions automatically, so the
-recap can open by admitting what it got wrong.
+recap can open by admitting what it got wrong. (`fantasy-pressbox grade`
+shows the same grading on its own.)
 
-Then the rankings:
+Then the rankings, and record them:
 
 ```bash
-node src/cli.mjs rankings
+fantasy-pressbox rankings
+fantasy-pressbox record output/my-rankings.txt --task rankings
 ```
 
-And record them, so next week's edition can show movement arrows:
+If anyone traded, grade it:
 
 ```bash
-node src/cli.mjs record output/my-rankings.txt --task rankings
+fantasy-pressbox transactions
 ```
 
-### Posting it
+A week with no trades says so and builds no prompt.
 
-The output is split into separate posts, divided by a line containing `%%%`.
-Post each chunk separately in Sleeper — the chat there does not render
-formatting and rejects very long messages, which is why the content is
-already broken up and length-checked for you.
+### Posting somewhere else
 
-For your iMessage group chat, add `--format imessage` to get one longer
-consolidated message instead:
+For an iMessage group chat, add `--format imessage` to get one longer
+consolidated message instead of Sleeper-sized posts:
 
 ```bash
-node src/cli.mjs rankings --format imessage
+fantasy-pressbox rankings --format imessage
 ```
 
 ---
 
 ## Commands
 
-Every command except `init` and `check` works on one league folder: the one you
-are in, or the one `--workspace` (or `PRESSBOX_WORKSPACE`) names.
+Run every command from inside a league folder, or point it at one with
+`--workspace <folder>` (or set `PRESSBOX_WORKSPACE=<folder>` once in your
+terminal). Only `init` and `check` work without one.
 
 | Command | What it does |
 |---|---|
-| `npm run setup` | Interactive setup. Run this first. |
-| `node src/cli.mjs init` | The same setup. With `--workspace <folder>` it creates that folder and sets the league up there; run from the project folder, it asks where the league's folder should go. See [One folder per league](#one-folder-per-league). |
-| `node src/cli.mjs migrate <folder>` | Copy this league — `.env`, league settings, `data/` and `output/` — into a new folder. Nothing is removed. |
-| `node src/cli.mjs doctor` | Checks your settings and connection. Run this when something is wrong. |
-| `node src/cli.mjs preview` | Build this week's matchup previews. |
-| `node src/cli.mjs survival-preview` | Build this week's survival preview. Guillotine leagues only — it replaces `preview`. |
-| `node src/cli.mjs recap` | Build last week's recap and awards. |
-| `node src/cli.mjs chop-recap` | Build last week's chop recap and awards. Guillotine leagues only — it replaces `recap`. |
-| `node src/cli.mjs rankings` | Build the power rankings. |
-| `node src/cli.mjs survival-rankings` | Build the power rankings for a guillotine league — the teams still alive, ranked on the floor that keeps them there. Guillotine leagues only; it replaces `rankings`. |
-| `node src/cli.mjs preseason-rankings` | Build preseason rankings, ignoring all results. |
-| `node src/cli.mjs tank-watch` | Build the tank watch: the race for next season's top rookie picks, who owns them, and which picks jump if their team crosses the playoff line. Dynasty leagues only. It needs a declared draft order (see `config/rookie-draft.yml`) and opens from the middle of the regular season. |
-| `node src/cli.mjs future-stock` | Rank every team on the next three seasons rather than this week: production by age band, each position's age curve, and priced future picks, with its own weight set (`weights.future_stock` in `config/rankings.yml`). Dynasty leagues only; it refuses redraft and guillotine leagues. Not recorded, so it prints no movement arrows. |
-| `node src/cli.mjs fetch` | Just download and save a week of league data. |
-| `node src/cli.mjs record <file> --task <name>` | File a finished edition you pasted back from a chat. |
-| `node src/cli.mjs check <file>` | Check a file of posts against the Sleeper length limit. |
-| `node src/cli.mjs grade` | Show how last week's predictions actually did. |
+| `fantasy-pressbox init` | Set up a league folder. Run this first. With `--workspace <folder>` it creates that folder. |
+| `fantasy-pressbox doctor` | Check your settings, league config and connection. Run this when something is wrong. |
+| `fantasy-pressbox fetch` | Just download and save a week of league data. |
+| `fantasy-pressbox preview` | Build this week's matchup previews. |
+| `fantasy-pressbox survival-preview` | Build this week's survival preview. Guillotine leagues only — it replaces `preview`. |
+| `fantasy-pressbox recap` | Build last week's recap and awards. |
+| `fantasy-pressbox chop-recap` | Build last week's chop recap and awards. Guillotine leagues only — it replaces `recap`. |
+| `fantasy-pressbox rankings` | Build the power rankings. |
+| `fantasy-pressbox survival-rankings` | Build the power rankings for a guillotine league — the teams still alive, ranked on the floor that keeps them there. Guillotine leagues only; it replaces `rankings`. |
+| `fantasy-pressbox preseason-rankings` | Build preseason rankings, ignoring all results. |
+| `fantasy-pressbox transactions` | Grade the week's trades against the trade market's values. A week with no trades is reported and skipped. |
+| `fantasy-pressbox tank-watch` | Build the tank watch: the race for next season's top rookie picks, who owns them, and which picks jump if their team crosses the playoff line. Dynasty leagues only. It needs a declared draft order (see `config/rookie-draft.yml`) and opens from the middle of the regular season. |
+| `fantasy-pressbox future-stock` | Rank every team on the next three seasons rather than this week: production by age band, each position's age curve, and priced future picks, with its own weight set (`weights.future_stock` in `config/rankings.yml`). Dynasty leagues only. Not recorded, so it prints no movement arrows. |
+| `fantasy-pressbox record <file> --task <name>` | File a finished edition you pasted back from a chat. `<name>` is `preview`, `survival-preview`, `rankings`, `survival-rankings` or `preseason-rankings`. |
+| `fantasy-pressbox check <file>` | Check a file of posts against the Sleeper length limit. |
+| `fantasy-pressbox grade` | Show how last week's predictions actually did. |
+| `fantasy-pressbox migrate <folder>` | Copy this league — `.env`, league settings, `data/` and `output/` — into a new folder. Nothing is removed. See [Moving a league](#moving-a-league). |
 
 Useful options:
 
 | Option | What it does |
 |---|---|
 | `--week 3` | Work on a specific week instead of the current one. |
-| `--format imessage` | One long message instead of Sleeper-sized posts. |
+| `--format imessage` | One long message instead of Sleeper-sized posts (`sleeper` is the default). |
 | `--generate` | Call the AI for you and write finished posts. |
-| `--refresh-players` | Re-download the NFL player list instead of using the cached copy. |
+| `--task <name>` | Which edition a file is, for `record`. |
 | `--early` | Run the tank watch before its start week. |
-| `--workspace <folder>` | Use a league folder other than the one you are in: its `.env`, its league config, and where `data/` and `output/` go. `PRESSBOX_WORKSPACE` does the same. Without either, the current folder is the league folder. |
+| `--refresh-market` | Fetch trade values again instead of reusing the ones saved for that week. |
+| `--refresh-players` | Re-download the NFL player list instead of using the cached copy. |
+| `--workspace <folder>` | Use a league folder other than the one you are in. `PRESSBOX_WORKSPACE` does the same. |
 
 ---
 
@@ -460,11 +558,11 @@ The trade-off is two copy-and-paste steps each week, and you need to run
 
 ### Let it write (paid API)
 
-Add an API key to your `.env` — or re-run `npm run setup` and choose Claude or
-ChatGPT — then add `--generate` to any command:
+Add an API key to your league's `.env` — or re-run `fantasy-pressbox init` and
+choose Claude or ChatGPT — then add `--generate` to any command:
 
 ```bash
-node src/cli.mjs recap --generate
+fantasy-pressbox recap --generate
 ```
 
 The finished posts are written straight into the `output` folder, predictions
@@ -478,24 +576,46 @@ It's a separate developer account that bills per use. See
 
 ## Configuration
 
+Two kinds of settings, in two places:
+
+- **Your league's own settings** live in your league folder: `.env`,
+  `config/rookie-draft.yml`, `config/guillotine.yml` and your prospect board.
+  Setup writes the first ones for you.
+- **The house style** — `config/editorial.yml`, `config/rankings.yml` and the
+  prompts — ships with Fantasy Pressbox. To change it for one league, put a
+  file of the same name in that league's folder (below). Never edit the
+  installed copies: an update replaces them.
+
+`fantasy-pressbox doctor` shows where your league files were read from and
+names every override, so you can always tell which settings are in force.
+
 ### `.env` — your league and your keys
 
-Created by `npm run setup` in your league folder. Holds your league ID, the
-league format, any API keys, and a few overrides. Never commit this file.
+Created by `init` in your league folder. Holds your league ID, the league
+format, any API keys, and a few overrides. Never share or commit this file.
+Every available setting is documented in `.env.example`, which ships with the
+package.
 
-`.env.example` documents every available setting.
+**`LEAGUE_FORMAT`** is `dynasty`, `redraft` or `guillotine`. Setup always
+fills it in. Left empty, the tool works it out from Sleeper, which can tell
+dynasty from redraft but never guillotine — see
+[What your league format changes](#what-your-league-format-changes).
 
-**`LEAGUE_FORMAT`** is worth knowing about: it says what kind of league yours is
-— `dynasty`, `redraft` or `guillotine`. Leave it empty and the tool works it out
-from Sleeper, which can tell dynasty from redraft on its own. It cannot tell a
-**guillotine** league, because that format is run by the commissioner by hand and
-Sleeper still reports an ordinary head-to-head league — so declare that one
-yourself. `node src/cli.mjs doctor` prints what the tool decided and whether it
-was told or guessed.
+### Overriding the house style for one league
+
+Copy the file you want to change into your league folder at the same relative
+path, and edit the copy:
+
+- `config/editorial.yml` and `config/rankings.yml` are layered over the shipped
+  ones, so your copy only needs the settings you are changing. A list like
+  `ranking_emoji`, or a weight set, replaces the shipped one whole.
+- `prompts/<name>.md` replaces the shipped prompt of that name; every other
+  prompt still comes from the package.
+
+`doctor` names each override it finds, and warns about a prompt file whose name
+matches no shipped prompt (it would never be read).
 
 ### `config/editorial.yml` — how it sounds
-
-Plain text you can edit in any text editor. Change a value, save, run again.
 
 - `tone` and `roast_intensity` — the voice
 - `output.sleeper_max_chars` — the per-post character limit
@@ -518,7 +638,8 @@ closes the edition:
 💩 12. LOWERED EXPECTATIONS ↓8
 ```
 
-**To change them, open `config/editorial.yml` and edit this block:**
+**To change them, create `config/editorial.yml` in your league folder with
+this block:**
 
 ```yaml
 ranking_emoji:
@@ -536,14 +657,13 @@ nothing to reinstall or restart.
 **See exactly what you'll get** before generating anything:
 
 ```bash
-node src/cli.mjs doctor
+fantasy-pressbox doctor
 ```
 
 It prints your finished table against your real number of teams:
 
 ```
   Rank emoji         1🥇  2🥈  3🥉  4🔥  5😤  6👀  7🤨  8🎲  9🫠  10💩  11💩  12💩
-                     Edit these in config/editorial.yml
 ```
 
 **Things worth knowing:**
@@ -554,7 +674,7 @@ It prints your finished table against your real number of teams:
 | Have an 18-team league | The default already runs to 18 — guillotine leagues usually start that big, so nothing repeats |
 | Have fewer teams than emoji | The extras are simply never used |
 | Write your own list | It **replaces** the default completely — no leftovers mixed in |
-| Want no emoji at all | Set `include_emoji: false` and the whole scheme switches off |
+| Want no emoji at all | Set `include_emoji: false` under `output:` and the whole scheme switches off |
 
 **A few ideas**
 
@@ -599,13 +719,13 @@ recaps alike.
 
 ### `config/rankings.yml` — how teams are judged
 
-- `weights` — how much starting lineup, dynasty value, depth, quarterback
-  play, draft capital, flexibility and contender status each count. There is
-  one set per league format, and each set should add up to `1.0`. The
-  `guillotine` set is a different list on purpose: in that format you do not
-  need the most points, only to not be last, so it weighs a team's weekly
-  **floor**, its bye-week exposure and its remaining FAAB — and weighs dynasty
-  value and draft capital at nothing at all.
+- `weights` — how much each factor counts. There is one set per league format
+  (`dynasty`, `redraft`, `guillotine`) plus one for `future-stock`, and each
+  set must add up to `1.0`. The `guillotine` set is a different list on
+  purpose: in that format you do not need the most points, only to not be
+  last, so it weighs a team's weekly **floor**, its bye-week exposure and its
+  remaining FAAB — and weighs dynasty value and draft capital at nothing at
+  all.
 - If you override a set, write out every line it needs. A partial set replaces
   the whole thing rather than merging into the default, so five lines means
   five.
@@ -614,8 +734,9 @@ recaps alike.
 
 ### `config/guillotine.yml` — who has been chopped
 
-Only read when `LEAGUE_FORMAT` is `guillotine`. It holds one thing: the
-elimination ledger, a list of which week chopped which team.
+Guillotine leagues only. Setup puts an empty one in your league folder. It
+holds one thing: the elimination ledger, a list of which week chopped which
+team.
 
 ```yaml
 eliminations:
@@ -637,13 +758,14 @@ So: a week you have written down is settled. A week you have not is reported as
 the two ever disagree, `doctor` says so and names both — it will not quietly
 pick one.
 
-Run `node src/cli.mjs doctor` after editing to see the ledger it read.
+Run `fantasy-pressbox doctor` after editing to see the ledger it read.
 
 ### `config/rookie-draft.yml` — how the rookie draft is ordered
 
-For dynasty leagues. Sleeper does not say how your rookie draft is ordered, so
-until you write the rule here, Fantasy Pressbox will not project where any pick
-lands. The rule is a list of groups that pick in turn:
+Dynasty leagues only. Setup writes this from your answers; edit it to change
+them. Sleeper does not say how your rookie draft is ordered, so until a rule is
+here, Fantasy Pressbox will not project where any pick lands, and `tank-watch`
+refuses to run. The rule is a list of groups that pick in turn:
 
 ```yaml
 order:
@@ -662,16 +784,17 @@ of playoff teams in Sleeper. A `lottery` sort is recognised but not supported
 yet, so a league with one can't be projected. A value that isn't on these lists
 stops the command and lists the valid ones.
 
-Run `node src/cli.mjs doctor` after editing to see the rule in plain words.
+The same file says how the rounds after the first are ordered:
 
-With a rule declared, the trade report grades a traded pick for next season's
-draft at its projected slot, for example 1.07. If the pick's original team is
-on the playoff bubble, the report also gives the slot the pick would jump to
-if that team crossed the line. When a prospect board exists (see below), it
-names the prospects ranked near that slot. The pick market's values are still
-quoted alongside. Without a rule, the report won't say where any pick lands.
+```yaml
+rounds: linear    # or snake
+```
 
-The same file sets when the tank watch opens:
+`linear` repeats round 1's order every round (the team at 1.07 also picks
+2.07); `snake` reverses it in even rounds (1.07 is followed by 2.06 in a
+12-team league).
+
+And when the tank watch opens:
 
 ```yaml
 tank_watch:
@@ -684,64 +807,97 @@ tells you when it opens; `--early` runs it anyway. Each tank watch saves its
 projection under `data/tank-watch/`, and the next one reports how every pick
 has moved since.
 
+Run `fantasy-pressbox doctor` after editing to see the rule in plain words.
+
+With a rule declared, the trade report grades a traded pick for next season's
+draft at its projected slot, for example 1.07. If the pick's original team is
+on the playoff bubble, the report also gives the slot the pick would jump to
+if that team crossed the line, and names the prospects your board ranks near
+that slot. Without a rule, the report won't say where any pick lands.
+
 ### `config/prospects.<year>.yml` — who headlines the rookie class
 
-For dynasty leagues. Nothing in Sleeper or the pick market knows the college
-players, so the class is whatever you write down, with where each claim came
-from. Copy `config/prospects.example.yml` (all invented names) to
-`config/prospects.2027.yml` and fill in your own board. It needs `draftYear`, an
-`updated` date, and ranked entries, each with `rank`, `name`, `position`,
-`school`, an optional short `note`, and a `source` (a publication and/or URL).
+Dynasty leagues only, and optional. Nothing in Sleeper or the trade market
+knows the college players, so the rookie class is whatever **you** write down,
+with where each claim came from. Fantasy Pressbox never ranks prospects itself
+and does not ship a board: a board is your sourced opinion, and one shipped
+with the package would go stale between releases.
+
+To start one, copy the example board that ships with the package (all invented
+names; setup prints its full path) into your league folder as, for example,
+`config/prospects.2027.yml`, and fill it in. It needs `draftYear`, an `updated`
+date, and ranked entries, each with `rank`, `name`, `position`, `school`, an
+optional short `note`, and a `source` (a publication and/or URL).
 
 A missing source, a repeated rank, or a missing `updated` date stops the command
 with a message naming the entry. A prospect who isn't on the board is not
-discussed. `node src/cli.mjs doctor` reports the board's age and warns once it
-is over 45 days old.
+discussed. `doctor` reports the board's age and warns once it is **over 45
+days old** — boards move fast in draft season, so refresh it.
+
+### Trade values — fetched for you
+
+The trade report quotes market values from
+[FantasyCalc](https://fantasycalc.com), queried for your league's format,
+team count and scoring. Nothing to configure. The first `transactions` run
+for a week saves the values in `data/market/`, and every later run for that
+week reuses them, so a re-run grades against the same numbers rather than
+whatever the market says that afternoon. `--refresh-market` fetches them
+again. If FantasyCalc can't be reached the edition still runs, and the model
+is told not to quote any value.
+
+### Bye weeks — shipped with the package
+
+Guillotine editions weigh how many of a team's starters are on bye in the
+coming weeks. Sleeper has no bye-week data, so the package ships a table of
+the season's bye weeks (`config/bye-weeks.<season>.yml`), taken from the real
+NFL schedule. The maintainer regenerates it each season once the schedule is
+out. If your season's table is missing, the guillotine editions stop and say
+so rather than pretend nobody has a bye — update the package
+(`npm install -g fantasy-pressbox`) to get it.
 
 ### `prompts/` — what it writes
 
 One Markdown file per edition, plus `system.md`, which defines the voice and
 the rules the AI is not allowed to break. If you want a different structure,
-a different number of posts, or a different house style, edit these — they are
-just instructions, in English.
+a different number of posts, or a different house style, override them in
+your league folder (see above) — they are just instructions, in English.
 
 A few passages only apply to some league formats. They sit between
 `<!-- format: dynasty -->` and `<!-- end format -->` lines, and are left out of
-the prompt for any other format. Keep those lines intact when you edit around
-them.
+the prompt for any other format. Keep those lines intact in your copy.
 
 ---
 
 ## Where files go
 
 ```
-fantasy-pressbox/        the project: read, never written to by a run
-├── config/          the shipped defaults and templates
-├── prompts/         the instructions given to the AI
-├── src/             the code
-└── docs/            how the project is designed
-
-~/leagues/my-league/     your league folder
-├── .env             your settings (never committed)
-├── config/          your league's own settings (rookie draft, guillotine, prospects)
-├── data/            your league's saved history — stays on your computer
+~/leagues/my-league/     your league folder: everything that is yours
+├── .env             your settings and keys (never share it)
+├── config/          your league's own settings, plus any overrides
+├── prompts/         (optional) your prompt overrides
+├── data/            your league's saved history
 │   ├── raw/           exactly what Sleeper returned
 │   ├── snapshots/     each week, analyzed and frozen
 │   ├── rankings/      every ranking you've published
 │   ├── predictions/   every pick you've made
-│   └── tank-watch/    the draft order each tank watch reported
+│   ├── tank-watch/    the draft order each tank watch reported
+│   ├── market/        the trade values each week was graded against
+│   └── cache/         the NFL player list (safe to delete; re-downloaded)
 └── output/          the files you paste into a chat, and the finished posts
+
+fantasy-pressbox     the installed package: read, never written to
+├── config/          the shipped defaults, templates and bye-week tables
+└── prompts/         the instructions given to the AI
 ```
 
-`data/` is the project's memory. Deleting it loses your movement arrows and
-prediction history, so leave it alone.
+`data/` is the publication's memory. Deleting it loses your movement arrows and
+prediction history, so leave it alone, and back it up with the rest of the
+league folder if the history matters to you.
 
 ### One folder per league
 
-Setup puts your league in a folder of its own, outside the project folder, so
-the project can be updated or reinstalled without touching your league. One
-copy of the project can serve as many leagues as you like, each in its own
-folder:
+One install serves as many leagues as you like, each in its own folder, with
+nothing shared between them:
 
 ```
 ~/leagues/my-dynasty/            ~/leagues/office-guillotine/
@@ -753,36 +909,32 @@ folder:
 └── output/
 ```
 
-A league folder holds that league's `.env`, its own league settings
-(`rookie-draft.yml`, `guillotine.yml`, `prospects.<year>.yml`), any
-`config/editorial.yml`, `config/rankings.yml` or `prompts/` files that override
-the shipped ones, and its `data/` and `output/`. Nothing is shared between
-leagues.
-
-- **Make one:** `npm run setup` asks where it should go;
-  `node src/cli.mjs init --workspace ~/leagues/my-dynasty` creates the named
-  folder and runs setup in it. Setup never writes a league into the project
-  folder.
-- **Use one:** run commands from inside it with the full path to the project,
-  or from anywhere with `--workspace ~/leagues/my-dynasty`.
+- **Make one:** `fantasy-pressbox init --workspace ~/leagues/my-dynasty`.
+  Setup never writes a league into the package.
+- **Use one:** run commands from inside it, or from anywhere with
+  `--workspace ~/leagues/my-dynasty`.
 - **Outside a league folder nothing runs.** A folder without a `.env` is not a
   league, so `recap` there stops and tells you to run `init`, rather than
   starting a second, empty history in the wrong place.
 
-**Moving the league you already have.** If you have been running your league
-from the project folder, copy it into a folder of its own:
+### Moving a league
+
+`migrate` copies a league into a new or empty folder:
 
 ```bash
-node src/cli.mjs migrate ~/leagues/my-dynasty
-node src/cli.mjs doctor --workspace ~/leagues/my-dynasty
+fantasy-pressbox migrate ~/leagues/my-dynasty
+fantasy-pressbox doctor --workspace ~/leagues/my-dynasty
 ```
 
-`migrate` copies `.env`, your league settings, and all of `data/` and `output/`
-— rankings history, snapshots (which remember renamed teams), predictions,
-tank-watch projections and saved trade values. It only copies: nothing in the
-project folder is removed, so check the new folder with `doctor`, run a week
-from it, and only then delete the old `.env`, `data/` and `output/` yourself.
-The destination must be new or empty.
+It copies `.env`, your league settings and overrides, and all of `data/` and
+`output/` — rankings history, snapshots (which remember renamed teams),
+predictions, tank-watch projections and saved trade values. It only copies:
+nothing is removed, so check the new folder with `doctor`, run a week from it,
+and only then delete the old one yourself.
+
+This is also how you move a league you were running from a clone of the
+repository (from before league folders existed) into a folder of its own: run
+`node src/cli.mjs migrate ~/leagues/<name>` from the clone.
 
 ---
 
@@ -793,12 +945,17 @@ Node isn't installed, or this terminal window was opened before you installed
 it. Close the window, open a new one, try again. If it still fails, reinstall
 from <https://nodejs.org>.
 
-**`No SLEEPER_LEAGUE_ID found`**
-You haven't run setup yet. Run `npm run setup` (or `node src/cli.mjs init`).
+**`command not found: fantasy-pressbox`**
+The install didn't finish, or it put the command somewhere your terminal
+doesn't look. Run `npm install -g fantasy-pressbox` again and read its last
+lines; open a new terminal window afterwards.
 
 **`... is not a league folder: it has no .env file`**
 You ran a command outside a league folder. Change into your league's folder,
 pass `--workspace <folder>`, or run `init` to set a new one up.
+
+**`No SLEEPER_LEAGUE_ID found`**
+The league folder's `.env` has no league ID. Run `init` on that folder again.
 
 **`Sleeper has no league with ID ...`**
 The ID is wrong. Open your league in a web browser and copy the long number
@@ -812,9 +969,19 @@ minute and try again.
 The games haven't been scored yet. Sleeper fills scores in as they happen. The
 tool warns you when a week has no scores rather than inventing them.
 
+**The movement arrows look wrong**
+Check the line `Measuring movement against "..." rankings.` near the top of the
+command's output. If it names an older week than last week's, a `record` was
+missed; see [Don't skip `record`](#dont-skip-record).
+
+**`record` refuses a team name**
+A name in your file matches no team in the league — usually a typo, or a name
+the AI shortened. Fix it in the file and run `record` again. Renamed teams are
+recognised on their own.
+
 **The posts are too long for Sleeper**
 The tool tells you which ones and by how much — it never silently cuts a post
-in half. Trim them by hand, or lower `sleeper_max_chars` in
+in half. Trim them by hand, or lower `sleeper_max_chars` in your
 `config/editorial.yml` so the AI aims smaller next time.
 
 **ChatGPT describes the file instead of writing the posts**
@@ -823,12 +990,11 @@ If it summarises the prompt and asks what you'd like it to do — "generate the
 rankings, review the prompt, or use it as the basis for a workflow?" — it has
 treated your attachment as a document to discuss rather than a job to do.
 
-Every prompt file now opens by telling the assistant it is a ready-to-run
-assignment, which prevents this. If you still see it — on an older generated
-file, or with a different assistant — you have two fixes:
+Every prompt file opens by telling the assistant it is a ready-to-run
+assignment, which prevents this. If you still see it, you have two fixes:
 
-- Regenerate the file (`node src/cli.mjs rankings`) so it includes the header,
-  and send it in a **new** chat.
+- Regenerate the file (`fantasy-pressbox rankings`) and send it in a **new**
+  chat.
 - Or just reply `Follow the file.` It will then produce the edition normally.
 
 Pasting the file's contents into the message box, rather than attaching it,
@@ -840,7 +1006,7 @@ file in `output/` and confirm whether the fact was in the JSON block — if it
 wasn't, the prompt rules need tightening.
 
 **Something else**
-Run `node src/cli.mjs doctor`. It checks each piece and tells you which one is
+Run `fantasy-pressbox doctor`. It checks each piece and tells you which one is
 unhappy. For full error details, set `DEBUG=true` in `.env`.
 
 ---
@@ -848,6 +1014,8 @@ unhappy. For full error details, set `DEBUG=true` in `.env`.
 ## What it costs
 
 **Sleeper data: free.** The API is public and requires no account.
+
+**Trade values: free.** FantasyCalc's values are public.
 
 **Paste-it-yourself: free.** Any ChatGPT or Claude account, including the free
 tiers, can take the prompt.
@@ -863,10 +1031,42 @@ limit in their dashboard if you want a hard ceiling.
 
 ## For developers
 
+### Working from a clone
+
+```bash
+git clone https://github.com/ryrykeith/fantasy-pressbox.git
+cd fantasy-pressbox
+npm test
+npm run setup
+```
+
+There is nothing to install: the package has no dependencies. In a clone,
+`node src/cli.mjs <command>` is the same program as `fantasy-pressbox
+<command>`, and `npm run setup` is the same as `init`.
+
+`setup.mjs` is the questionnaire `init` runs, and it stays for the clone path,
+because a clone has no installed command. Started in the repository's own
+folder, it asks where the league folder should go and refuses any folder inside
+the repository, so a clone stays a clean package. Don't keep a league's `.env`
+in the clone; if you have one there, `migrate` it out (see
+[Moving a league](#moving-a-league)).
+
+Each season, regenerate the bye-week table before the season starts:
+
+```bash
+node scripts/fetch-bye-weeks.mjs <season>
+```
+
+It writes `config/bye-weeks.<season>.yml` from the published NFL schedule and
+refuses to write a table that isn't 32 teams with one bye each. Review it and
+ship it with a release.
+
+### Design
+
 The design rules live in [`AGENTS.md`](AGENTS.md) and [`docs/`](docs/):
 
-- [`docs/architecture.md`](docs/architecture.md) — the pipeline and why the
-  stages are separate
+- [`docs/architecture.md`](docs/architecture.md) — the pipeline, why the
+  stages are separate, and the package/league-folder split
 - [`docs/editorial-model.md`](docs/editorial-model.md) — ranking philosophy,
   voice, awards, receipts
 - [`docs/prompt-design.md`](docs/prompt-design.md) — how a prompt is assembled
@@ -886,6 +1086,7 @@ The short version:
   league ID.
 - History is append-only. A ranking published in week 2 is never recomputed
   with week 5's information.
+- The package is read-only at run time. Every write goes to the league folder.
 
 Adding another fantasy platform means writing a new client and normalizer that
 produce the same shapes; nothing downstream should need to change.
