@@ -13,6 +13,6 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Interactive init and league workspaces](./interactive-init-and-league-workspaces/index.md) | pending |
+| [Interactive init and league workspaces](./interactive-init-and-league-workspaces/index.md) | completed |
 | [Publish preparation](./publish-preparation/index.md) | pending |
 | [Separate package assets from workspace data](./separate-package-assets-from-workspace/index.md) | completed |

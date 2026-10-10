@@ -234,13 +234,10 @@ test('a league with no rookie-draft file declares no rule', () => {
   });
 });
 
-// This repository runs one league, and its rule is committed here on purpose:
-// until league workspaces land, config/ is that league's config. The test
-// guards that what is committed parses, rather than that it is empty.
-test('the committed config/rookie-draft.yml is readable and declares a projectable rule', () => {
+test('the shipped config/rookie-draft.yml is readable and declares nothing', () => {
   const config = loadConfig({ envPath: NO_ENV_FILE, rookieDraftPath: join(PACKAGE_ROOT, 'config', 'rookie-draft.yml') });
-  assert.deepEqual(config.rookieDraft.order, THIS_LEAGUE_RULE);
-  assert.equal(config.rookieDraft.rounds, 'linear');
+  assert.equal(config.rookieDraft.order, null);
+  assert.equal(config.rookieDraft.rounds, null);
 });
 
 test('a misspelled rule stops the run at config load, naming the file', () => {
