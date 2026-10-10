@@ -156,6 +156,7 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/validate.mjs` | Post splitting and length checking |
 | `src/pipeline.mjs` | The run order |
 | `src/cli.mjs` | Commands and human-facing output |
+| `src/welcome.mjs` | How the CLI talks someone through starting: the command line its advice prints (global install, npx, a project's node_modules, or a clone), the banner, the getting-started steps and the weekly routine |
 
 ## Domain concepts
 

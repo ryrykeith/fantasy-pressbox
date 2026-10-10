@@ -231,10 +231,13 @@ The `-g` makes `fantasy-pressbox` a command you can run from any folder. Check
 it worked:
 
 ```bash
-fantasy-pressbox --help
+fantasy-pressbox
 ```
 
-You should see the list of commands.
+You should see the Fantasy Pressbox scoreboard and the three steps to your
+first edition. Run it again from inside a league folder and it lists that
+week's commands instead. `fantasy-pressbox --help` shows every command and
+option.
 
 > **If you get a permissions error** (`EACCES`) on a Mac or Linux, your Node
 > install keeps global packages somewhere your user cannot write. The fix
@@ -320,10 +323,10 @@ fantasy-pressbox doctor
 ```
 
 You should see your league name, your team count, and your league format.
-
-> Setup's closing message prints commands as `node <path>/src/cli.mjs doctor`.
-> That is the same program as `fantasy-pressbox doctor`; use whichever you
-> like.
+Setup's closing screen prints these same commands, then the weekly routine,
+written the way you run Fantasy Pressbox: `fantasy-pressbox` after a global
+install, `npx fantasy-pressbox` through npx, or `node <path>/src/cli.mjs`
+from a clone of the repository.
 
 ---
 

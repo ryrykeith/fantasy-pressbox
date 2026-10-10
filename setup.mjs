@@ -29,7 +29,7 @@
  * rookie-draft.yml are backed up first.
  */
 import { createInterface } from 'node:readline';
-import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -47,6 +47,7 @@ import { normalizeLeague } from './src/sleeper/normalize.mjs';
 import { FORMAT_LABELS } from './src/format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './src/scoringReport.mjs';
 import { describeDraftOrder } from './src/rookieDraft.mjs';
+import { banner, cliCommand, displayPath, weeklyRoutine } from './src/welcome.mjs';
 import {
   DRAFT_ORDER_PRESETS,
   ROUND_ORDER_CHOICES,
@@ -353,9 +354,9 @@ async function main() {
   const startedInPackage = workspaceIsPackage(workspaceRoot);
 
   say('');
-  say(bold('  Fantasy Pressbox setup'));
-  say(dim('  AI league coverage from your Sleeper data'));
+  say(banner({ title: bold }));
   say('');
+  say(bold('  Fantasy Pressbox setup'));
   say('  This asks a few questions and sets up a folder for your league.');
   say('  Press Enter to accept the value shown in brackets.');
 
@@ -367,7 +368,7 @@ async function main() {
     say('');
     say(`This folder (${PACKAGE_ROOT}) already holds a league: its .env.`);
     say('To move that league and its history into a folder of its own, run:');
-    say(bold(`  node ${join(PACKAGE_ROOT, 'src', 'cli.mjs')} migrate ~/leagues/<league-name>`));
+    say(bold(`  ${cliCommand({ packageRoot: PACKAGE_ROOT })} migrate ~/leagues/<league-name>`));
     if (!(await askYesNo('Set up a different league in a new folder instead?', false))) return 0;
   }
 
@@ -567,45 +568,35 @@ async function main() {
   }
   say(green('✓ The league folder loads'));
 
-  heading('Done');
-  // From a checkout's own folder the short form works; from a league folder
-  // anywhere else only the full path to the CLI does.
-  const cli = workspaceIsPackage(workspaceRoot) ? 'node src/cli.mjs' : `node ${join(PACKAGE_ROOT, 'src', 'cli.mjs')}`;
-  const editions =
-    formatType === 'guillotine'
-      ? [
-          ['survival-preview', "build this week's survival preview"],
-          ['chop-recap', "build last week's chop recap"],
-          ['survival-rankings', 'build the survival rankings'],
-        ]
-      : [
-          ['preview', "build this week's matchup previews"],
-          ['recap', "build last week's recap"],
-          ['rankings', 'build the power rankings'],
-        ];
-  say(`Try these, in order, from ${workspaceRoot}:`);
+  heading("You're on the air");
+  // Typed from the league folder, which is where the week's commands run.
+  const cli = cliCommand({ packageRoot: PACKAGE_ROOT, from: workspaceRoot });
+  say(`Your league folder is ${displayPath(workspaceRoot)}.`);
   say('');
-  const steps = [['doctor', 'check everything is working'], ...editions];
-  const width = Math.max(...steps.map(([command]) => command.length));
-  for (const [command, what] of steps) {
-    say(`  ${bold(`${cli} ${command.padEnd(width)}`)}  ${what}`);
-  }
+  say('First, check that everything works:');
   say('');
-  say(`Output lands in ${join(workspaceRoot, 'output')}.`);
-  if (!provider) {
-    say('Open the newest file there, copy all of it, and paste it into ChatGPT or Claude.');
-  } else {
-    say(`Add ${bold('--generate')} to any of those to have the posts written for you.`);
+  if (realpathSync(process.cwd()) !== realpathSync(workspaceRoot)) {
+    say(`  ${bold(`cd ${displayPath(workspaceRoot)}`)}`);
   }
+  say(`  ${bold(`${cli} doctor`)}`);
+  say('');
+  say('Then every week, from that folder:');
+  say('');
+  for (const line of weeklyRoutine(cli, formatType)) say(line);
+  say('');
+  say(`Output lands in ${displayPath(join(workspaceRoot, 'output'))}.`);
+  if (provider) say(`Your API key is set, so ${bold('--generate')} works on any of those.`);
   if (formatType === 'dynasty') {
     // The rookie class that matters is next season's: this season's draft is done.
     const season = Number.parseInt(league.season, 10);
     const draftYear = Number.isInteger(season) ? String(season + 1) : '<draft year>';
     say('');
-    say(`To name the prospects in the ${draftYear} rookie class, copy the example board`);
-    say(`  ${join(PACKAGE_ROOT, 'config', 'prospects.example.yml')}`);
-    say(`to ${join(configDir, `prospects.${draftYear}.yml`)} and fill it in from sources you`);
-    say('have checked. Fantasy Pressbox never ranks prospects itself.');
+    say(`To name the prospects in the ${draftYear} rookie class, start from the example board,`);
+    say('then fill it in from sources you have checked. Fantasy Pressbox never ranks prospects');
+    say('itself:');
+    say('');
+    const example = join(PACKAGE_ROOT, 'config', 'prospects.example.yml');
+    say(`  ${bold(`cp ${displayPath(example)} ${displayPath(join(configDir, `prospects.${draftYear}.yml`))}`)}`);
   }
   say('');
   return 0;
@@ -621,8 +612,7 @@ main()
     if (error.name === 'NoMoreInput') {
       console.error(
         red('\nSetup needs an answer to every question, and input ended early.\n') +
-          'Run it directly in a terminal so it can ask you:  fantasy-pressbox init\n' +
-          '(from a clone of the repository:  npm run setup)\n',
+          `Run it directly in a terminal so it can ask you:  ${cliCommand({ packageRoot: PACKAGE_ROOT })} init\n`,
       );
       process.exit(1);
     }

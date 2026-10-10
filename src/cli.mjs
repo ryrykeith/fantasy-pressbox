@@ -7,6 +7,7 @@
  * into a chat or send it to a model for you.
  */
 import { writeFileSync, mkdirSync, readFileSync, existsSync, realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -68,41 +69,61 @@ import {
   refuseTankWatch,
   resolveTankWatchStartWeek,
 } from './tankWatch.mjs';
+import { banner, cliCommand, displayPath, gettingStarted, weeklyRoutine } from './welcome.mjs';
 
 /**
- * This CLI as a command that works from any folder. A league folder can live
- * anywhere, so advice printed to someone standing in one cannot assume they
- * are in this package's checkout, where `node src/cli.mjs` would resolve.
+ * This CLI as a command typed from the current folder: the installed
+ * `fantasy-pressbox`, `npx fantasy-pressbox`, or node and a path, whichever
+ * works for how the package got here (src/welcome.mjs). A league folder can
+ * live anywhere, so advice cannot assume `node src/cli.mjs` resolves.
  */
-const CLI_COMMAND = `node ${join(PACKAGE_ROOT, 'src', 'cli.mjs')}`;
+const CLI_COMMAND = cliCommand({ packageRoot: PACKAGE_ROOT });
 const INIT_COMMAND = `${CLI_COMMAND} init`;
 
-const HELP = `
+/**
+ * The same command typed from inside a league folder, for the getting-started
+ * steps, which `cd` there before running anything.
+ */
+const LEAGUE_FOLDER_COMMAND = cliCommand({ packageRoot: PACKAGE_ROOT, from: join(homedir(), 'leagues', 'my-league') });
+
+function helpText(cli = CLI_COMMAND) {
+  return `
 Fantasy Pressbox — AI league coverage from your Sleeper data
 
-  node src/cli.mjs <command> [options]
+Usage
+  ${cli} <command> [options]
 
 Each league lives in its own folder, holding its .env, config, data and
 output. Run commands from inside that folder, or point at it with --workspace.
 
+Getting started
+${gettingStarted(LEAGUE_FOLDER_COMMAND).join('\n')}
+
+Every week, from the league folder
+${weeklyRoutine(LEAGUE_FOLDER_COMMAND).join('\n')}
+
 Commands
   init                          Set up a league folder (run this first)
-  migrate <folder>              Copy this league into a new folder; nothing is removed
   doctor                        Check that everything is configured and reachable
-  fetch                         Download and save a week of league data
+  migrate <folder>              Copy this league into a new folder; nothing is removed
+
   preview                       Build the weekly matchup previews
-  survival-preview              Build the weekly survival preview (guillotine leagues)
   recap                         Build the weekly recap and awards
-  chop-recap                    Build the weekly chop recap and awards (guillotine leagues)
   rankings                      Build the weekly power rankings
-  survival-rankings             Build the weekly survival rankings (guillotine leagues)
-  preseason-rankings            Build preseason rankings (ignores all results)
   transactions                  Grade the week's trades (quiet weeks are skipped)
+  preseason-rankings            Build preseason rankings (ignores all results)
+
   tank-watch                    Build the rookie draft tank watch (dynasty leagues, second half)
   future-stock                  Rank teams on the next three seasons: age, production, picks (dynasty leagues)
+
+  survival-preview              Build the weekly survival preview (guillotine leagues)
+  chop-recap                    Build the weekly chop recap and awards (guillotine leagues)
+  survival-rankings             Build the weekly survival rankings (guillotine leagues)
+
   record <file>                 File a finished edition you pasted back from a chat
-  check <file>                  Check a file of finished posts against the length limit
   grade                         Score last week's predictions against what happened
+  check <file>                  Check a file of finished posts against the length limit
+  fetch                         Download and save a week of league data
 
 Options
   --week <n>                    Which week to work on (default: worked out from Sleeper)
@@ -117,18 +138,41 @@ Options
   --help                        Show this message
 
 Examples
-  node src/cli.mjs init --workspace ~/leagues/my-league
-  node src/cli.mjs doctor --workspace ~/leagues/my-league
-  node src/cli.mjs preview --week 3
-  node src/cli.mjs recap --format imessage --generate
-  node src/cli.mjs record output/week2.txt --task preview
-  node src/cli.mjs survival-preview --week 3
-  node src/cli.mjs chop-recap --week 3
-  node src/cli.mjs survival-rankings --week 3
-  node src/cli.mjs transactions --week 3 --generate
-  node src/cli.mjs tank-watch --week 9
-  node src/cli.mjs future-stock --week 9 --generate
+  ${cli} doctor --workspace ~/leagues/my-league
+  ${cli} preview --week 3
+  ${cli} recap --format imessage --generate
+  ${cli} record output/week2.txt --task preview
+  ${cli} survival-preview --week 3
+  ${cli} transactions --week 3 --generate
+  ${cli} tank-watch --week 9
+  ${cli} future-stock --week 9 --generate
 `;
+}
+
+/**
+ * What a bare run prints: the banner, then the next thing to do from here.
+ * Outside a league folder that is init; inside one, the week's commands.
+ */
+function welcomeText(workspaceRoot) {
+  const lines = ['', banner({ title: bold }), ''];
+  if (isLeagueWorkspace(workspaceRoot)) {
+    let formatType = null;
+    try {
+      formatType = loadConfig({ workspaceRoot }).leagueFormat ?? null;
+    } catch {
+      // A folder that does not load still gets its routine; doctor names the problem.
+    }
+    lines.push(`League folder: ${displayPath(workspaceRoot)}`, '', 'This week');
+    lines.push(...weeklyRoutine(CLI_COMMAND, formatType));
+    lines.push('', `Something not working?  ${CLI_COMMAND} doctor`);
+  } else {
+    lines.push(`No league here yet: ${displayPath(workspaceRoot)} has no .env.`, '', 'Getting started');
+    lines.push(...gettingStarted(LEAGUE_FOLDER_COMMAND));
+    lines.push('', 'Already have a league folder? Run commands from inside it, or add --workspace <folder>.');
+  }
+  lines.push(`Every command and option:  ${CLI_COMMAND} --help`, '');
+  return lines.join('\n');
+}
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -154,6 +198,7 @@ function parseArgs(argv) {
 
 const say = (...parts) => console.log(...parts);
 const warn = (...parts) => console.warn(...parts);
+const bold = (text) => (process.stdout.isTTY ? `\x1b[1m${text}\x1b[0m` : text);
 
 /** The league's prospect board for a draft class, from its workspace — never the package. */
 function loadLeagueProspectBoard(config, draftYear) {
@@ -265,9 +310,9 @@ export function refuseOrdinaryEditionInGuillotineLeague(config, task) {
       (!replacement
         ? `There is no guillotine \`${task}\` edition. The ranking this format does have is ` +
           `\`${GUILLOTINE_EDITION_FOR.rankings}\`, written about a week that has been played: ` +
-          `node src/cli.mjs ${GUILLOTINE_EDITION_FOR.rankings}`
+          `${CLI_COMMAND} ${GUILLOTINE_EDITION_FOR.rankings}`
         : TASKS.includes(replacement)
-          ? `Run \`${replacement}\` instead: node src/cli.mjs ${replacement}`
+          ? `Run \`${replacement}\` instead: ${CLI_COMMAND} ${replacement}`
           : `Guillotine leagues get a \`${replacement}\` edition instead of \`${task}\`, but it has not ` +
             'shipped yet. Track it in the PRD under "Guillotine chopped league coverage" → "Guillotine editions".'),
   );
@@ -292,7 +337,7 @@ export function refuseSurvivalEditionWithoutEliminations(config, task) {
   throw new Error(
     `\`${task}\` is a guillotine edition: nobody is eliminated during the season in this league ` +
       '— every team plays all the way to the end.\n\n' +
-      `Run \`${replacement}\` instead: node src/cli.mjs ${replacement}\n\n` +
+      `Run \`${replacement}\` instead: ${CLI_COMMAND} ${replacement}\n\n` +
       'If this really is a guillotine league, say so with LEAGUE_FORMAT=guillotine in .env. ' +
       'Sleeper cannot report that format, so it has to be declared.',
   );
@@ -981,7 +1026,7 @@ function pinPredictionsToRosters(predictions, identity) {
 async function commandRecord(config, args) {
   requireLeague(config);
   const file = args._[1];
-  if (!file) throw new Error('Usage: node src/cli.mjs record <file> --task <preview|rankings> [--week <n>]');
+  if (!file) throw new Error(`Usage: ${CLI_COMMAND} record <file> --task <preview|rankings> [--week <n>]`);
   if (!existsSync(file)) throw new Error(`No such file: ${file}`);
 
   const task = args.task;
@@ -1020,7 +1065,7 @@ async function commandRecord(config, args) {
 
 function commandCheck(config, args) {
   const file = args._[1];
-  if (!file) throw new Error('Usage: node src/cli.mjs check <file>');
+  if (!file) throw new Error(`Usage: ${CLI_COMMAND} check <file>`);
   if (!existsSync(file)) throw new Error(`No such file: ${file}`);
   // The machine-readable tail is not a post and must not be counted as one.
   reportLengths(stripJsonBlock(readFileSync(file, 'utf8')), config, 'sleeper');
@@ -1098,7 +1143,7 @@ function commandMigrate(config, args) {
   const destination = args._[1];
   if (!destination) {
     throw new Error(
-      'Usage: node src/cli.mjs migrate <folder>\n' +
+      `Usage: ${CLI_COMMAND} migrate <folder>\n` +
         'Copies this league into <folder>, which must be new or empty. Nothing here is removed.',
     );
   }
@@ -1125,8 +1170,12 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const command = args._[0];
 
-  if (args.help || !command) {
-    say(HELP.trim());
+  if (args.help) {
+    say(helpText().trim());
+    return 0;
+  }
+  if (!command) {
+    say(welcomeText(resolveWorkspaceRoot({ flag: args.workspace })));
     return 0;
   }
 

@@ -257,6 +257,17 @@ test('a dynasty league gets a folder that loads, with its declared format and dr
   assert.match(result.stdout, /The league folder loads/);
 });
 
+test('setup ends with the commands to run next, written for the league folder', () => {
+  const workspace = tempDir();
+  const result = runSetup(dynastyAnswers(), { workspace });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /You're on the air/);
+  assert.match(result.stdout, / doctor\n/);
+  assert.match(result.stdout, /record <reply file> --task rankings/);
+  // Run from a league folder outside the clone, the short form would not resolve.
+  assert.doesNotMatch(result.stdout, /node src\/cli\.mjs/);
+});
+
 test('the scoring Sleeper reports is shown back for confirmation', () => {
   const result = runSetup(dynastyAnswers(), { workspace: tempDir() });
   assert.match(result.stdout, /Reception\s+full PPR/);
