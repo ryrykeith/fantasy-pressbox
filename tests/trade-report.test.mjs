@@ -279,26 +279,26 @@ test('only trades are graded, and the incidental transaction colour is not repea
 
 test('each side carries its standing, its players with market values and its roster shape', () => {
   const ctx = context();
-  const jd = side(ctx, 'Taco Tuesday');
-  assert.deepEqual(jd.standing, {
+  const taco = side(ctx, 'Taco Tuesday');
+  assert.deepEqual(taco.standing, {
     team: 'Taco Tuesday',
     record: '3-1',
     currentSeed: 2,
     pointsFor: 480.1,
     maxPointsFor: 590.3,
   });
-  assert.deepEqual(jd.received.players, [
+  assert.deepEqual(taco.received.players, [
     {
       player: 'DJ Moore (WR, BUF, age 29) [Questionable]',
       startsAfter: 'WR',
       market: { value: 2097, overallRank: 100, positionRank: 'WR37', age: 29.4 },
     },
   ]);
-  assert.equal(jd.roster.asOfWeek, 3);
-  assert.ok(jd.roster.startersAfter.includes('WR DJ Moore 9.2'));
+  assert.equal(taco.roster.asOfWeek, 3);
+  assert.ok(taco.roster.startersAfter.includes('WR DJ Moore 9.2'));
   // SUPER_FLEX makes a running back startable, so an empty RB room is shown.
-  assert.equal(jd.roster.depthBefore, 'QB 1, WR 1, TE 1, RB 0');
-  assert.equal(jd.roster.depthAfter, 'QB 1, WR 2, TE 1, RB 0');
+  assert.equal(taco.roster.depthBefore, 'QB 1, WR 1, TE 1, RB 0');
+  assert.equal(taco.roster.depthAfter, 'QB 1, WR 2, TE 1, RB 0');
 
   const rebuildSzn = side(ctx, 'Rebuild Szn');
   assert.ok(rebuildSzn.roster.startersAfter.includes('WR EMPTY'));
@@ -354,10 +354,10 @@ test('the prototype\'s unavailable entries are always present', () => {
 test('without a market, no value reaches the model and the reason is stated', () => {
   const ctx = context({ marketValues: { unavailable: 'FantasyCalc returned HTTP 503' } });
   assert.equal(ctx.marketValues, undefined);
-  const jd = side(ctx, 'Taco Tuesday');
-  assert.equal(jd.receivedMarketTotal, undefined);
-  assert.equal('market' in jd.received.players[0], false);
-  assert.equal('market' in jd.received.picks[0], false);
+  const taco = side(ctx, 'Taco Tuesday');
+  assert.equal(taco.receivedMarketTotal, undefined);
+  assert.equal('market' in taco.received.players[0], false);
+  assert.equal('market' in taco.received.picks[0], false);
   const entry = field(ctx, 'marketValues');
   assert.match(entry.why, /HTTP 503/);
   assert.match(entry.instruction, /Do not quote, estimate or recall any trade value/);
@@ -379,9 +379,9 @@ test('a redraft trade carries no picks and says picks are not an asset', () => {
 test('a guillotine trade carries no picks, no record and no seed', () => {
   const l = league('guillotine');
   const ctx = context({ l });
-  const jd = side(ctx, 'Taco Tuesday');
-  assert.equal(jd.received.picks, undefined);
-  assert.deepEqual(jd.standing, { team: 'Taco Tuesday', pointsFor: 480.1, maxPointsFor: 590.3 });
+  const taco = side(ctx, 'Taco Tuesday');
+  assert.equal(taco.received.picks, undefined);
+  assert.deepEqual(taco.standing, { team: 'Taco Tuesday', pointsFor: 480.1, maxPointsFor: 590.3 });
   assert.match(field(ctx, 'draftPicks').why, /eliminated/);
 });
 

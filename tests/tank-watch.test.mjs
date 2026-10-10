@@ -20,25 +20,25 @@ import { loadConfig } from '../src/config.mjs';
 import { checkPosts } from '../src/validate.mjs';
 import {
   RULE,
-  TEAMS_2026_10_09,
+  TEAMS_AFTER_WEEK_4,
   LEAGUE,
   TRADED_PICKS,
   ROSTER_IDS,
   TACO_TUESDAY,
-} from './fixtures/league-2026-week04.mjs';
+} from './fixtures/mock-dynasty-league.mjs';
 
 /**
  * The tank watch: a dynasty edition about the race for the top rookie picks,
  * who owns them, and which picks jump if their team crosses the playoff line.
  *
- * Built on the operator's league after week 4 (tests/fixtures), where Taco
- * Tuesday' 2027 1st — owned by Rebuild Szn — is projected 1.07 and would be 1.02 if
+ * Built on the mock league after week 4 (tests/fixtures), where Taco Tuesday's
+ * 2027 1st — owned by Rebuild Szn — is projected 1.07 and would be 1.02 if
  * Taco Tuesday missed the playoffs.
  */
 
 const NO_ENV_FILE = join(tmpdir(), 'pressbox-no-such-env-file');
 
-function project(teams = TEAMS_2026_10_09) {
+function project(teams = TEAMS_AFTER_WEEK_4) {
   return projectDraftOrder({
     league: LEAGUE,
     teams,
@@ -82,7 +82,7 @@ function context({ draftOrder = project(), previousTankWatch = null, prospectBoa
     task: 'tank-watch',
     config: testConfig(),
     league: { ...league, name: 'Fantasy Island', startingSlots: [], benchSlots: 0, taxiSlots: 0 },
-    teams: TEAMS_2026_10_09,
+    teams: TEAMS_AFTER_WEEK_4,
     players: {},
     week: 4,
     transactions: [{ type: 'trade', week: 4, teams: ['A', 'B'], bid: null, moves: ['x'] }],
@@ -197,17 +197,17 @@ test('the race is the non-playoff group, with the max points-for gaps between pi
 
 test('pick ownership says who holds whose pick, every round, with round-1 picks numbered', () => {
   const { tankWatch } = context();
-  const jdFirst = tankWatch.stakes.find((stake) => stake.originalTeam === 'Taco Tuesday' && stake.round === 1);
-  assert.deepEqual(jdFirst, {
+  const tacoFirst = tankWatch.stakes.find((stake) => stake.originalTeam === 'Taco Tuesday' && stake.round === 1);
+  assert.deepEqual(tacoFirst, {
     pick: '2027 round 1',
     round: 1,
     originalTeam: 'Taco Tuesday',
     ownedBy: 'Rebuild Szn',
     projectedPick: '1.07',
   });
-  const jdSecond = tankWatch.stakes.find((stake) => stake.originalTeam === 'Taco Tuesday' && stake.round === 2);
-  assert.equal(jdSecond.ownedBy, 'Lowered Expectations');
-  assert.equal(jdSecond.projectedPick, null);
+  const tacoSecond = tankWatch.stakes.find((stake) => stake.originalTeam === 'Taco Tuesday' && stake.round === 2);
+  assert.equal(tacoSecond.ownedBy, 'Lowered Expectations');
+  assert.equal(tacoSecond.projectedPick, null);
   // Only picks that changed hands are stakes; a team rooting for itself is not news.
   assert.equal(tankWatch.stakes.length, 4);
   assert.equal(tankWatch.order.find((slot) => slot.pick === '1.07').ownedBy, 'Rebuild Szn');
@@ -216,8 +216,8 @@ test('pick ownership says who holds whose pick, every round, with round-1 picks 
 
 test('the playoff cliff: Taco Tuesday missing the playoffs sends Rebuild Szn its pick at 1.02', () => {
   const { tankWatch } = context();
-  const jd = tankWatch.cliff.find((entry) => entry.team === 'Taco Tuesday');
-  assert.deepEqual(jd, {
+  const taco = tankWatch.cliff.find((entry) => entry.team === 'Taco Tuesday');
+  assert.deepEqual(taco, {
     team: 'Taco Tuesday',
     ownedBy: 'Rebuild Szn',
     side: 'projected playoff team',
@@ -248,14 +248,14 @@ test('with no prospect board the prize is an unavailable entry, not a guess', ()
 
 test('movement is measured against the previous tank watch\'s projection', () => {
   const before = project(
-    TEAMS_2026_10_09.map((t) =>
+    TEAMS_AFTER_WEEK_4.map((t) =>
       t.rosterId === TACO_TUESDAY ? { ...t, record: { wins: 1, losses: 3, ties: 0 }, seasonPointsFor: 400 } : t,
     ),
   );
   const ctx = context({ previousTankWatch: { week: 3, draftOrder: before } });
   assert.equal(ctx.tankWatch.movement.sinceWeek, 3);
-  const jd = ctx.tankWatch.movement.picks.find((entry) => entry.team === 'Taco Tuesday');
-  assert.deepEqual(jd, { team: 'Taco Tuesday', ownedBy: 'Rebuild Szn', pick: '1.07', previousPick: '1.02', change: -5 });
+  const taco = ctx.tankWatch.movement.picks.find((entry) => entry.team === 'Taco Tuesday');
+  assert.deepEqual(taco, { team: 'Taco Tuesday', ownedBy: 'Rebuild Szn', pick: '1.07', previousPick: '1.02', change: -5 });
   assert.equal(unavailable(ctx, 'previousTankWatch'), undefined);
 });
 

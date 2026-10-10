@@ -26,7 +26,7 @@ output:
 # Change these freely. The number on the left is the rank; the emoji on the
 # right is what prints next to whoever finishes there. Keep the quotes.
 #
-#   1: "🥇"     ->     🥇 1. KICKOFF_KINGS ↑2
+#   1: "🥇"     ->     🥇 1. KICKOFF KINGS ↑2
 #
 # Rules of thumb:
 #   - Have one line per team in your league. 12 teams, 12 lines.

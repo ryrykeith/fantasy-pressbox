@@ -12,14 +12,13 @@ import { createStore } from '../src/store.mjs';
 /**
  * The projected rookie draft order.
  *
- * The fixture (tests/fixtures/league-2026-week04.mjs) is the operator's league
- * as it stood on 2026-10-09, after week 4, with the league's own draft order
- * rule. tests/tank-watch.test.mjs reads the same table.
+ * The fixture (tests/fixtures/mock-dynasty-league.mjs) is a made-up league
+ * after week 4, with its declared draft order rule. tests/tank-watch.test.mjs reads the same table.
  */
 
 import {
   RULE,
-  TEAMS_2026_10_09,
+  TEAMS_AFTER_WEEK_4,
   LEAGUE,
   TRADED_PICKS,
   ROSTER_IDS,
@@ -27,7 +26,7 @@ import {
   SUNDAY_SCARIES,
   REBUILD_SZN,
   TACO_TUESDAY,
-} from './fixtures/league-2026-week04.mjs';
+} from './fixtures/mock-dynasty-league.mjs';
 
 function picksFor(season = '2027') {
   return futurePickOwnership({ tradedPicks: TRADED_PICKS, rosterIds: ROSTER_IDS, roundsPerDraft: 5, season });
@@ -36,7 +35,7 @@ function picksFor(season = '2027') {
 function project(overrides = {}) {
   return projectDraftOrder({
     league: LEAGUE,
-    teams: TEAMS_2026_10_09,
+    teams: TEAMS_AFTER_WEEK_4,
     rule: RULE,
     picks: picksFor(),
     ...overrides,
@@ -71,7 +70,7 @@ test('ownership only covers the season asked for', () => {
 });
 
 test('the future draft capital summary is unchanged by sharing the ownership walk', () => {
-  const teamsByRosterId = new Map(TEAMS_2026_10_09.map((t) => [t.rosterId, t]));
+  const teamsByRosterId = new Map(TEAMS_AFTER_WEEK_4.map((t) => [t.rosterId, t]));
   const capital = normalizeFutureDraftCapital({
     tradedPicks: TRADED_PICKS,
     league: LEAGUE,
@@ -88,9 +87,9 @@ test('the future draft capital summary is unchanged by sharing the ownership wal
   ]);
 });
 
-/* --------------------------------------------------------- the 2026-10-09 order */
+/* ------------------------------------------------------------ the week 4 order */
 
-test('reproduces the 2026-10-09 order: non-playoff teams 1-6, playoff teams 7-12, lowest max points-for first', () => {
+test('reproduces the week 4 order: non-playoff teams 1-6, playoff teams 7-12, lowest max points-for first', () => {
   const order = project();
   assert.equal(order.draftSeason, '2027');
   assert.equal(order.status, 'projected');
@@ -118,11 +117,11 @@ test('reproduces the 2026-10-09 order: non-playoff teams 1-6, playoff teams 7-12
 
 test('a traded pick reports its owner, not its original team', () => {
   const order = project();
-  const jd = order.slots.find((slot) => slot.originalRosterId === TACO_TUESDAY);
-  assert.equal(jd.pick, '1.07');
-  assert.equal(jd.ownerRosterId, REBUILD_SZN);
-  assert.equal(jd.owner, 'Rebuild Szn');
-  assert.equal(jd.traded, true);
+  const taco = order.slots.find((slot) => slot.originalRosterId === TACO_TUESDAY);
+  assert.equal(taco.pick, '1.07');
+  assert.equal(taco.ownerRosterId, REBUILD_SZN);
+  assert.equal(taco.owner, 'Rebuild Szn');
+  assert.equal(taco.traded, true);
 
   const rebuildSzn = order.slots.find((slot) => slot.originalRosterId === REBUILD_SZN);
   assert.equal(rebuildSzn.owner, 'Rebuild Szn');
@@ -130,7 +129,7 @@ test('a traded pick reports its owner, not its original team', () => {
 
   // Every round of the slot carries its own owner.
   assert.deepEqual(
-    jd.rounds.map((round) => [round.round, round.owner]),
+    taco.rounds.map((round) => [round.round, round.owner]),
     [
       [1, 'Rebuild Szn'],
       [2, 'Lowered Expectations'],
@@ -172,8 +171,8 @@ test('distance from the top-3 line', () => {
 
 test('the cliff: Taco Tuesday missing the playoffs moves its pick from 1.07 to 1.02, and Rebuild Szn owns it', () => {
   const order = project();
-  const jd = order.cliff.find((entry) => entry.originalRosterId === TACO_TUESDAY);
-  assert.deepEqual(jd, {
+  const taco = order.cliff.find((entry) => entry.originalRosterId === TACO_TUESDAY);
+  assert.deepEqual(taco, {
     originalRosterId: TACO_TUESDAY,
     originalTeam: 'Taco Tuesday',
     ownerRosterId: REBUILD_SZN,
@@ -242,13 +241,13 @@ test('a descending record sort puts the best record first, then the higher point
 test('movement compares each pick with the previous week by its original team', () => {
   const now = project();
   const before = project({
-    teams: TEAMS_2026_10_09.map((t) =>
+    teams: TEAMS_AFTER_WEEK_4.map((t) =>
       t.rosterId === TACO_TUESDAY ? { ...t, record: { wins: 1, losses: 3, ties: 0 }, seasonPointsFor: 400 } : t,
     ),
   });
   const movement = draftOrderMovement(now, before);
-  const jd = movement.find((entry) => entry.originalRosterId === TACO_TUESDAY);
-  assert.deepEqual(jd, {
+  const taco = movement.find((entry) => entry.originalRosterId === TACO_TUESDAY);
+  assert.deepEqual(taco, {
     originalRosterId: TACO_TUESDAY,
     originalTeam: 'Taco Tuesday',
     ownerRosterId: REBUILD_SZN,
@@ -277,7 +276,7 @@ test('captureWeek records the projected draft order in the snapshot', async () =
     client: fakeClient(),
     store,
     league: { ...LEAGUE, startingSlots: [] },
-    teams: TEAMS_2026_10_09.map((t) => ({ ...t, playerIds: [] })),
+    teams: TEAMS_AFTER_WEEK_4.map((t) => ({ ...t, playerIds: [] })),
     players: {},
     week: 4,
     config: { rookieDraft: { order: RULE } },
@@ -296,7 +295,7 @@ test('captureWeek leaves the draft order out when no rule is declared, or the fo
       client: fakeClient(),
       store: createStore({ dataDir: mkdtempSync(join(tmpdir(), 'pressbox-')) }),
       league: { ...league, startingSlots: [] },
-      teams: TEAMS_2026_10_09.map((t) => ({ ...t, playerIds: [] })),
+      teams: TEAMS_AFTER_WEEK_4.map((t) => ({ ...t, playerIds: [] })),
       players: {},
       week: 4,
       config,

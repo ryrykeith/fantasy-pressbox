@@ -47,7 +47,7 @@ const BOARD_YAML =
 /**
  * A dynasty league as it stood after week 4: rankings for weeks 1-4, and
  * snapshots in which roster 3 was "user4817" through week 3 and renamed
- * "Pick Six Appeal" in week 4 — the shape of the operator's own league.
+ * "Pick Six Appeal" in week 4 — a team that renames itself mid-season.
  */
 function dynastyLeague(root) {
   write(root, '.env', 'SLEEPER_LEAGUE_ID=111\nLEAGUE_FORMAT=dynasty\n');

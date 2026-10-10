@@ -4,8 +4,8 @@
  * Sleeper does not say whether a rookie draft runs linear (every round in round
  * 1's order) or snakes (even rounds reversed), so the league declares it. Once
  * it does, later-round picks get real numbers, and a bubble team's 2nd moves
- * across the playoff line just like its 1st. Built on the operator's league as
- * it stood on 2026-10-09: Taco Tuesday, the last playoff seed, picks 7th, and
+ * across the playoff line just like its 1st. Built on the mock league after
+ * week 4: Taco Tuesday, the last playoff seed, picks 7th, and
  * its 2027 2nd is owned by Lowered Expectations.
  */
 import test from 'node:test';
@@ -18,18 +18,18 @@ import { tankWatchView, tankWatchUnavailable } from '../src/tankWatch.mjs';
 import { futurePickOwnership } from '../src/sleeper/normalize.mjs';
 import {
   RULE,
-  TEAMS_2026_10_09,
+  TEAMS_AFTER_WEEK_4,
   LEAGUE,
   TRADED_PICKS,
   ROSTER_IDS,
   TACO_TUESDAY,
   LOWERED_EXPECTATIONS,
-} from './fixtures/league-2026-week04.mjs';
+} from './fixtures/mock-dynasty-league.mjs';
 
 function project(roundOrder) {
   return projectDraftOrder({
     league: LEAGUE,
-    teams: TEAMS_2026_10_09,
+    teams: TEAMS_AFTER_WEEK_4,
     rule: RULE,
     picks: futurePickOwnership({ tradedPicks: TRADED_PICKS, rosterIds: ROSTER_IDS, roundsPerDraft: 5, season: '2027' }),
     roundOrder,
@@ -68,9 +68,9 @@ test('undeclared: round 1 is still numbered, later rounds are not', () => {
 });
 
 test("the projection numbers every round's pick once the order is declared", () => {
-  const jd = project('linear').slots.find((slot) => slot.originalRosterId === TACO_TUESDAY);
+  const taco = project('linear').slots.find((slot) => slot.originalRosterId === TACO_TUESDAY);
   assert.deepEqual(
-    jd.rounds.slice(0, 3).map((round) => [round.pick, round.owner]),
+    taco.rounds.slice(0, 3).map((round) => [round.pick, round.owner]),
     [
       ['1.07', 'Rebuild Szn'],
       ['2.07', 'Lowered Expectations'],
@@ -120,9 +120,9 @@ test('the trade report only warns about unnumbered later rounds when the order i
 
 test('tank watch numbers later-round stakes and drops the warning once the order is declared', () => {
   const tankWatch = tankWatchView({ draftOrder: project('linear'), rule: RULE, teamCount: 12, playoffTeams: 6 });
-  const jdSecond = tankWatch.stakes.find((s) => s.round === 2 && s.originalTeam === 'Taco Tuesday');
-  assert.equal(jdSecond.projectedPick, '2.07');
-  assert.equal(jdSecond.ownedBy, 'Lowered Expectations');
+  const tacoSecond = tankWatch.stakes.find((s) => s.round === 2 && s.originalTeam === 'Taco Tuesday');
+  assert.equal(tacoSecond.projectedPick, '2.07');
+  assert.equal(tacoSecond.ownedBy, 'Lowered Expectations');
   const missing = tankWatchUnavailable({ tankWatch, prize: null, week: 8 }).map((e) => e.field);
   assert.ok(!missing.includes('laterRoundPickNumbers'));
 
