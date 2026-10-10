@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { projectPlayoffField, isRegularSeasonOver } from '../src/analysis/playoffField.mjs';
 
 /**
- * 2026-10-09-shaped standings after week 4: four 3-1 teams, four 2-2, four
+ * Standings after week 4: four 3-1 teams, four 2-2, four
  * 1-3, in a 12-team league where 6 make the playoffs.
  */
 function team(rosterId, wins, pointsFor) {

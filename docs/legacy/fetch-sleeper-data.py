@@ -1,7 +1,7 @@
 import json
 import requests
 
-LEAGUE_ID = "YOUR_SLEEPER_LEAGUE_ID"
+LEAGUE_ID = "YOUR_SLEEPER_LEAGUE_ID"  # from your league's sleeper.com address
 BASE = "https://api.sleeper.app/v1"
 
 data = {

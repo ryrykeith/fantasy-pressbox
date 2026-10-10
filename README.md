@@ -636,7 +636,7 @@ beside the team in its own post, and beside it again in the tier list that
 closes the edition:
 
 ```
-🥇 1. KICKOFF_KINGS ↑2
+🥇 1. KICKOFF KINGS ↑2
 🥈 2. BENCH MOB —
 💩 12. LOWERED EXPECTATIONS ↓8
 ```

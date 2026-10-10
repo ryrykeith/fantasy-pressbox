@@ -102,10 +102,10 @@ can decide them:
   decide is placed at a slot or tier. A later draft's picks never are. Board
   prospects are named only as the board ranks them, with its source.
 
-**The motivating case.** In the operator's league after week 4, Taco Tuesday
+**The motivating case.** In the mock league the tests use, after week 4, Taco Tuesday
 is a contender: 2-2 and a playoff seed, with points from an older core. It holds
 no 2027 1st or 2nd. Rebuild Szn is 1-3 with the league's lowest points-for. It holds
-its own 1st, projected 1.02, and Taco Tuesday' 1st, projected 1.07. That pick
+its own 1st, projected 1.02, and Taco Tuesday's 1st, projected 1.07. That pick
 becomes 1.02 if Taco Tuesday misses the playoffs. The edition must put Taco
 Tuesday near the bottom whatever its record. Its points come from players who
 are leaving, and it has nothing to replace them with. Rebuild Szn's two 1sts are

@@ -40,7 +40,7 @@ Adjust the count if the league has a different number of games; keep the
 Lead with both teams, their current rank, rank emoji and record:
 
 ```
-🥇 #1 KICKOFF_KINGS (1-0)
+🥇 #1 KICKOFF KINGS (1-0)
 vs.
 🔥 #4 BENCH MOB (0-1)
 ```

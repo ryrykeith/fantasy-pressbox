@@ -23,7 +23,7 @@ import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
 
 // The league as it is now, after the rename.
 const TEAMS = [
-  { rosterId: 1, name: 'Taco Tuesday', manager: 'jdman' },
+  { rosterId: 1, name: 'Taco Tuesday', manager: 'tacoman' },
   { rosterId: 2, name: 'Bye Week Blues', manager: 'vavirg' },
   { rosterId: 5, name: 'Pick Six Appeal', manager: 'user4817' },
 ];

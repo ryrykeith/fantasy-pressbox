@@ -4,7 +4,7 @@
  * FantasyCalc snapshot, summed per season and across the horizon, with the
  * net against each team's own picks as the figure teams compare on.
  *
- * The league is the operator's, after week 4 (tests/fixtures/league-2026-week04.mjs):
+ * The league is the mock one after week 4 (tests/fixtures/mock-dynasty-league.mjs):
  * Taco Tuesday has traded its 2027 1st to Rebuild Szn and its 2nd to Lowered Expectations, and
  * holds three 2027 3rds.
  */
@@ -19,9 +19,9 @@ import {
   REBUILD_SZN,
   LEAGUE,
   RULE,
-  TEAMS_2026_10_09,
+  TEAMS_AFTER_WEEK_4,
   TRADED_PICKS,
-} from './fixtures/league-2026-week04.mjs';
+} from './fixtures/mock-dynasty-league.mjs';
 
 const CONFIG = { rookieDraft: { order: RULE, rounds: null } };
 
@@ -50,7 +50,7 @@ const MARKET = {
 const capital = (overrides = {}) =>
   readPickCapital({
     league: LEAGUE,
-    teams: TEAMS_2026_10_09,
+    teams: TEAMS_AFTER_WEEK_4,
     tradedPicks: TRADED_PICKS,
     market: MARKET,
     config: CONFIG,
@@ -99,8 +99,8 @@ test('a spent draft is outside the horizon even when Sleeper still lists its mov
 });
 
 test('Taco Tuesday holds no 2027 1st or 2nd but three 3rds, and is net negative', () => {
-  const jd = teamRow(capital(), TACO_TUESDAY);
-  const y2027 = seasonRow(jd, '2027');
+  const taco = teamRow(capital(), TACO_TUESDAY);
+  const y2027 = seasonRow(taco, '2027');
   assert.deepEqual(
     y2027.picks.map((pick) => [pick.round, pick.originalTeam]),
     [
@@ -118,7 +118,7 @@ test('Taco Tuesday holds no 2027 1st or 2nd but three 3rds, and is net negative'
   assert.equal(y2027.value, 1000 * 3 + 400);
   assert.equal(y2027.ownValue, 6000 + 2500 + 1000 + 400);
   assert.equal(y2027.netValue, y2027.value - y2027.ownValue);
-  assert.ok(jd.horizon.netValue < 0);
+  assert.ok(taco.horizon.netValue < 0);
 });
 
 test("the projected draft's 1sts are priced at their projected tier and labelled an estimate", () => {
@@ -150,8 +150,8 @@ test("the projected draft's 1sts are priced at their projected tier and labelled
 
 test('later rounds of the projected draft use the generic value until the round order is declared', () => {
   const loweredExpectations2027 = seasonRow(teamRow(capital(), LOWERED_EXPECTATIONS), '2027');
-  const jdSecond = loweredExpectations2027.picks.find((pick) => pick.round === 2 && pick.originalTeam === 'Taco Tuesday');
-  assert.deepEqual(jdSecond, {
+  const tacoSecond = loweredExpectations2027.picks.find((pick) => pick.round === 2 && pick.originalTeam === 'Taco Tuesday');
+  assert.deepEqual(tacoSecond, {
     round: 2,
     originalRosterId: TACO_TUESDAY,
     originalTeam: 'Taco Tuesday',
@@ -214,7 +214,7 @@ test('the horizon sums the seasons, and the net figure balances across the leagu
   // Picks only change hands, so the league's net is zero.
   assert.equal(result.teams.reduce((total, row) => total + row.horizon.netValue, 0), 0);
   assert.equal(result.teams.reduce((total, row) => total + row.horizon.netPicks, 0), 0);
-  // 2028: Rebuild Szn's 2nd went to Taco Tuesday, Taco Tuesday' 3rd to Rebuild Szn.
+  // 2028: Rebuild Szn's 2nd went to Taco Tuesday, Taco Tuesday's 3rd to Rebuild Szn.
   assert.equal(seasonRow(teamRow(result, REBUILD_SZN), '2028').netValue, 900 - 2200);
 });
 
@@ -236,11 +236,11 @@ test('without a market the counts stand and every value is null, with the reason
   assert.equal(result.marketUnavailable, 'FantasyCalc did not answer');
   // The horizon falls back to the drafts Sleeper reports moves for.
   assert.deepEqual(result.seasons, ['2027', '2028']);
-  const jd = teamRow(result, TACO_TUESDAY);
-  assert.equal(jd.horizon.picksHeld, 10);
-  assert.equal(jd.horizon.value, null);
-  assert.equal(jd.horizon.netValue, null);
-  assert.equal(seasonRow(jd, '2027').picks[0].basis, 'unpriced');
+  const taco = teamRow(result, TACO_TUESDAY);
+  assert.equal(taco.horizon.picksHeld, 10);
+  assert.equal(taco.horizon.value, null);
+  assert.equal(taco.horizon.netValue, null);
+  assert.equal(seasonRow(taco, '2027').picks[0].basis, 'unpriced');
 });
 
 test('without a declared draft order the projected draft is priced generically', () => {

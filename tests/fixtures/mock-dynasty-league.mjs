@@ -1,11 +1,10 @@
 /**
- * The operator's league as it stood on 2026-10-09, after week 4: records,
- * points-for and max points-for exactly as Sleeper reported them, and the 2027
- * picks that had moved by then. Taken from output/2026-week04-rankings-prompt.md;
- * roster ids 1-12 are assigned in that file's order, not Sleeper's real ids.
+ * A made-up 12-team dynasty league after week 4: records, points-for and max
+ * points-for for every team, and the 2027 and 2028 picks that have moved. Every
+ * name and number is invented; none of it is a real league's data.
  *
- * The rule is the league's own: the six teams that miss the playoffs pick 1-6,
- * then the six playoff teams pick 7-12, each group lowest max points-for first.
+ * Its rule: the six teams that miss the playoffs pick 1-6, then the six playoff
+ * teams pick 7-12, each group lowest max points-for first.
  *
  * Shared by every test that projects this league's rookie draft, so they all
  * reason about the same table. Not a test file itself: `npm test` only runs
@@ -42,7 +41,7 @@ export const HAIL_MARY = 10;
 export const TACO_TUESDAY = 11;
 export const SACK_LUNCH = 12;
 
-export const TEAMS_2026_10_09 = [
+export const TEAMS_AFTER_WEEK_4 = [
   team(BYE_WEEK_BLUES, 'Bye Week Blues', 3, 587.57, 662.63),
   team(PUNT_INTENDED, 'Punt Intended', 3, 524.77, 632.91),
   team(LOWERED_EXPECTATIONS, 'Lowered Expectations', 2, 505.21, 637.69),
@@ -67,7 +66,7 @@ export const LEAGUE = {
   format: { type: 'dynasty', source: 'detected' },
 };
 
-/** Sleeper's traded_picks as of 2026-10-09: only the picks that moved. */
+/** Sleeper's traded_picks shape: only the picks that moved. */
 export const TRADED_PICKS = [
   { season: '2027', round: 1, roster_id: TACO_TUESDAY, owner_id: REBUILD_SZN, previous_owner_id: TACO_TUESDAY },
   { season: '2027', round: 2, roster_id: TACO_TUESDAY, owner_id: LOWERED_EXPECTATIONS, previous_owner_id: TACO_TUESDAY },
@@ -77,4 +76,4 @@ export const TRADED_PICKS = [
   { season: '2028', round: 3, roster_id: TACO_TUESDAY, owner_id: REBUILD_SZN, previous_owner_id: TACO_TUESDAY },
 ];
 
-export const ROSTER_IDS = TEAMS_2026_10_09.map((t) => t.rosterId);
+export const ROSTER_IDS = TEAMS_AFTER_WEEK_4.map((t) => t.rosterId);

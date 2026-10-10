@@ -38,7 +38,7 @@ Otherwise `previousRankings` holds last edition's order. Print each team's
 movement after its name:
 
 ```
-🥇 1. KICKOFF_KINGS ↑2
+🥇 1. KICKOFF KINGS ↑2
 🥈 2. TACO TUESDAY ↓1
 🥉 3. USER4817 —
 ```

@@ -2,11 +2,11 @@
  * The future stock edition (src/futureStock.mjs, prompts/future-stock.md): a
  * dynasty ranking of who is set up for the next three seasons.
  *
- * Built on the operator's league after week 4 (tests/fixtures), with rosters
+ * Built on the mock league after week 4 (tests/fixtures), with rosters
  * invented to make the motivating case concrete. Taco Tuesday is a contender
  * whose points come from an old core, and it holds no 2027 1st or 2nd. Rebuild Szn
  * is 1-3 with young starters and two 2027 1sts: its own, projected 1.02, and
- * Taco Tuesday', projected 1.07, which would become 1.02 if Taco Tuesday missed
+ * Taco Tuesday's, projected 1.07, which would become 1.02 if Taco Tuesday missed
  * the playoffs. The Waiver Wire is the ideal: young starters who are already
  * producing.
  *
@@ -30,13 +30,13 @@ import { buildRosterWindow } from '../src/analysis/rosterWindow.mjs';
 import { readDraftOrder, readPickCapital } from '../src/pipeline.mjs';
 import {
   RULE,
-  TEAMS_2026_10_09,
+  TEAMS_AFTER_WEEK_4,
   LEAGUE,
   TRADED_PICKS,
   TACO_TUESDAY,
   REBUILD_SZN,
   WAIVER_WIRE,
-} from './fixtures/league-2026-week04.mjs';
+} from './fixtures/mock-dynasty-league.mjs';
 
 const CONFIG_DRAFT = { order: RULE, rounds: null };
 const FUTURE_STOCK_WEIGHTS = { roster_age_window: 0.6, future_draft_capital: 0.4 };
@@ -61,7 +61,7 @@ for (const [rosterId, lineup] of Object.entries(LINEUPS)) {
   rosterIds.set(Number(rosterId), ids);
 }
 
-const TEAMS = TEAMS_2026_10_09.map((team) => {
+const TEAMS = TEAMS_AFTER_WEEK_4.map((team) => {
   const ids = rosterIds.get(team.rosterId) ?? [];
   return {
     ...team,
@@ -203,14 +203,14 @@ test('buildPrompt refuses a dynasty context built without the window and the cap
 /* ------------------------------------------------- the motivating case */
 
 test('the old contender with no picks: old production, no 2027 1st or 2nd, net negative capital', () => {
-  const jd = teamEntry(context(), 'Taco Tuesday');
+  const taco = teamEntry(context(), 'Taco Tuesday');
 
   // Every point came from players 29 and over.
-  assert.equal(jd.window.starterPointsByAgeBand['29+'], '440 points, 100% of starter points');
-  assert.equal(jd.window.starterPointsByAgeBand['<25'], '0 points, 0% of starter points');
-  assert.equal(jd.window.byPosition.RB, 'roster 1 (mean 30, median 30, 30-30); starting 1 (mean 30, median 30, 30-30)');
+  assert.equal(taco.window.starterPointsByAgeBand['29+'], '440 points, 100% of starter points');
+  assert.equal(taco.window.starterPointsByAgeBand['<25'], '0 points, 0% of starter points');
+  assert.equal(taco.window.byPosition.RB, 'roster 1 (mean 30, median 30, 30-30); starting 1 (mean 30, median 30, 30-30)');
 
-  const y2027 = season(jd, '2027');
+  const y2027 = season(taco, '2027');
   assert.deepEqual(
     y2027.picks.map((pick) => [pick.pick, pick.originalTeam]),
     [
@@ -222,8 +222,8 @@ test('the old contender with no picks: old production, no 2027 1st or 2nd, net n
     ],
     'Taco Tuesday holds no 2027 1st or 2nd',
   );
-  assert.ok(jd.draftCapital.horizon.netValue < 0);
-  assert.equal(jd.record, '2-2');
+  assert.ok(taco.draftCapital.horizon.netValue < 0);
+  assert.equal(taco.record, '2-2');
 });
 
 test("Rebuild Szn's two 1sts are placed at 1.02 and 1.07, and the 1.07 jumps to 1.02 if Taco Tuesday misses the playoffs", () => {
@@ -236,11 +236,11 @@ test("Rebuild Szn's two 1sts are placed at 1.02 and 1.07, and the 1.07 jumps to 
       ['Taco Tuesday', '1.07', 'Mid', 6000],
     ],
   );
-  const jdFirst = firsts[1];
-  assert.equal(jdFirst.ifOriginalTeamCrosses.pick, '1.02');
-  assert.equal(jdFirst.ifOriginalTeamCrosses.picksMoved, 5);
+  const tacoFirst = firsts[1];
+  assert.equal(tacoFirst.ifOriginalTeamCrosses.pick, '1.02');
+  assert.equal(tacoFirst.ifOriginalTeamCrosses.picksMoved, 5);
   assert.deepEqual(
-    jdFirst.boardAroundPick.map((entry) => entry.rank),
+    tacoFirst.boardAroundPick.map((entry) => entry.rank),
     [6, 7, 8],
   );
 });
@@ -300,9 +300,9 @@ test('without a declared draft order no pick has a slot and no prospect may be n
 
 test('without a market, picks carry no values and the edition is told not to invent one', () => {
   const ctx = context({ market: { unavailable: 'FantasyCalc did not answer' } });
-  const jd = teamEntry(ctx, 'Taco Tuesday');
-  assert.equal(jd.draftCapital.horizon.value, undefined);
-  assert.equal(season(jd, '2027').picks[0].value, undefined);
+  const taco = teamEntry(ctx, 'Taco Tuesday');
+  assert.equal(taco.draftCapital.horizon.value, undefined);
+  assert.equal(season(taco, '2027').picks[0].value, undefined);
   assert.match(unavailable(ctx, 'pickValues').why, /FantasyCalc did not answer/);
 });
 

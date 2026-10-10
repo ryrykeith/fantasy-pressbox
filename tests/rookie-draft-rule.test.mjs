@@ -21,7 +21,7 @@ import {
  *
  * Sleeper reports nothing about how a rookie draft is ordered, so the rule is
  * declared in config/rookie-draft.yml, like a guillotine ledger. The fixture is
- * the operator's own league: the six teams that miss the playoffs pick 1-6,
+ * the mock league's rule: the six teams that miss the playoffs pick 1-6,
  * lowest max points-for first, then the six playoff teams pick 7-12, also
  * lowest max points-for first.
  */

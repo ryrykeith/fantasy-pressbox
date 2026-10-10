@@ -7,19 +7,19 @@ import { futurePickOwnership } from '../src/sleeper/normalize.mjs';
 import { prospectsAroundPick } from '../src/tradePicks.mjs';
 import {
   RULE,
-  TEAMS_2026_10_09,
+  TEAMS_AFTER_WEEK_4,
   LEAGUE,
   TRADED_PICKS,
   ROSTER_IDS,
   REBUILD_SZN,
   TACO_TUESDAY,
-} from './fixtures/league-2026-week04.mjs';
+} from './fixtures/mock-dynasty-league.mjs';
 
 /**
  * A trade report that values traded picks at their projected slot: the DJ
- * Moore trade in the operator's league after week 4. Taco Tuesday sent its
- * 2027 1st to Rebuild Szn for DJ Moore and two later picks. JD is the last playoff
- * seed, so the 1st is projected 1.07 — and 1.02 if JD falls out of the field.
+ * Moore trade in the mock league after week 4. Taco Tuesday sent its
+ * 2027 1st to Rebuild Szn for DJ Moore and two later picks. Taco Tuesday is the last playoff
+ * seed, so the 1st is projected 1.07 — and 1.02 if it falls out of the field.
  */
 
 const players = {
@@ -106,7 +106,7 @@ const CONFIG = {
 function project() {
   return projectDraftOrder({
     league: LEAGUE,
-    teams: TEAMS_2026_10_09,
+    teams: TEAMS_AFTER_WEEK_4,
     rule: RULE,
     picks: futurePickOwnership({ tradedPicks: TRADED_PICKS, rosterIds: ROSTER_IDS, roundsPerDraft: 5, season: '2027' }),
   });
@@ -117,7 +117,7 @@ function context({ draftOrder = project(), prospectBoard = BOARD, league = LEAGU
     task: 'trade-report',
     config: CONFIG,
     league: { ...league, name: 'Fantasy Island', startingSlots: [], benchSlots: 0, taxiSlots: 0 },
-    teams: TEAMS_2026_10_09,
+    teams: TEAMS_AFTER_WEEK_4,
     players,
     week: 4,
     enrichedTransactions: [TRADE],
@@ -180,7 +180,7 @@ test('a pick whose original team is off the bubble carries no cliff', () => {
     task: 'trade-report',
     config: CONFIG,
     league: { ...LEAGUE, name: 'Fantasy Island', startingSlots: [], benchSlots: 0, taxiSlots: 0 },
-    teams: TEAMS_2026_10_09,
+    teams: TEAMS_AFTER_WEEK_4,
     players,
     week: 4,
     enrichedTransactions: [
