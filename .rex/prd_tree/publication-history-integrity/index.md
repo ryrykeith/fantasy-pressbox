@@ -5,10 +5,10 @@ title: "Publication history integrity"
 status: "completed"
 priority: "high"
 startedAt: "2026-10-09T17:06:13.594Z"
-completedAt: "2026-10-09T17:06:13.594Z"
-endedAt: "2026-10-09T17:06:13.594Z"
+completedAt: "2026-10-10T19:04:10.280Z"
+endedAt: "2026-10-10T19:04:10.280Z"
 description: "Keep the publication's memory correct as the league changes underneath it. Published history (rankings, predictions) is written in team names, and team names are not stable identities."
-lastModified: "2026-10-09T17:06:13.605Z"
+lastModified: "2026-10-10T19:04:10.292Z"
 lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 ---
 

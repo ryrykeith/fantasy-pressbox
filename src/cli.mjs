@@ -521,7 +521,11 @@ async function commandFetch(config, args) {
   const ctx = await openLeague(config, { refreshPlayers: args.refreshPlayers });
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week });
   const result = await captureWeek({ ...ctx, week });
-  say(`Week ${week} saved.`);
+  say(
+    result.kept
+      ? `Week ${week} is settled: its snapshot was saved after Sleeper scored it, and is kept as it is.`
+      : `Week ${week} saved.`,
+  );
   say(`  raw data   ${result.rawPath}`);
   say(`  snapshot   ${result.snapshotPath}`);
   say(`  status     ${result.played ? 'scores are in' : 'not played yet (all scores are zero)'}`);

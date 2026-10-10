@@ -1,0 +1,21 @@
+---
+id: "560eda15-f658-44bb-85b6-2d1fdacb0de3"
+level: "task"
+title: "Settled snapshots are never rewritten"
+status: "completed"
+priority: "high"
+source: "operator review session 2026-10-10"
+startedAt: "2026-10-10T19:04:10.203Z"
+completedAt: "2026-10-10T19:04:10.203Z"
+endedAt: "2026-10-10T19:04:10.203Z"
+resolutionType: "code-change"
+resolutionDetail: "isSettledSnapshot + readSettledWeek in src/pipeline.mjs; 568 tests pass; verified on a copy of the league."
+acceptanceCriteria:
+  - "Capturing a settled week again changes no file and makes no Sleeper call"
+  - "A preview-time or mid-game capture is replaced by the capture after Sleeper scores the week"
+  - "The operator's existing snapshots for weeks 1-4 are treated as settled"
+  - "tests/settled-snapshots.test.mjs covers each case"
+description: "Done 2026-10-10 by the operator's review session, outside ndx work.\n\nFound while checking the npm package against a copy of the operator's league: a week 5 preview captured week 4 again for last week's results and overwrote week 4's snapshot. On the copy, 15 starters' injury statuses became that day's values and a draft order projected that day was added. A team renamed between the two captures would have lost its old name, which src/teamIdentity.mjs reads out of the snapshots. Any edition run with an old --week did the same. The behavior dated from the first commit; docs/architecture.md claimed store.mjs never overwrote a past week, but nothing enforced it.\n\nFix: a capture made once Sleeper has scored the week (week <= league.lastScoredWeek) writes settled: true, and captureWeek then reads that week back from disk instead of fetching or writing it (isSettledSnapshot, src/pipeline.mjs). Preview-time and mid-game captures are settled: false and get replaced. Legacy snapshots without the flag count as settled when played and scored by Sleeper. A legacy guillotine snapshot without its ledger is captured again. fetch says when it kept a week.\n\nVerified against a fresh copy of the league on main: the week 5 preview left weeks 1-4 byte-identical and wrote week 5 as played, not settled."
+lastModified: "2026-10-10T19:04:10.224Z"
+lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
+---

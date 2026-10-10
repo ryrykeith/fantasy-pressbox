@@ -34,6 +34,14 @@ export function createStore({ dataDir }) {
   const store = {
     dataDir,
 
+    /** Where a week's raw bundle and snapshot live, whether or not they exist yet. */
+    rawPath(season, week) {
+      return pathFor('raw', season, `week-${week}.json`);
+    },
+    snapshotPath(season, week) {
+      return pathFor('snapshots', season, `week-${week}.json`);
+    },
+
     saveRaw(season, week, bundle) {
       return writeJson(pathFor('raw', season, `week-${week}.json`), bundle);
     },
