@@ -7,11 +7,11 @@ priority: "medium"
 blockedBy:
   - "44b18efd-6560-4493-bd64-2a9dc09b2cb3"
 startedAt: "2026-10-10T18:19:06.927Z"
-completedAt: "2026-10-10T19:01:54.011Z"
-endedAt: "2026-10-10T19:01:54.011Z"
+completedAt: "2026-10-10T19:44:41.551Z"
+endedAt: "2026-10-10T19:44:41.551Z"
 acceptanceCriteria: []
 description: "Everything needed to actually put this on npm."
-lastModified: "2026-10-10T19:01:54.025Z"
+lastModified: "2026-10-10T19:44:41.572Z"
 lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 ---
 
@@ -19,6 +19,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
+| [CI workflow: test matrix and pack-contents guard](./ci-workflow-test-matrix-and-pack.md) | completed |
 | [Made-up names in shipped examples, and an installed CLI that names itself correctly](./made-up-names-in-shipped-examples-and.md) | completed |
 | [Package metadata and publishable layout](./package-metadata-and-publishable-layout.md) | completed |
 | [Rewrite the docs for the package workflow](./rewrite-the-docs-for-the-package.md) | completed |
