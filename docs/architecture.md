@@ -51,8 +51,27 @@ Two directories, never confused (`src/config.mjs`):
 The workspace is chosen by `resolveWorkspaceRoot`: `--workspace <folder>`, then
 `PRESSBOX_WORKSPACE`, then the working directory. It cannot come from `.env`,
 because `.env` is in it. A named folder that does not exist is refused rather
-than created. A relative `DATA_DIR` or `OUTPUT_DIR` is taken from the
-workspace.
+than created (only `init` creates one). A relative `DATA_DIR` or `OUTPUT_DIR`
+is taken from the workspace.
+
+A folder is a league workspace when it holds a `.env` (`src/workspace.mjs`).
+Every command that reads or writes a league (`requireLeague` in `cli.mjs`)
+refuses to run outside one, naming `init` as the fix — even with
+`SLEEPER_LEAGUE_ID` exported in the shell, so a league's history is never
+started in whatever folder happens to be current. `doctor` reports the same and
+stops before contacting Sleeper; `check` needs no league.
+
+`.env` is read into the config, never into `process.env`
+(`environmentWithFile`), so loading one league leaves nothing behind for the
+next. A real environment variable still overrides the file.
+
+`migrate <folder>` (`copyLeagueWorkspace`) copies a league into a new or empty
+folder: `.env`, the league's config files, a workspace's overrides, and the
+whole data and output folders, at the same relative paths. It never moves or
+deletes. Copied from the package folder, the shipped defaults stay behind and
+so does a template (`rookie-draft.yml`, `guillotine.yml`) that declares
+nothing. A `DATA_DIR` or `OUTPUT_DIR` outside the source is refused, because
+the copied `.env` would point both leagues at one history.
 
 Every write goes through `config.dataDir` or `config.outputDir`, so nothing is
 ever written into an installed package. Only the modules that read shipped
@@ -92,7 +111,8 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 |---|---|
 | `src/lib/yaml.mjs` | A small YAML reader, so `config/` needs no dependency |
 | `src/lib/env.mjs` | `.env` parsing, so secrets need no dependency |
-| `src/config.mjs` | Merges flags, env, `config/*.yml` and defaults; owns the package root and the workspace root (below) |
+| `src/config.mjs` | Merges flags, env, `config/*.yml` and defaults; owns the package root and the workspace root (above) |
+| `src/workspace.mjs` | What makes a folder a league workspace, the refusal outside one, and the copy-only `migrate` |
 | `src/format.mjs` | The league format taxonomy: valid types, declaration parsing, resolution |
 | `src/rookieDraft.mjs` | The declared rookie draft order rule (`config/rookie-draft.yml`): parsing, group sizes, plain-words description, and the refusal to project an order without one |
 | `src/sleeper/client.mjs` | HTTP only. Retries, friendly errors, player-file cache |

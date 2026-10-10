@@ -32,13 +32,19 @@ export function loadEnvFile(path) {
   return parseEnv(readFileSync(path, 'utf8'));
 }
 
-/** File values are applied to process.env without clobbering real env vars. */
-export function applyEnvFile(path) {
-  const values = loadEnvFile(path);
-  for (const [key, value] of Object.entries(values)) {
-    if (process.env[key] === undefined || process.env[key] === '') {
-      process.env[key] = value;
-    }
+/**
+ * The environment one league's run sees: the file's values, under any real
+ * environment variable that is set and not empty.
+ *
+ * Returned rather than written into process.env. Writing them there made the
+ * first .env loaded in a process part of the "real environment" for every
+ * later load, so a second league loaded in the same process silently kept the
+ * first league's ID — and league settings must never leak between workspaces.
+ */
+export function environmentWithFile(path, env = process.env) {
+  const merged = { ...loadEnvFile(path) };
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined && value !== '') merged[key] = value;
   }
-  return values;
+  return merged;
 }

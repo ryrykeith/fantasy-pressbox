@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { loadEnvFile } from './src/lib/env.mjs';
-import { PACKAGE_ROOT, resolveWorkspaceRoot } from './src/config.mjs';
+import { PACKAGE_ROOT, resolveWorkspaceRoot, workspaceIsPackage } from './src/config.mjs';
 
 // The package (its manifest, .env.example) is only read. The answers — .env,
 // and the data/ and output/ folders — go to the league's workspace, which is
@@ -357,14 +357,17 @@ async function main() {
   say(dim('  This file holds your keys and is never committed to git.'));
 
   heading('Done');
-  say('Try these, in order:');
+  // From a checkout's own folder the short form works; from a league folder
+  // anywhere else only the full path to the CLI does.
+  const cli = workspaceIsPackage(workspaceRoot) ? 'node src/cli.mjs' : `node ${join(PACKAGE_ROOT, 'src', 'cli.mjs')}`;
+  say(`Try these, in order, from ${workspaceRoot}:`);
   say('');
-  say(`  ${bold('node src/cli.mjs doctor')}     check everything is working`);
-  say(`  ${bold('node src/cli.mjs preview')}    build this week's matchup previews`);
-  say(`  ${bold('node src/cli.mjs recap')}      build last week's recap`);
-  say(`  ${bold('node src/cli.mjs rankings')}   build the power rankings`);
+  say(`  ${bold(`${cli} doctor`)}     check everything is working`);
+  say(`  ${bold(`${cli} preview`)}    build this week's matchup previews`);
+  say(`  ${bold(`${cli} recap`)}      build last week's recap`);
+  say(`  ${bold(`${cli} rankings`)}   build the power rankings`);
   say('');
-  say('Output lands in the "output" folder.');
+  say(`Output lands in ${join(workspaceRoot, 'output')}.`);
   if (!provider) {
     say('Open the newest file there, copy all of it, and paste it into ChatGPT or Claude.');
   } else {

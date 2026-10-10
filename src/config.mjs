@@ -30,11 +30,11 @@
  * Run from a checkout's own folder the two are the same directory, which is
  * how a cloned repository covering one league keeps working unchanged.
  */
-import { readFileSync, existsSync, statSync, readdirSync, realpathSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, statSync, readdirSync, realpathSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseYaml } from './lib/yaml.mjs';
-import { applyEnvFile } from './lib/env.mjs';
+import { environmentWithFile } from './lib/env.mjs';
 import { parseDeclaredFormatType } from './format.mjs';
 import { parseDeclaredEliminations } from './analysis/elimination.mjs';
 import { byeWeekTableSource, parseByeWeekTable } from './analysis/byeExposure.mjs';
@@ -55,9 +55,10 @@ export const WORKSPACE_ENV_VAR = 'PRESSBOX_WORKSPACE';
  * `flag` (--workspace) wins, then the environment variable, then `cwd`. A
  * relative path is taken from `cwd`. A named folder that does not exist is
  * refused rather than created: a typo would otherwise start a fresh, empty
- * league history somewhere nobody meant, with nothing saying so.
+ * league history somewhere nobody meant, with nothing saying so. `create` is
+ * for init alone, whose job is to make the folder it is pointed at.
  */
-export function resolveWorkspaceRoot({ flag, env = process.env, cwd = process.cwd() } = {}) {
+export function resolveWorkspaceRoot({ flag, env = process.env, cwd = process.cwd(), create = false } = {}) {
   const fromEnv = (env[WORKSPACE_ENV_VAR] ?? '').trim();
   let chosen = null;
   let source = null;
@@ -66,6 +67,7 @@ export function resolveWorkspaceRoot({ flag, env = process.env, cwd = process.cw
   if (chosen === null) return resolve(cwd);
 
   const path = resolve(cwd, chosen);
+  if (create) mkdirSync(path, { recursive: true });
   if (!existsSync(path)) {
     throw new Error(`The workspace folder ${path} (from ${source} ${chosen}) does not exist.`);
   }
@@ -91,7 +93,7 @@ export function workspacePromptsDir(workspaceRoot) {
  * be the shipped file read a second time, and doctor would report every shipped
  * file as a local override.
  */
-function workspaceIsPackage(workspaceRoot) {
+export function workspaceIsPackage(workspaceRoot) {
   return realpathSync(workspaceRoot) === realpathSync(PACKAGE_ROOT);
 }
 
@@ -402,8 +404,7 @@ export function loadConfig({
   workspaceRankingsPath = join(workspaceConfigDir(workspaceRoot), 'rankings.yml'),
   workspacePromptsPath = workspacePromptsDir(workspaceRoot),
 } = {}) {
-  applyEnvFile(envPath);
-  const env = process.env;
+  const env = environmentWithFile(envPath);
 
   // Layers, lowest first: built-in defaults, the shipped file, the workspace's
   // copy. Each is read by the same readYamlFile with the same replaceKeys, so a

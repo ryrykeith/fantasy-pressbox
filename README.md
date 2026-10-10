@@ -387,6 +387,8 @@ Run them all from inside the project folder.
 | Command | What it does |
 |---|---|
 | `npm run setup` | Interactive setup. Run this first. |
+| `node src/cli.mjs init` | The same setup, for any league folder: with `--workspace <folder>` it creates that folder and sets the league up there. See [One folder per league](#one-folder-per-league). |
+| `node src/cli.mjs migrate <folder>` | Copy this league — `.env`, league settings, `data/` and `output/` — into a new folder. Nothing is removed. |
 | `node src/cli.mjs doctor` | Checks your settings and connection. Run this when something is wrong. |
 | `node src/cli.mjs preview` | Build this week's matchup previews. |
 | `node src/cli.mjs survival-preview` | Build this week's survival preview. Guillotine leagues only — it replaces `preview`. |
@@ -701,6 +703,51 @@ fantasy-pressbox/
 `data/` is the project's memory. Deleting it loses your movement arrows and
 prediction history, so leave it alone.
 
+### One folder per league
+
+Run from the project folder, as above, the project folder is your league
+folder. Any other folder can be one too, and one copy of the project can serve
+as many leagues as you like, each in its own folder:
+
+```
+~/leagues/my-dynasty/            ~/leagues/office-guillotine/
+├── .env                         ├── .env
+├── config/                      ├── config/
+│   ├── rookie-draft.yml         │   └── guillotine.yml
+│   └── prospects.2027.yml       ├── data/
+├── data/                        └── output/
+└── output/
+```
+
+A league folder holds that league's `.env`, its own league settings
+(`rookie-draft.yml`, `guillotine.yml`, `prospects.<year>.yml`), any
+`config/editorial.yml`, `config/rankings.yml` or `prompts/` files that override
+the shipped ones, and its `data/` and `output/`. Nothing is shared between
+leagues.
+
+- **Make one:** `node src/cli.mjs init --workspace ~/leagues/my-dynasty`
+  creates the folder and runs setup in it.
+- **Use one:** run commands from inside it with the full path to the project,
+  or from anywhere with `--workspace ~/leagues/my-dynasty`.
+- **Outside a league folder nothing runs.** A folder without a `.env` is not a
+  league, so `recap` there stops and tells you to run `init`, rather than
+  starting a second, empty history in the wrong place.
+
+**Moving the league you already have.** If you have been running your league
+from the project folder, copy it into a folder of its own:
+
+```bash
+node src/cli.mjs migrate ~/leagues/my-dynasty
+node src/cli.mjs doctor --workspace ~/leagues/my-dynasty
+```
+
+`migrate` copies `.env`, your league settings, and all of `data/` and `output/`
+— rankings history, snapshots (which remember renamed teams), predictions,
+tank-watch projections and saved trade values. It only copies: nothing in the
+project folder is removed, so check the new folder with `doctor`, run a week
+from it, and only then delete the old `.env`, `data/` and `output/` yourself.
+The destination must be new or empty.
+
 ---
 
 ## Troubleshooting
@@ -711,7 +758,11 @@ it. Close the window, open a new one, try again. If it still fails, reinstall
 from <https://nodejs.org>.
 
 **`No SLEEPER_LEAGUE_ID found`**
-You haven't run setup yet. Run `npm run setup`.
+You haven't run setup yet. Run `npm run setup` (or `node src/cli.mjs init`).
+
+**`... is not a league folder: it has no .env file`**
+You ran a command outside a league folder. Change into your league's folder,
+pass `--workspace <folder>`, or run `init` to set a new one up.
 
 **`Sleeper has no league with ID ...`**
 The ID is wrong. Open your league in a web browser and copy the long number

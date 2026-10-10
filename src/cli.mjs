@@ -7,7 +7,8 @@
  * into a chat or send it to a model for you.
  */
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import {
   loadConfig,
@@ -19,7 +20,9 @@ import {
   resolveWorkspaceRoot,
   WORKSPACE_ENV_VAR,
   workspaceConfigDir,
+  workspaceIsPackage,
 } from './config.mjs';
+import { copyLeagueWorkspace, isLeagueWorkspace, requireLeagueWorkspace } from './workspace.mjs';
 import { describeFormat, hasFutureDraftCapital, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './scoringReport.mjs';
 import { describeEliminationLedger } from './eliminationReport.mjs';
@@ -66,14 +69,25 @@ import {
   resolveTankWatchStartWeek,
 } from './tankWatch.mjs';
 
+/**
+ * This CLI as a command that works from any folder. A league folder can live
+ * anywhere, so advice printed to someone standing in one cannot assume they
+ * are in this package's checkout, where `node src/cli.mjs` would resolve.
+ */
+const CLI_COMMAND = `node ${join(PACKAGE_ROOT, 'src', 'cli.mjs')}`;
+const INIT_COMMAND = `${CLI_COMMAND} init`;
+
 const HELP = `
 Fantasy Pressbox — AI league coverage from your Sleeper data
 
-  npm run setup                 Set the project up (run this first)
-
   node src/cli.mjs <command> [options]
 
+Each league lives in its own folder, holding its .env, config, data and
+output. Run commands from inside that folder, or point at it with --workspace.
+
 Commands
+  init                          Set up a league folder (run this first)
+  migrate <folder>              Copy this league into a new folder; nothing is removed
   doctor                        Check that everything is configured and reachable
   fetch                         Download and save a week of league data
   preview                       Build the weekly matchup previews
@@ -103,7 +117,8 @@ Options
   --help                        Show this message
 
 Examples
-  node src/cli.mjs doctor
+  node src/cli.mjs init --workspace ~/leagues/my-league
+  node src/cli.mjs doctor --workspace ~/leagues/my-league
   node src/cli.mjs preview --week 3
   node src/cli.mjs recap --format imessage --generate
   node src/cli.mjs record output/week2.txt --task preview
@@ -145,11 +160,18 @@ function loadLeagueProspectBoard(config, draftYear) {
   return loadProspectBoard({ draftYear: Number(draftYear), configDir: workspaceConfigDir(config.workspaceRoot) });
 }
 
-function requireLeagueId(config) {
+/**
+ * Every command that reads or writes a league starts here. The folder decides
+ * the league: outside a league folder nothing runs, even with a league ID in
+ * the shell, so one league's history can never be written somewhere else.
+ */
+function requireLeague(config) {
+  requireLeagueWorkspace(config.workspaceRoot, { initCommand: INIT_COMMAND });
   if (config.leagueId) return;
   throw new Error(
-    'No SLEEPER_LEAGUE_ID found.\n' +
-      'Run `npm run setup` to create your .env file, or add the ID to .env by hand.',
+    `No SLEEPER_LEAGUE_ID found in ${join(config.workspaceRoot, '.env')}.\n` +
+      `Run init to set the league up: ${INIT_COMMAND}\n` +
+      'Or add the ID to .env by hand.',
   );
 }
 
@@ -317,9 +339,13 @@ async function commandDoctor(config) {
   say('Fantasy Pressbox check\n');
   const major = Number.parseInt(process.versions.node.split('.')[0], 10);
   say(`  Node.js            ${process.versions.node} ${major >= 18 ? '✓' : '✗ needs 18 or newer'}`);
-  say(`  League ID          ${config.leagueId || '✗ not set — run npm run setup'}`);
+  const inLeague = isLeagueWorkspace(config.workspaceRoot);
+  say(`  League ID          ${config.leagueId || `✗ not set — run ${INIT_COMMAND}`}`);
   say(`  AI provider        ${describeProvider(config.ai)}`);
-  say(`  Workspace          ${config.workspaceRoot}`);
+  say(
+    `  Workspace          ${config.workspaceRoot}` +
+      (inLeague ? '' : ` ✗ not a league folder (no .env) — run ${INIT_COMMAND}`),
+  );
   say(`  Data folder       ${config.dataDir}`);
   say(`  Output folder      ${config.outputDir}`);
   say(`  Sleeper post limit ${config.editorial.output.sleeper_max_chars} characters`);
@@ -341,7 +367,9 @@ async function commandDoctor(config) {
     `  Ranking weights    ✓ ${definedWeightSets.length ? `${definedWeightSets.join(', ')} each sum to 1.0` : 'no sets defined'}`,
   );
 
-  if (!config.leagueId) return 1;
+  // Outside a league folder doctor stops here even with a league ID exported
+  // in the shell, as every league command does.
+  if (!inLeague || !config.leagueId) return 1;
 
   say('\n  Contacting Sleeper...');
   const ctx = await openLeague(config);
@@ -399,7 +427,10 @@ async function commandDoctor(config) {
 
   reportRankEmoji(config, teams.length);
 
-  say('\nEverything looks good. Try: node src/cli.mjs preview');
+  say(
+    `\nEverything looks good. Try: ${CLI_COMMAND} preview` +
+      (workspaceIsPackage(config.workspaceRoot) ? '' : ` --workspace ${config.workspaceRoot}`),
+  );
   return 0;
 }
 
@@ -441,7 +472,7 @@ function reportRankEmoji(config, teamCount) {
 }
 
 async function commandFetch(config, args) {
-  requireLeagueId(config);
+  requireLeague(config);
   const ctx = await openLeague(config, { refreshPlayers: args.refreshPlayers });
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week });
   const result = await captureWeek({ ...ctx, week });
@@ -492,7 +523,7 @@ export function describeQuietTransactionWeek(summary, week) {
 }
 
 async function commandEdition(config, args, task) {
-  requireLeagueId(config);
+  requireLeague(config);
   refuseOrdinaryEditionInGuillotineLeague(config, task);
   refuseSurvivalEditionWithoutEliminations(config, task);
   const isTankWatch = task === TANK_WATCH_TASK;
@@ -773,7 +804,7 @@ async function commandEdition(config, args, task) {
   if (!detectProvider(config.ai)) {
     throw new Error(
       'You asked for --generate, but no AI provider is configured.\n' +
-        'Run `npm run setup` and choose Claude or ChatGPT, or drop --generate and paste\n' +
+        `Run init again (${INIT_COMMAND}) and choose Claude or ChatGPT, or drop --generate and paste\n` +
         `the prompt file into a chat instead: ${promptPath}`,
     );
   }
@@ -948,7 +979,7 @@ function pinPredictionsToRosters(predictions, identity) {
 }
 
 async function commandRecord(config, args) {
-  requireLeagueId(config);
+  requireLeague(config);
   const file = args._[1];
   if (!file) throw new Error('Usage: node src/cli.mjs record <file> --task <preview|rankings> [--week <n>]');
   if (!existsSync(file)) throw new Error(`No such file: ${file}`);
@@ -997,7 +1028,7 @@ function commandCheck(config, args) {
 }
 
 async function commandGrade(config, args) {
-  requireLeagueId(config);
+  requireLeague(config);
   const ctx = await openLeague(config);
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week, offset: -1 });
   const captured = await captureWeek({ ...ctx, week });
@@ -1042,6 +1073,52 @@ async function commandGrade(config, args) {
   return 0;
 }
 
+/**
+ * Sets up a league folder: makes the folder it is pointed at (--workspace, or
+ * PRESSBOX_WORKSPACE, else the current folder) and runs the guided setup there,
+ * which writes the league's .env and its data/ and output/ folders.
+ */
+function commandInit(args) {
+  const workspaceRoot = resolveWorkspaceRoot({ flag: args.workspace, create: true });
+  const result = spawnSync(process.execPath, [join(PACKAGE_ROOT, 'setup.mjs')], {
+    stdio: 'inherit',
+    env: { ...process.env, [WORKSPACE_ENV_VAR]: workspaceRoot },
+  });
+  if (result.error) throw result.error;
+  return result.status ?? 1;
+}
+
+/**
+ * Copies the league in this workspace into a new folder: its .env, league
+ * config, data and output (src/workspace.mjs#copyLeagueWorkspace). Nothing
+ * here is removed — the operator checks the new folder, then deletes the old
+ * one by hand.
+ */
+function commandMigrate(config, args) {
+  const destination = args._[1];
+  if (!destination) {
+    throw new Error(
+      'Usage: node src/cli.mjs migrate <folder>\n' +
+        'Copies this league into <folder>, which must be new or empty. Nothing here is removed.',
+    );
+  }
+  requireLeagueWorkspace(config.workspaceRoot, { initCommand: INIT_COMMAND });
+  const target = resolve(destination);
+  const copied = copyLeagueWorkspace({
+    source: config.workspaceRoot,
+    destination: target,
+    dataDir: config.dataDir,
+    outputDir: config.outputDir,
+    fromPackage: workspaceIsPackage(config.workspaceRoot),
+  });
+  say(`Copied the league in ${config.workspaceRoot} to ${target}:`);
+  for (const { what, to } of copied) say(`  ${what.padEnd(28)} → ${to}`);
+  say(`\nNothing in ${config.workspaceRoot} was removed. Check the new folder first:`);
+  say(`  ${CLI_COMMAND} doctor --workspace ${target}`);
+  say('then run every command from there, and delete the old copies by hand once you are happy.');
+  return 0;
+}
+
 /* -------------------------------------------------------------------- main */
 
 async function main() {
@@ -1053,9 +1130,14 @@ async function main() {
     return 0;
   }
 
+  // Before any config is read: the folder init sets up may not exist yet.
+  if (command === 'init') return commandInit(args);
+
   const config = loadConfig({ workspaceRoot: resolveWorkspaceRoot({ flag: args.workspace }) });
 
   switch (command) {
+    case 'migrate':
+      return commandMigrate(config, args);
     case 'doctor':
       return commandDoctor(config);
     case 'fetch':
