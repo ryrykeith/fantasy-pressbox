@@ -6,10 +6,10 @@
  * snapshot that week, build a prompt, and either write it out for you to paste
  * into a chat or send it to a model for you.
  */
-import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import {
   loadConfig,
   loadProspectBoard,
@@ -1173,14 +1173,25 @@ async function main() {
   }
 }
 
-// Guards the auto-run so a test can import this module (to reach exports like
-// refuseOrdinaryEditionInGuillotineLeague) without executing main() and calling
-// process.exit() out from under the test runner. True for every real
-// invocation — `node src/cli.mjs ...`, `npm run preview`, or the installed
-// `fantasy-pressbox` bin — because argv[1] is the same path Node resolved to
-// load this file. argv[1] is absent under `node -e`/a REPL/an embedder; that
-// is never a real run either, so it is treated the same as an import.
-if (typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(process.argv[1]).href) {
+/**
+ * Whether this file is the program being run, rather than a module a test
+ * imported (to reach exports like refuseOrdinaryEditionInGuillotineLeague)
+ * without wanting main() to call process.exit() out from under the runner.
+ *
+ * Both sides are compared as real paths. The installed `fantasy-pressbox` bin
+ * is a symlink npm puts on the PATH: argv[1] is the link, while
+ * import.meta.url is the file it points at, so comparing them as given made
+ * the installed command print nothing and exit zero
+ * (tests/installed-bin.test.mjs). argv[1] is absent under `node -e`, a REPL
+ * or an embedder, and none of those is a real run.
+ */
+function isRunAsProgram() {
+  const entry = process.argv[1];
+  if (typeof entry !== 'string' || !existsSync(entry)) return false;
+  return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+}
+
+if (isRunAsProgram()) {
   main()
     .then((code) => process.exit(code ?? 0))
     .catch((error) => {
