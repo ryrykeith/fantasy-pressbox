@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 
-import { loadConfig, ROOT } from '../src/config.mjs';
+import { loadConfig, PACKAGE_ROOT } from '../src/config.mjs';
 
 // Point config at a file that does not exist so the developer's own .env plays
 // no part, and drive the setting through the real environment instead.
-const NO_ENV_FILE = join(ROOT, 'tests', '.env.does-not-exist');
+const NO_ENV_FILE = join(PACKAGE_ROOT, 'tests', '.env.does-not-exist');
 
 function withLeagueFormat(value, body) {
   const previous = process.env.LEAGUE_FORMAT;

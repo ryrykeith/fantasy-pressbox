@@ -6,10 +6,24 @@
  * snapshot that week, build a prompt, and either write it out for you to paste
  * into a chat or send it to a model for you.
  */
-import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { loadConfig, loadProspectBoard, rankEmoji, resolveRankingWeights, ROOT } from './config.mjs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync, realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import {
+  loadConfig,
+  loadProspectBoard,
+  PACKAGE_ROOT,
+  describePromptOverrides,
+  rankEmoji,
+  resolveRankingWeights,
+  resolveWorkspaceRoot,
+  WORKSPACE_ENV_VAR,
+  workspaceConfigDir,
+  workspaceIsPackage,
+} from './config.mjs';
+import { copyLeagueWorkspace, isLeagueWorkspace, requireLeagueWorkspace } from './workspace.mjs';
 import { describeFormat, hasFutureDraftCapital, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './scoringReport.mjs';
 import { describeEliminationLedger } from './eliminationReport.mjs';
@@ -55,30 +69,61 @@ import {
   refuseTankWatch,
   resolveTankWatchStartWeek,
 } from './tankWatch.mjs';
+import { banner, cliCommand, displayPath, gettingStarted, weeklyRoutine } from './welcome.mjs';
 
-const HELP = `
+/**
+ * This CLI as a command typed from the current folder: the installed
+ * `fantasy-pressbox`, `npx fantasy-pressbox`, or node and a path, whichever
+ * works for how the package got here (src/welcome.mjs). A league folder can
+ * live anywhere, so advice cannot assume `node src/cli.mjs` resolves.
+ */
+const CLI_COMMAND = cliCommand({ packageRoot: PACKAGE_ROOT });
+const INIT_COMMAND = `${CLI_COMMAND} init`;
+
+/**
+ * The same command typed from inside a league folder, for the getting-started
+ * steps, which `cd` there before running anything.
+ */
+const LEAGUE_FOLDER_COMMAND = cliCommand({ packageRoot: PACKAGE_ROOT, from: join(homedir(), 'leagues', 'my-league') });
+
+function helpText(cli = CLI_COMMAND) {
+  return `
 Fantasy Pressbox — AI league coverage from your Sleeper data
 
-  npm run setup                 Set the project up (run this first)
+Usage
+  ${cli} <command> [options]
 
-  node src/cli.mjs <command> [options]
+Each league lives in its own folder, holding its .env, config, data and
+output. Run commands from inside that folder, or point at it with --workspace.
+
+Getting started
+${gettingStarted(LEAGUE_FOLDER_COMMAND).join('\n')}
+
+Every week, from the league folder
+${weeklyRoutine(LEAGUE_FOLDER_COMMAND).join('\n')}
 
 Commands
+  init                          Set up a league folder (run this first)
   doctor                        Check that everything is configured and reachable
-  fetch                         Download and save a week of league data
+  migrate <folder>              Copy this league into a new folder; nothing is removed
+
   preview                       Build the weekly matchup previews
-  survival-preview              Build the weekly survival preview (guillotine leagues)
   recap                         Build the weekly recap and awards
-  chop-recap                    Build the weekly chop recap and awards (guillotine leagues)
   rankings                      Build the weekly power rankings
-  survival-rankings             Build the weekly survival rankings (guillotine leagues)
-  preseason-rankings            Build preseason rankings (ignores all results)
   transactions                  Grade the week's trades (quiet weeks are skipped)
+  preseason-rankings            Build preseason rankings (ignores all results)
+
   tank-watch                    Build the rookie draft tank watch (dynasty leagues, second half)
   future-stock                  Rank teams on the next three seasons: age, production, picks (dynasty leagues)
+
+  survival-preview              Build the weekly survival preview (guillotine leagues)
+  chop-recap                    Build the weekly chop recap and awards (guillotine leagues)
+  survival-rankings             Build the weekly survival rankings (guillotine leagues)
+
   record <file>                 File a finished edition you pasted back from a chat
-  check <file>                  Check a file of finished posts against the length limit
   grade                         Score last week's predictions against what happened
+  check <file>                  Check a file of finished posts against the length limit
+  fetch                         Download and save a week of league data
 
 Options
   --week <n>                    Which week to work on (default: worked out from Sleeper)
@@ -88,20 +133,46 @@ Options
   --refresh-players             Re-download the NFL player list instead of using the cache
   --refresh-market              Fetch trade values again instead of reusing the week's saved ones
   --early                       Run the tank watch before its start week
+  --workspace <folder>          The league folder: its .env, config, data and output
+                                (default: $${WORKSPACE_ENV_VAR}, else the current folder)
   --help                        Show this message
 
 Examples
-  node src/cli.mjs doctor
-  node src/cli.mjs preview --week 3
-  node src/cli.mjs recap --format imessage --generate
-  node src/cli.mjs record output/week2.txt --task preview
-  node src/cli.mjs survival-preview --week 3
-  node src/cli.mjs chop-recap --week 3
-  node src/cli.mjs survival-rankings --week 3
-  node src/cli.mjs transactions --week 3 --generate
-  node src/cli.mjs tank-watch --week 9
-  node src/cli.mjs future-stock --week 9 --generate
+  ${cli} doctor --workspace ~/leagues/my-league
+  ${cli} preview --week 3
+  ${cli} recap --format imessage --generate
+  ${cli} record output/week2.txt --task preview
+  ${cli} survival-preview --week 3
+  ${cli} transactions --week 3 --generate
+  ${cli} tank-watch --week 9
+  ${cli} future-stock --week 9 --generate
 `;
+}
+
+/**
+ * What a bare run prints: the banner, then the next thing to do from here.
+ * Outside a league folder that is init; inside one, the week's commands.
+ */
+function welcomeText(workspaceRoot) {
+  const lines = ['', banner({ title: bold }), ''];
+  if (isLeagueWorkspace(workspaceRoot)) {
+    let formatType = null;
+    try {
+      formatType = loadConfig({ workspaceRoot }).leagueFormat ?? null;
+    } catch {
+      // A folder that does not load still gets its routine; doctor names the problem.
+    }
+    lines.push(`League folder: ${displayPath(workspaceRoot)}`, '', 'This week');
+    lines.push(...weeklyRoutine(CLI_COMMAND, formatType));
+    lines.push('', `Something not working?  ${CLI_COMMAND} doctor`);
+  } else {
+    lines.push(`No league here yet: ${displayPath(workspaceRoot)} has no .env.`, '', 'Getting started');
+    lines.push(...gettingStarted(LEAGUE_FOLDER_COMMAND));
+    lines.push('', 'Already have a league folder? Run commands from inside it, or add --workspace <folder>.');
+  }
+  lines.push(`Every command and option:  ${CLI_COMMAND} --help`, '');
+  return lines.join('\n');
+}
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -115,7 +186,11 @@ function parseArgs(argv) {
     else if (token === '--week') args.week = Number.parseInt(argv[++i], 10);
     else if (token === '--format') args.format = argv[++i];
     else if (token === '--task') args.task = argv[++i];
-    else if (token.startsWith('--')) throw new Error(`Unknown option "${token}". Try --help.`);
+    else if (token === '--workspace') {
+      const folder = argv[++i];
+      if (!folder || folder.startsWith('--')) throw new Error('--workspace needs a folder, e.g. --workspace ~/leagues/my-league');
+      args.workspace = folder;
+    } else if (token.startsWith('--')) throw new Error(`Unknown option "${token}". Try --help.`);
     else args._.push(token);
   }
   return args;
@@ -123,12 +198,25 @@ function parseArgs(argv) {
 
 const say = (...parts) => console.log(...parts);
 const warn = (...parts) => console.warn(...parts);
+const bold = (text) => (process.stdout.isTTY ? `\x1b[1m${text}\x1b[0m` : text);
 
-function requireLeagueId(config) {
+/** The league's prospect board for a draft class, from its workspace — never the package. */
+function loadLeagueProspectBoard(config, draftYear) {
+  return loadProspectBoard({ draftYear: Number(draftYear), configDir: workspaceConfigDir(config.workspaceRoot) });
+}
+
+/**
+ * Every command that reads or writes a league starts here. The folder decides
+ * the league: outside a league folder nothing runs, even with a league ID in
+ * the shell, so one league's history can never be written somewhere else.
+ */
+function requireLeague(config) {
+  requireLeagueWorkspace(config.workspaceRoot, { initCommand: INIT_COMMAND });
   if (config.leagueId) return;
   throw new Error(
-    'No SLEEPER_LEAGUE_ID found.\n' +
-      'Run `npm run setup` to create your .env file, or add the ID to .env by hand.',
+    `No SLEEPER_LEAGUE_ID found in ${join(config.workspaceRoot, '.env')}.\n` +
+      `Run init to set the league up: ${INIT_COMMAND}\n` +
+      'Or add the ID to .env by hand.',
   );
 }
 
@@ -222,9 +310,9 @@ export function refuseOrdinaryEditionInGuillotineLeague(config, task) {
       (!replacement
         ? `There is no guillotine \`${task}\` edition. The ranking this format does have is ` +
           `\`${GUILLOTINE_EDITION_FOR.rankings}\`, written about a week that has been played: ` +
-          `node src/cli.mjs ${GUILLOTINE_EDITION_FOR.rankings}`
+          `${CLI_COMMAND} ${GUILLOTINE_EDITION_FOR.rankings}`
         : TASKS.includes(replacement)
-          ? `Run \`${replacement}\` instead: node src/cli.mjs ${replacement}`
+          ? `Run \`${replacement}\` instead: ${CLI_COMMAND} ${replacement}`
           : `Guillotine leagues get a \`${replacement}\` edition instead of \`${task}\`, but it has not ` +
             'shipped yet. Track it in the PRD under "Guillotine chopped league coverage" → "Guillotine editions".'),
   );
@@ -249,7 +337,7 @@ export function refuseSurvivalEditionWithoutEliminations(config, task) {
   throw new Error(
     `\`${task}\` is a guillotine edition: nobody is eliminated during the season in this league ` +
       '— every team plays all the way to the end.\n\n' +
-      `Run \`${replacement}\` instead: node src/cli.mjs ${replacement}\n\n` +
+      `Run \`${replacement}\` instead: ${CLI_COMMAND} ${replacement}\n\n` +
       'If this really is a guillotine league, say so with LEAGUE_FORMAT=guillotine in .env. ' +
       'Sleeper cannot report that format, so it has to be declared.',
   );
@@ -264,22 +352,56 @@ function writeOutput(config, name, body) {
 
 /* ---------------------------------------------------------------- commands */
 
+/**
+ * Where each league setting was read from, and which shipped defaults this
+ * workspace overrides — so a confusing output can be traced to a local file.
+ */
+function describeLocalSettings(config) {
+  const { sources } = config;
+  const from = (path) => (path ? `read from ${path}` : 'not found — nothing declared');
+  const lines = [
+    `  League settings    .env ${sources.env ? `read from ${sources.env}` : 'not found'}`,
+    `                     rookie-draft.yml ${from(sources.rookieDraft)}`,
+    `                     guillotine.yml ${from(sources.guillotine)}`,
+  ];
+  const overrides = [];
+  if (sources.editorialOverride) overrides.push(`config/editorial.yml (${sources.editorialOverride})`);
+  if (sources.rankingsOverride) overrides.push(`config/rankings.yml (${sources.rankingsOverride})`);
+  const { overridden, unmatched } = describePromptOverrides(config.promptsDir);
+  for (const file of overridden) overrides.push(`prompts/${file} (${join(config.promptsDir, file)})`);
+  lines.push(
+    overrides.length
+      ? `  Local overrides    ${overrides.join('\n                     ')}`
+      : '  Local overrides    none — using the shipped defaults',
+  );
+  for (const file of unmatched) {
+    lines.push(`                     ✗ ${join(config.promptsDir, file)} matches no shipped prompt, so it is never read`);
+  }
+  return lines;
+}
+
 async function commandDoctor(config) {
   say('Fantasy Pressbox check\n');
   const major = Number.parseInt(process.versions.node.split('.')[0], 10);
   say(`  Node.js            ${process.versions.node} ${major >= 18 ? '✓' : '✗ needs 18 or newer'}`);
-  say(`  League ID          ${config.leagueId || '✗ not set — run npm run setup'}`);
+  const inLeague = isLeagueWorkspace(config.workspaceRoot);
+  say(`  League ID          ${config.leagueId || `✗ not set — run ${INIT_COMMAND}`}`);
   say(`  AI provider        ${describeProvider(config.ai)}`);
-  say(`  Data folder        ${config.dataDir}`);
+  say(
+    `  Workspace          ${config.workspaceRoot}` +
+      (inLeague ? '' : ` ✗ not a league folder (no .env) — run ${INIT_COMMAND}`),
+  );
+  say(`  Data folder       ${config.dataDir}`);
   say(`  Output folder      ${config.outputDir}`);
   say(`  Sleeper post limit ${config.editorial.output.sleeper_max_chars} characters`);
 
   const missingPrompts = ['system.md', 'weekly-preview.md', 'weekly-recap.md', 'weekly-power-rankings.md']
     .filter((file) => {
-      const path = join(ROOT, 'prompts', file);
+      const path = join(PACKAGE_ROOT, 'prompts', file);
       return !existsSync(path) || readFileSync(path, 'utf8').trim() === '';
     });
   say(`  Prompt files       ${missingPrompts.length ? `✗ empty or missing: ${missingPrompts.join(', ')}` : '✓'}`);
+  for (const line of describeLocalSettings(config)) say(line);
 
   // Every set in config/rankings.yml was already checked to sum to 1.0 when
   // config was loaded — loadConfig throws before doctor gets this far if one
@@ -290,7 +412,9 @@ async function commandDoctor(config) {
     `  Ranking weights    ✓ ${definedWeightSets.length ? `${definedWeightSets.join(', ')} each sum to 1.0` : 'no sets defined'}`,
   );
 
-  if (!config.leagueId) return 1;
+  // Outside a league folder doctor stops here even with a league ID exported
+  // in the shell, as every league command does.
+  if (!inLeague || !config.leagueId) return 1;
 
   say('\n  Contacting Sleeper...');
   const ctx = await openLeague(config);
@@ -338,7 +462,7 @@ async function commandDoctor(config) {
   if (hasFutureDraftCapital(league.format)) {
     const draftYear = Number.parseInt(league.season, 10) + 1;
     try {
-      for (const line of describeProspectBoard(loadProspectBoard({ draftYear }), { draftYear })) {
+      for (const line of describeProspectBoard(loadLeagueProspectBoard(config, draftYear), { draftYear })) {
         say(`  ${line}`);
       }
     } catch (error) {
@@ -348,7 +472,10 @@ async function commandDoctor(config) {
 
   reportRankEmoji(config, teams.length);
 
-  say('\nEverything looks good. Try: node src/cli.mjs preview');
+  say(
+    `\nEverything looks good. Try: ${CLI_COMMAND} preview` +
+      (workspaceIsPackage(config.workspaceRoot) ? '' : ` --workspace ${config.workspaceRoot}`),
+  );
   return 0;
 }
 
@@ -390,7 +517,7 @@ function reportRankEmoji(config, teamCount) {
 }
 
 async function commandFetch(config, args) {
-  requireLeagueId(config);
+  requireLeague(config);
   const ctx = await openLeague(config, { refreshPlayers: args.refreshPlayers });
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week });
   const result = await captureWeek({ ...ctx, week });
@@ -441,7 +568,7 @@ export function describeQuietTransactionWeek(summary, week) {
 }
 
 async function commandEdition(config, args, task) {
-  requireLeagueId(config);
+  requireLeague(config);
   refuseOrdinaryEditionInGuillotineLeague(config, task);
   refuseSurvivalEditionWithoutEliminations(config, task);
   const isTankWatch = task === TANK_WATCH_TASK;
@@ -545,7 +672,7 @@ async function commandEdition(config, args, task) {
         // declares its draft order; without one they keep the refusal to name
         // a slot, and the edition still runs.
         draftOrder = captured.draftOrder ?? null;
-        prospectBoard = draftOrder ? loadProspectBoard({ draftYear: Number(draftOrder.draftSeason) }) : null;
+        prospectBoard = draftOrder ? loadLeagueProspectBoard(config, draftOrder.draftSeason) : null;
         if (draftOrder) {
           say(
             `Traded ${draftOrder.draftSeason} picks are valued at their projected slot` +
@@ -576,7 +703,7 @@ async function commandEdition(config, args, task) {
           ? `Measuring movement against the week ${previousTankWatch.week} tank watch.`
           : 'No earlier tank watch this season: no movement to report.',
       );
-      prospectBoard = loadProspectBoard({ draftYear: Number(draftOrder.draftSeason) });
+      prospectBoard = loadLeagueProspectBoard(config, draftOrder.draftSeason);
     } else if (isFutureStock) {
       // Everything the edition reads is already on disk or one market fetch
       // away. A market that cannot be fetched degrades to unpriced picks
@@ -589,7 +716,7 @@ async function commandEdition(config, args, task) {
       pickCapital = readPickCapital({ league, teams, tradedPicks, market: marketValues, config });
       // Optional: without a declared draft rule the picks simply carry no slot.
       draftOrder = captured.draftOrder ?? null;
-      prospectBoard = draftOrder ? loadProspectBoard({ draftYear: Number(draftOrder.draftSeason) }) : null;
+      prospectBoard = draftOrder ? loadLeagueProspectBoard(config, draftOrder.draftSeason) : null;
       if (!rosterWindow.weeksCovered.length) {
         warn(`Week ${week} has no completed week on disk: production by age cannot be reported yet.`);
       }
@@ -697,7 +824,7 @@ async function commandEdition(config, args, task) {
     format,
   });
 
-  const prompt = buildPrompt({ task, context });
+  const prompt = buildPrompt({ task, context, promptsDir: config.promptsDir });
   const base =
     task === 'preseason-rankings'
       ? `${league.season}-preseason-rankings`
@@ -722,7 +849,7 @@ async function commandEdition(config, args, task) {
   if (!detectProvider(config.ai)) {
     throw new Error(
       'You asked for --generate, but no AI provider is configured.\n' +
-        'Run `npm run setup` and choose Claude or ChatGPT, or drop --generate and paste\n' +
+        `Run init again (${INIT_COMMAND}) and choose Claude or ChatGPT, or drop --generate and paste\n` +
         `the prompt file into a chat instead: ${promptPath}`,
     );
   }
@@ -730,8 +857,8 @@ async function commandEdition(config, args, task) {
   say(`Generating with ${describeProvider(config.ai)}...`);
   const result = await generate({
     ai: config.ai,
-    system: systemPromptOnly(context.league.format?.type),
-    user: [taskPromptOnly(task, context.league.format?.type), '', '# LEAGUE CONTEXT', '', '```json', JSON.stringify(context, null, 2), '```'].join('\n'),
+    system: systemPromptOnly(context.league.format?.type, { promptsDir: config.promptsDir }),
+    user: [taskPromptOnly(task, context.league.format?.type, { promptsDir: config.promptsDir }), '', '# LEAGUE CONTEXT', '', '```json', JSON.stringify(context, null, 2), '```'].join('\n'),
   });
 
   const body = stripJsonBlock(result.text);
@@ -897,9 +1024,9 @@ function pinPredictionsToRosters(predictions, identity) {
 }
 
 async function commandRecord(config, args) {
-  requireLeagueId(config);
+  requireLeague(config);
   const file = args._[1];
-  if (!file) throw new Error('Usage: node src/cli.mjs record <file> --task <preview|rankings> [--week <n>]');
+  if (!file) throw new Error(`Usage: ${CLI_COMMAND} record <file> --task <preview|rankings> [--week <n>]`);
   if (!existsSync(file)) throw new Error(`No such file: ${file}`);
 
   const task = args.task;
@@ -938,7 +1065,7 @@ async function commandRecord(config, args) {
 
 function commandCheck(config, args) {
   const file = args._[1];
-  if (!file) throw new Error('Usage: node src/cli.mjs check <file>');
+  if (!file) throw new Error(`Usage: ${CLI_COMMAND} check <file>`);
   if (!existsSync(file)) throw new Error(`No such file: ${file}`);
   // The machine-readable tail is not a post and must not be counted as one.
   reportLengths(stripJsonBlock(readFileSync(file, 'utf8')), config, 'sleeper');
@@ -946,7 +1073,7 @@ function commandCheck(config, args) {
 }
 
 async function commandGrade(config, args) {
-  requireLeagueId(config);
+  requireLeague(config);
   const ctx = await openLeague(config);
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week, offset: -1 });
   const captured = await captureWeek({ ...ctx, week });
@@ -991,20 +1118,75 @@ async function commandGrade(config, args) {
   return 0;
 }
 
+/**
+ * Sets up a league folder: makes the folder it is pointed at (--workspace, or
+ * PRESSBOX_WORKSPACE, else the current folder) and runs the guided setup there,
+ * which writes the league's .env and its data/ and output/ folders.
+ */
+function commandInit(args) {
+  const workspaceRoot = resolveWorkspaceRoot({ flag: args.workspace, create: true });
+  const result = spawnSync(process.execPath, [join(PACKAGE_ROOT, 'setup.mjs')], {
+    stdio: 'inherit',
+    env: { ...process.env, [WORKSPACE_ENV_VAR]: workspaceRoot },
+  });
+  if (result.error) throw result.error;
+  return result.status ?? 1;
+}
+
+/**
+ * Copies the league in this workspace into a new folder: its .env, league
+ * config, data and output (src/workspace.mjs#copyLeagueWorkspace). Nothing
+ * here is removed — the operator checks the new folder, then deletes the old
+ * one by hand.
+ */
+function commandMigrate(config, args) {
+  const destination = args._[1];
+  if (!destination) {
+    throw new Error(
+      `Usage: ${CLI_COMMAND} migrate <folder>\n` +
+        'Copies this league into <folder>, which must be new or empty. Nothing here is removed.',
+    );
+  }
+  requireLeagueWorkspace(config.workspaceRoot, { initCommand: INIT_COMMAND });
+  const target = resolve(destination);
+  const copied = copyLeagueWorkspace({
+    source: config.workspaceRoot,
+    destination: target,
+    dataDir: config.dataDir,
+    outputDir: config.outputDir,
+    fromPackage: workspaceIsPackage(config.workspaceRoot),
+  });
+  say(`Copied the league in ${config.workspaceRoot} to ${target}:`);
+  for (const { what, to } of copied) say(`  ${what.padEnd(28)} → ${to}`);
+  say(`\nNothing in ${config.workspaceRoot} was removed. Check the new folder first:`);
+  say(`  ${CLI_COMMAND} doctor --workspace ${target}`);
+  say('then run every command from there, and delete the old copies by hand once you are happy.');
+  return 0;
+}
+
 /* -------------------------------------------------------------------- main */
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const command = args._[0];
 
-  if (args.help || !command) {
-    say(HELP.trim());
+  if (args.help) {
+    say(helpText().trim());
+    return 0;
+  }
+  if (!command) {
+    say(welcomeText(resolveWorkspaceRoot({ flag: args.workspace })));
     return 0;
   }
 
-  const config = loadConfig();
+  // Before any config is read: the folder init sets up may not exist yet.
+  if (command === 'init') return commandInit(args);
+
+  const config = loadConfig({ workspaceRoot: resolveWorkspaceRoot({ flag: args.workspace }) });
 
   switch (command) {
+    case 'migrate':
+      return commandMigrate(config, args);
     case 'doctor':
       return commandDoctor(config);
     case 'fetch':
@@ -1040,14 +1222,25 @@ async function main() {
   }
 }
 
-// Guards the auto-run so a test can import this module (to reach exports like
-// refuseOrdinaryEditionInGuillotineLeague) without executing main() and calling
-// process.exit() out from under the test runner. True for every real
-// invocation — `node src/cli.mjs ...`, `npm run preview`, or the installed
-// `fantasy-pressbox` bin — because argv[1] is the same path Node resolved to
-// load this file. argv[1] is absent under `node -e`/a REPL/an embedder; that
-// is never a real run either, so it is treated the same as an import.
-if (typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(process.argv[1]).href) {
+/**
+ * Whether this file is the program being run, rather than a module a test
+ * imported (to reach exports like refuseOrdinaryEditionInGuillotineLeague)
+ * without wanting main() to call process.exit() out from under the runner.
+ *
+ * Both sides are compared as real paths. The installed `fantasy-pressbox` bin
+ * is a symlink npm puts on the PATH: argv[1] is the link, while
+ * import.meta.url is the file it points at, so comparing them as given made
+ * the installed command print nothing and exit zero
+ * (tests/installed-bin.test.mjs). argv[1] is absent under `node -e`, a REPL
+ * or an embedder, and none of those is a real run.
+ */
+function isRunAsProgram() {
+  const entry = process.argv[1];
+  if (typeof entry !== 'string' || !existsSync(entry)) return false;
+  return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+}
+
+if (isRunAsProgram()) {
   main()
     .then((code) => process.exit(code ?? 0))
     .catch((error) => {

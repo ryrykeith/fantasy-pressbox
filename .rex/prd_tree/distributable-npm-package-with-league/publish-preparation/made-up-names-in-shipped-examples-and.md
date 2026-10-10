@@ -1,0 +1,20 @@
+---
+id: "26169bad-dae1-4efb-af5a-fe42984bff35"
+level: "task"
+title: "Made-up names in shipped examples, and an installed CLI that names itself correctly"
+status: "completed"
+priority: "medium"
+source: "operator review session 2026-10-10"
+startedAt: "2026-10-10T19:01:53.970Z"
+completedAt: "2026-10-10T19:01:53.970Z"
+endedAt: "2026-10-10T19:01:53.970Z"
+resolutionType: "code-change"
+resolutionDetail: "88f1eee (names) and 753e9de (command naming, banner, start screens, help); 665 tests pass."
+acceptanceCriteria:
+  - "No team or manager name from the operator's league appears in any file npm pack ships"
+  - "An installed package's help, bare run, init and refusals print fantasy-pressbox or npx fantasy-pressbox, never a node_modules path when the bin is on PATH"
+  - "tests/welcome.test.mjs covers each install shape, the banner's alignment and the format-specific routine"
+description: "Done 2026-10-10 by the operator's review session, outside ndx work.\n\n- Shipped prompt examples, README samples and two code comments used real team and manager names from the operator's league, including a manager's Sleeper handle. They now use one invented cast (88f1eee). tests/fixtures and docs/editorial-model.md still hold the league's real data; they do not ship, but the repository is public.\n- src/welcome.mjs: advice prints the command the way the package was installed: fantasy-pressbox (global), npx fantasy-pressbox (npx, or inside a project with a local copy), or node and a path (a clone, or outside that project). Before this, an installed package printed node <path>/node_modules/fantasy-pressbox/src/cli.mjs.\n- init opens with a scoreboard banner and ends with cd, doctor and the weekly routine for the league's format; a bare run prints the banner and the next step; --help leads with getting started and the weekly routine (753e9de).\n- Verified from a packed tarball installed outside the repository, with the bin on PATH and through npx."
+lastModified: "2026-10-10T19:01:53.984Z"
+lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
+---

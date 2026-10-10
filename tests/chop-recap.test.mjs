@@ -11,7 +11,7 @@ import { TASKS, ELIMINATION_ONLY_TASKS, buildContext, buildPrompt } from '../src
 import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { buildDangerBoard } from '../src/analysis/danger.mjs';
 import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
-import { ROOT } from '../src/config.mjs';
+import { PACKAGE_ROOT } from '../src/config.mjs';
 
 /**
  * The chop recap: the backward-looking edition a guillotine league gets
@@ -220,7 +220,7 @@ function unavailableFields(context) {
 
 test('chop-recap is a registered task with a prompt file of its own', () => {
   assert.ok(TASKS.includes('chop-recap'), 'chop-recap is in TASKS');
-  const text = readFileSync(join(ROOT, 'prompts', 'chop-recap.md'), 'utf8');
+  const text = readFileSync(join(PACKAGE_ROOT, 'prompts', 'chop-recap.md'), 'utf8');
   assert.ok(text.trim().length > 0, 'the prompt file is not empty');
 });
 
@@ -238,7 +238,7 @@ test('buildPrompt embeds the chop-recap prompt file and the context', () => {
  * convention tests/survival-preview.test.mjs already enforces for its sibling.
  */
 test('the chop-recap prompt never mentions a matchup, an opponent, a game, a winner or a loser', () => {
-  const text = readFileSync(join(ROOT, 'prompts', 'chop-recap.md'), 'utf8');
+  const text = readFileSync(join(PACKAGE_ROOT, 'prompts', 'chop-recap.md'), 'utf8');
   for (const word of ['matchup', 'opponent', 'game', 'winner', 'loser']) {
     assert.doesNotMatch(
       text,

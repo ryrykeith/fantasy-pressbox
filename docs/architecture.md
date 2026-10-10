@@ -39,13 +39,96 @@ undiagnosable.
 When output is wrong, this separation makes it answerable whether the data was
 wrong, the analysis was wrong, or the writing was wrong.
 
+## Package root and workspace root
+
+Two directories, never confused (`src/config.mjs`):
+
+| Root | What lives there | At run time |
+|---|---|---|
+| `PACKAGE_ROOT` (from `import.meta.url`) | `prompts/`, the `config/editorial.yml` and `config/rankings.yml` defaults, `config/bye-weeks.<season>.yml`, `config/prospects.example.yml`, empty `rookie-draft.yml` / `guillotine.yml` templates | read only |
+| workspace (`config.workspaceRoot`) | one league's `.env`, its `config/rookie-draft.yml`, `config/guillotine.yml`, `config/prospects.<year>.yml`, and `data/` and `output/` | read and written |
+
+The workspace is chosen by `resolveWorkspaceRoot`: `--workspace <folder>`, then
+`PRESSBOX_WORKSPACE`, then the working directory. It cannot come from `.env`,
+because `.env` is in it. A named folder that does not exist is refused rather
+than created (only `init` creates one). A relative `DATA_DIR` or `OUTPUT_DIR`
+is taken from the workspace.
+
+A folder is a league workspace when it holds a `.env` (`src/workspace.mjs`).
+Every command that reads or writes a league (`requireLeague` in `cli.mjs`)
+refuses to run outside one, naming `init` as the fix — even with
+`SLEEPER_LEAGUE_ID` exported in the shell, so a league's history is never
+started in whatever folder happens to be current. `doctor` reports the same and
+stops before contacting Sleeper; `check` needs no league.
+
+`.env` is read into the config, never into `process.env`
+(`environmentWithFile`), so loading one league leaves nothing behind for the
+next. A real environment variable still overrides the file.
+
+`init` makes the folder and runs `setup.mjs` in it. Setup asks for the league
+(confirmed against Sleeper at entry), declares the format (Sleeper's reading is
+offered first, but guillotine can only be chosen), shows the scoring profile
+back, then asks what that format needs: a dynasty league's rookie draft order
+from common presets, its later-round order and tank watch start week; a
+guillotine league gets the empty `guillotine.yml` ledger. Every answer is read
+by the parser `loadConfig` uses (`src/init.mjs`), the rookie draft file is read
+back through them before it is written, and the finished folder is loaded with
+`loadConfig` before setup reports success. It never writes a prospect board:
+it points at `prospects.example.yml`, because a board is the operator's sourced
+opinion. Started in the package folder itself, setup asks for a league folder
+outside it (offering `~/leagues/<league name>`) rather than writing `.env`
+into the package. On a second run the existing answers are the defaults, and
+`.env` and `rookie-draft.yml` are only replaced after asking, with a backup.
+
+`migrate <folder>` (`copyLeagueWorkspace`) copies a league into a new or empty
+folder: `.env`, the league's config files, a workspace's overrides, and the
+whole data and output folders, at the same relative paths. It never moves or
+deletes. Copied from the package folder, the shipped defaults stay behind and
+so does a template (`rookie-draft.yml`, `guillotine.yml`) that declares
+nothing. A `DATA_DIR` or `OUTPUT_DIR` outside the source is refused, because
+the copied `.env` would point both leagues at one history.
+
+Every write goes through `config.dataDir` or `config.outputDir`, so nothing is
+ever written into an installed package. Only the modules that read shipped
+assets (`config.mjs`, `promptContext.mjs`'s `readPrompt`, `cli.mjs`'s doctor)
+refer to `PACKAGE_ROOT`, and `tests/workspace-root.test.mjs` holds that line.
+The prospect board has no package fallback: `loadProspectBoard` needs the
+workspace's config folder.
+
+Run from a checkout's own folder, the two roots are the same directory, which
+is how a cloned repository covering one league keeps working unchanged.
+
+### Workspace overrides
+
+A workspace may adjust the shipped defaults without copying the package:
+
+- `config/editorial.yml` and `config/rankings.yml` in the workspace are layered
+  over the shipped files with the same `readYamlFile` and the same
+  `replaceKeys` (a `ranking_emoji` table or a weight set replaces, the rest
+  merges). The merged weights are still checked to sum to 1.0, and a setting
+  that is a table in the shipped file cannot be overridden by a bare value.
+- `prompts/<name>.md` in the workspace shadows the shipped prompt of the same
+  name; every other prompt still comes from the package. `readPrompt` reads
+  either through `renderFormatBlocks`, so an override's `<!-- format: -->`
+  blocks resolve exactly as the shipped prompt's do.
+- League-specific files (`.env`, `rookie-draft.yml`, `guillotine.yml`,
+  `prospects.<year>.yml`) are never layered: they come from the workspace only.
+- When the workspace is the package folder there is nothing to override, so none
+  is reported.
+
+`doctor` prints where `.env`, `rookie-draft.yml` and `guillotine.yml` were read
+from, lists each overridden config file and prompt with its path, and flags a
+workspace prompt whose name matches no shipped prompt (it would never be read).
+
 ## Module map
 
 | Path | Responsibility |
 |---|---|
 | `src/lib/yaml.mjs` | A small YAML reader, so `config/` needs no dependency |
 | `src/lib/env.mjs` | `.env` parsing, so secrets need no dependency |
-| `src/config.mjs` | Merges flags, env, `config/*.yml` and defaults |
+| `src/config.mjs` | Merges flags, env, `config/*.yml` and defaults; owns the package root and the workspace root (above) |
+| `src/workspace.mjs` | What makes a folder a league workspace, the refusal outside one, and the copy-only `migrate` |
+| `src/init.mjs` | What init offers and writes, without the terminal: format choices, rookie draft presets, answers read by the loader's parsers, and a `rookie-draft.yml` checked back through them. `setup.mjs` asks the questions |
 | `src/format.mjs` | The league format taxonomy: valid types, declaration parsing, resolution |
 | `src/rookieDraft.mjs` | The declared rookie draft order rule (`config/rookie-draft.yml`): parsing, group sizes, plain-words description, and the refusal to project an order without one |
 | `src/sleeper/client.mjs` | HTTP only. Retries, friendly errors, player-file cache |
@@ -73,6 +156,7 @@ wrong, the analysis was wrong, or the writing was wrong.
 | `src/validate.mjs` | Post splitting and length checking |
 | `src/pipeline.mjs` | The run order |
 | `src/cli.mjs` | Commands and human-facing output |
+| `src/welcome.mjs` | How the CLI talks someone through starting: the command line its advice prints (global install, npx, a project's node_modules, or a clone), the banner, the getting-started steps and the weekly routine |
 
 ## Domain concepts
 

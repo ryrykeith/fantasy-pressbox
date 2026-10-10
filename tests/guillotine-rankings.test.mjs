@@ -18,7 +18,7 @@ import {
 import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { buildDangerBoard } from '../src/analysis/danger.mjs';
 import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
-import { loadConfig, rankEmoji, resolveRankingWeights, ROOT } from '../src/config.mjs';
+import { loadConfig, rankEmoji, resolveRankingWeights, PACKAGE_ROOT } from '../src/config.mjs';
 
 /**
  * The survival rankings: the guillotine league's power ranking.
@@ -39,7 +39,7 @@ const STARTING_SLOTS = ['QB', 'RB', 'WR'];
 
 // Point config at a file that does not exist so the developer's own .env plays
 // no part in these tests, same as tests/rankings-weights.test.mjs.
-const NO_ENV_FILE = join(ROOT, 'tests', '.env.does-not-exist');
+const NO_ENV_FILE = join(PACKAGE_ROOT, 'tests', '.env.does-not-exist');
 
 const GUILLOTINE_WEIGHTS = { weekly_floor: 0.6, starting_lineup: 0.4 };
 const DYNASTY_WEIGHTS = { starting_lineup: 0.6, dynasty_value: 0.4 };
@@ -195,7 +195,7 @@ function unavailableFields(context) {
 
 test('survival-rankings is a registered task with a prompt file of its own', () => {
   assert.ok(TASKS.includes('survival-rankings'), 'survival-rankings is in TASKS');
-  const text = readFileSync(join(ROOT, 'prompts', 'survival-rankings.md'), 'utf8');
+  const text = readFileSync(join(PACKAGE_ROOT, 'prompts', 'survival-rankings.md'), 'utf8');
   assert.ok(text.trim().length > 0, 'the prompt file is not empty');
 });
 
@@ -217,7 +217,7 @@ test('buildPrompt embeds the survival-rankings prompt file and the context', () 
  * so the prompt file's job is to not reintroduce the concepts.
  */
 test('the survival-rankings prompt never mentions a matchup, an opponent or a game', () => {
-  const text = readFileSync(join(ROOT, 'prompts', 'survival-rankings.md'), 'utf8');
+  const text = readFileSync(join(PACKAGE_ROOT, 'prompts', 'survival-rankings.md'), 'utf8');
   for (const word of ['matchup', 'opponent', 'game']) {
     assert.doesNotMatch(
       text,
@@ -228,14 +228,14 @@ test('the survival-rankings prompt never mentions a matchup, an opponent or a ga
 });
 
 test('the survival-rankings prompt teaches floor over ceiling, the format\'s inversion', () => {
-  const text = readFileSync(join(ROOT, 'prompts', 'survival-rankings.md'), 'utf8');
+  const text = readFileSync(join(PACKAGE_ROOT, 'prompts', 'survival-rankings.md'), 'utf8');
   assert.match(text, /\bfloor\b/i, 'the prompt talks about the floor');
   assert.match(text, /\bceiling\b/i, 'the prompt names the ceiling it is ranking against');
   assert.match(text, /survival/i);
 });
 
 test('the survival-rankings prompt never asks for draft capital or dynasty value', () => {
-  const text = readFileSync(join(ROOT, 'prompts', 'survival-rankings.md'), 'utf8');
+  const text = readFileSync(join(PACKAGE_ROOT, 'prompts', 'survival-rankings.md'), 'utf8');
   assert.doesNotMatch(text, /draft capital/i);
   assert.doesNotMatch(text, /dynasty/i);
 });

@@ -4,11 +4,11 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { loadConfig, readYamlFile, resolveRankingWeights, validateRankingWeights, ROOT } from '../src/config.mjs';
+import { loadConfig, readYamlFile, resolveRankingWeights, validateRankingWeights, PACKAGE_ROOT } from '../src/config.mjs';
 
 // Point config at a file that does not exist so the developer's own .env plays
 // no part in these tests, same as tests/config-format.test.mjs.
-const NO_ENV_FILE = join(ROOT, 'tests', '.env.does-not-exist');
+const NO_ENV_FILE = join(PACKAGE_ROOT, 'tests', '.env.does-not-exist');
 
 const DYNASTY_WEIGHTS = {
   starting_lineup: 0.3,

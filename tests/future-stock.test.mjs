@@ -17,6 +17,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadConfig, resolveFutureStockWeights, validateRankingWeights } from '../src/config.mjs';
@@ -385,7 +388,12 @@ test('--help documents the command with an example', () => {
 
 for (const formatType of ['redraft', 'guillotine']) {
   test(`the command refuses a declared ${formatType} league before contacting Sleeper`, () => {
+    // A league folder of its own: the command refuses to run outside one,
+    // which would hide the refusal under test.
+    const workspace = mkdtempSync(join(tmpdir(), 'pressbox-future-stock-'));
+    writeFileSync(join(workspace, '.env'), '');
     const result = spawnSync(process.execPath, [cli, 'future-stock'], {
+      cwd: workspace,
       encoding: 'utf8',
       env: { ...process.env, SLEEPER_LEAGUE_ID: '1', LEAGUE_FORMAT: formatType },
     });

@@ -12,7 +12,7 @@ import {
   prospectBoardView,
   PROSPECT_BOARD_STALE_DAYS,
 } from '../src/prospectBoard.mjs';
-import { loadProspectBoard, ROOT } from '../src/config.mjs';
+import { loadProspectBoard, PACKAGE_ROOT } from '../src/config.mjs';
 import { parseYaml } from '../src/lib/yaml.mjs';
 
 /**
@@ -177,8 +177,8 @@ test('loadProspectBoard names the file when it is invalid', () => {
 });
 
 test('the shipped example is a valid board, but is never loaded as a real one', () => {
-  const path = join(ROOT, 'config', 'prospects.example.yml');
+  const path = join(PACKAGE_ROOT, 'config', 'prospects.example.yml');
   const parsed = parseProspectBoard(parseYaml(readFileSync(path, 'utf8')), { draftYear: 2027, source: path });
   assert.ok(parsed.entries.length >= 2);
-  assert.equal(loadProspectBoard({ draftYear: 2099 }), null);
+  assert.equal(loadProspectBoard({ draftYear: 2099, configDir: join(PACKAGE_ROOT, 'config') }), null);
 });
