@@ -17,6 +17,6 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Interactive init command](./interactive-init-command.md) | pending |
+| [Interactive init command](./interactive-init-command.md) | completed |
 | [Multi-league layout and league selection](./multi-league-layout-and-league-selection.md) | completed |
 | [Return the shipped rookie-draft.yml to a template once the operator's league runs from its own folder](./return-the-shipped-rookie-draft-yml-to.md) | pending |
