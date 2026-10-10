@@ -822,8 +822,26 @@ Historical analysis uses historical snapshots. A preseason ranking generated
 after week 1 must use the preseason roster snapshot, and must not incorporate
 week 1 results, later transactions, later injuries or later roster changes.
 
-This is why `data/snapshots/` is append-only and why `store.mjs` never
-overwrites a past week with current data.
+This is why a week's snapshot, once settled, is never rewritten.
+
+A week is captured more than once in the ordinary course of things: its own
+preview captures it before kickoff, a run during the games captures it half
+played, and only a capture after Sleeper has scored it (`last_scored_leg`, as
+`league.lastScoredWeek`) holds the final result. That capture writes
+`settled: true`, and from then on `captureWeek` reads the week back from disk
+instead of fetching it (`isSettledSnapshot` in `src/pipeline.mjs`). Earlier
+captures are `settled: false` and are replaced.
+
+Without this, a preview for week 5, which reads week 4's results, captured
+week 4 again and stamped that day's injury statuses, projected draft order and
+team names onto it. A renamed team's old name is what `src/teamIdentity.mjs`
+reads out of these snapshots, so a rename between the two captures would have
+erased it. The same applied to any edition run with an old `--week`.
+
+Snapshots written before the flag count as settled when they have scores for a
+week Sleeper has since scored. The rule errs toward keeping history. The one
+value still computed fresh for a settled week is a projected draft order the
+snapshot never recorded, which is what every edition did before.
 
 ### Team renames
 

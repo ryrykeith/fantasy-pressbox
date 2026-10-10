@@ -365,7 +365,65 @@ export function readRosterWindow({ store, league, teams, players, throughWeek, a
 }
 
 /** Fetch one week, save the raw bundle and the analyzed snapshot. */
+/**
+ * Whether a stored snapshot is the settled record of its week, which nothing
+ * may rewrite.
+ *
+ * A week is captured more than once in the ordinary course of things: its own
+ * preview captures it before kickoff, a run on Sunday captures it half played,
+ * and only a capture after Sleeper has scored it (`league.lastScoredWeek`)
+ * holds its final result. That last capture is the record. Capturing the week
+ * again later would stamp today's team names, injuries and projected draft
+ * order onto it — and a renamed team's old name is exactly what
+ * src/teamIdentity.mjs reads out of these snapshots to recognise it.
+ *
+ * Snapshots written before this rule carry no `settled` flag. One counts as
+ * settled when it has scores for a week Sleeper has since scored: every such
+ * snapshot on record was captured after its week ended, and the rule errs
+ * toward keeping history, never toward rewriting it. A legacy snapshot of an
+ * elimination format without its ledger is the exception — every edition of
+ * that format reads the ledger, so it is captured again.
+ */
+export function isSettledSnapshot(snapshot, league) {
+  if (!snapshot) return false;
+  if (typeof snapshot.settled === 'boolean') return snapshot.settled;
+  if (hasEliminations(league.format) && !snapshot.elimination) return false;
+  return Boolean(snapshot.played) && Number.isInteger(league.lastScoredWeek) && snapshot.week <= league.lastScoredWeek;
+}
+
+/**
+ * A settled week, read back from disk in the shape captureWeek returns. Its
+ * transactions come from the raw bundle saved beside it. The projected draft
+ * order is the one exception that may be computed now: a snapshot written
+ * before the order was recorded has none, and computing it from today's
+ * standings is what every edition did before this rule. Nothing is written,
+ * and `kept` says so.
+ */
+async function readSettledWeek({ client, store, league, teams, week, config, tradedPicks, snapshot }) {
+  const raw = store.loadRaw(league.season, week);
+  const transactions = raw?.transactions ?? (await client.transactions(week));
+  const draftOrder = snapshot.draftOrder ?? readDraftOrder({ league, teams, config, tradedPicks });
+  return {
+    analysis: snapshot.analysis,
+    transactions,
+    played: snapshot.played,
+    ...(snapshot.elimination ? { elimination: snapshot.elimination } : {}),
+    ...(snapshot.danger ? { danger: snapshot.danger } : {}),
+    ...(snapshot.faab ? { faab: snapshot.faab } : {}),
+    ...(snapshot.byeExposure ? { byeExposure: snapshot.byeExposure } : {}),
+    ...(draftOrder ? { draftOrder } : {}),
+    rawPath: raw ? store.rawPath(league.season, week) : null,
+    snapshotPath: store.snapshotPath(league.season, week),
+    kept: true,
+  };
+}
+
 export async function captureWeek({ client, store, league, teams, players, week, config = null, tradedPicks = [] }) {
+  const stored = store.loadSnapshot(league.season, week);
+  if (isSettledSnapshot(stored, league)) {
+    return readSettledWeek({ client, store, league, teams, week, config, tradedPicks, snapshot: stored });
+  }
+
   const [matchups, transactions] = await Promise.all([
     client.matchups(week),
     client.transactions(week),
@@ -455,10 +513,15 @@ export async function captureWeek({ client, store, league, teams, players, week,
   // was projected then, not recomputed from later standings.
   const draftOrder = readDraftOrder({ league, teams, config, tradedPicks });
 
+  // Settled once Sleeper has scored the week: from then on this capture is the
+  // week's record (isSettledSnapshot).
+  const settled = Number.isInteger(league.lastScoredWeek) && week <= league.lastScoredWeek;
+
   const snapshotPath = store.saveSnapshot(league.season, week, {
     week,
     season: league.season,
     played,
+    settled,
     teams: teams.map((team) => ({
       rosterId: team.rosterId,
       name: team.name,
@@ -487,5 +550,6 @@ export async function captureWeek({ client, store, league, teams, players, week,
     ...(draftOrder ? { draftOrder } : {}),
     rawPath,
     snapshotPath,
+    kept: false,
   };
 }
