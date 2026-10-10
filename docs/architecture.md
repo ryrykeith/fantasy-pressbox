@@ -65,6 +65,21 @@ stops before contacting Sleeper; `check` needs no league.
 (`environmentWithFile`), so loading one league leaves nothing behind for the
 next. A real environment variable still overrides the file.
 
+`init` makes the folder and runs `setup.mjs` in it. Setup asks for the league
+(confirmed against Sleeper at entry), declares the format (Sleeper's reading is
+offered first, but guillotine can only be chosen), shows the scoring profile
+back, then asks what that format needs: a dynasty league's rookie draft order
+from common presets, its later-round order and tank watch start week; a
+guillotine league gets the empty `guillotine.yml` ledger. Every answer is read
+by the parser `loadConfig` uses (`src/init.mjs`), the rookie draft file is read
+back through them before it is written, and the finished folder is loaded with
+`loadConfig` before setup reports success. It never writes a prospect board:
+it points at `prospects.example.yml`, because a board is the operator's sourced
+opinion. Started in the package folder itself, setup asks for a league folder
+outside it (offering `~/leagues/<league name>`) rather than writing `.env`
+into the package. On a second run the existing answers are the defaults, and
+`.env` and `rookie-draft.yml` are only replaced after asking, with a backup.
+
 `migrate <folder>` (`copyLeagueWorkspace`) copies a league into a new or empty
 folder: `.env`, the league's config files, a workspace's overrides, and the
 whole data and output folders, at the same relative paths. It never moves or
@@ -113,6 +128,7 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/lib/env.mjs` | `.env` parsing, so secrets need no dependency |
 | `src/config.mjs` | Merges flags, env, `config/*.yml` and defaults; owns the package root and the workspace root (above) |
 | `src/workspace.mjs` | What makes a folder a league workspace, the refusal outside one, and the copy-only `migrate` |
+| `src/init.mjs` | What init offers and writes, without the terminal: format choices, rookie draft presets, answers read by the loader's parsers, and a `rookie-draft.yml` checked back through them. `setup.mjs` asks the questions |
 | `src/format.mjs` | The league format taxonomy: valid types, declaration parsing, resolution |
 | `src/rookieDraft.mjs` | The declared rookie draft order rule (`config/rookie-draft.yml`): parsing, group sizes, plain-words description, and the refusal to project an order without one |
 | `src/sleeper/client.mjs` | HTTP only. Retries, friendly errors, player-file cache |

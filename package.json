@@ -17,6 +17,7 @@
     "config/rookie-draft.yml",
     "config/guillotine.yml",
     "setup.mjs",
+    ".env.example",
     "README.md",
     "LICENSE"
   ],

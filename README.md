@@ -247,9 +247,10 @@ That's the install finished. The next section covers what setup asks you.
 
 ## Setup
 
-`npm run setup` is an interactive questionnaire. It checks your computer,
-asks a handful of questions in plain language, and writes your settings file
-for you. Press Enter to accept any answer shown in brackets.
+`npm run setup` (the same as `node src/cli.mjs init`) is an interactive
+questionnaire. It checks your computer, asks a handful of questions in plain
+language, and sets up a folder for your league. Press Enter to accept any
+answer shown in brackets.
 
 It asks for:
 
@@ -263,28 +264,52 @@ https://sleeper.com/leagues/1234567890123456789/team
 ```
 
 You can paste the entire address — setup pulls the ID out of it. It then
-checks the ID against Sleeper and shows you the league name, so you know
-immediately if you grabbed the wrong number.
+checks the ID against Sleeper and shows you the league's name, season and
+number of teams, so you know immediately if you grabbed the wrong number.
 
-**2. Whether you want the posts written for you.** Choose "paste it myself"
+**2. Where your league's folder goes.** Each league gets a folder of its own,
+outside the project folder, holding its settings, history and output. Setup
+offers `~/leagues/<your league's name>`; press Enter to take it. (Run with
+`--workspace <folder>`, or from inside a league folder, and it uses that
+folder instead without asking.)
+
+**3. What kind of league it is.** Dynasty, redraft or guillotine. Setup offers
+what Sleeper reports, but Sleeper cannot tell a guillotine league (also called
+chopped or elimination) from an ordinary one, so if yours is one, choose it
+here.
+
+**4. Whether the scoring is right.** Setup shows the scoring Sleeper reports:
+PPR, any tight end premium, the passing touchdown value and superflex. Every
+edition is written from these, so check them. If they are wrong, they need
+fixing in Sleeper.
+
+**5. What your format needs.** A dynasty league is asked how its rookie draft
+is ordered (choose from the common rules, or write your own later), whether
+later rounds are linear or snake, and optionally when the tank watch opens.
+These go in `config/rookie-draft.yml` in the league folder. A guillotine league
+gets an empty `config/guillotine.yml` to record each week's elimination in.
+
+**6. Whether you want the posts written for you.** Choose "paste it myself"
 to use Fantasy Pressbox for free. You can change this later.
 
-**3. How it should sound.** Humorous, analytical, or unhinged.
+**7. How it should sound.** Humorous, analytical, or unhinged, and your Sleeper
+post length limit (900 characters is a safe default).
 
-**4. Your Sleeper post length limit.** 900 characters is a safe default.
+Your answers are saved to a file called `.env` in the league folder. That file
+stays on your computer. Setup checks the folder loads before it finishes, so
+every command works straight away with no editing. You can re-run setup any
+time to change your answers: what you answered before is offered again, nothing
+is replaced without asking, and your previous settings are backed up first.
 
-Your answers are saved to a file called `.env` in the project folder. That
-file stays on your computer and is never committed to git. You can re-run
-`npm run setup` any time to change your answers — your previous settings are
-backed up first.
-
-When it finishes, check everything works:
+When it finishes, check everything works, from inside the league folder:
 
 ```bash
-node src/cli.mjs doctor
+cd ~/leagues/<your league's name>
+node <path to fantasy-pressbox>/src/cli.mjs doctor
 ```
 
-You should see your league name, your team count, and your league format.
+Setup prints that command with the real path filled in. You should see your
+league name, your team count, and your league format.
 
 ---
 
@@ -307,12 +332,16 @@ flowchart TB
     end
     T --> U
 ```
-Twice a week, in the project folder. Thursday you build previews and record
+Twice a week, for your league folder. Thursday you build previews and record
 the picks; Tuesday you build the recap and the rankings, and record the new
 order. The two `record` steps are what give the publication its memory — skip
 them and you lose graded predictions and movement arrows.
 
-Once a week, in the project folder:
+The commands below are written as run from the project folder. Point them at
+your league in one of three ways: add `--workspace ~/leagues/<name>` to each,
+set `PRESSBOX_WORKSPACE=~/leagues/<name>` once in your terminal, or run them
+from inside the league folder with the full path to `src/cli.mjs` (setup prints
+it for you).
 
 ### Thursday — before the games
 
@@ -382,12 +411,13 @@ node src/cli.mjs rankings --format imessage
 
 ## Commands
 
-Run them all from inside the project folder.
+Every command except `init` and `check` works on one league folder: the one you
+are in, or the one `--workspace` (or `PRESSBOX_WORKSPACE`) names.
 
 | Command | What it does |
 |---|---|
 | `npm run setup` | Interactive setup. Run this first. |
-| `node src/cli.mjs init` | The same setup, for any league folder: with `--workspace <folder>` it creates that folder and sets the league up there. See [One folder per league](#one-folder-per-league). |
+| `node src/cli.mjs init` | The same setup. With `--workspace <folder>` it creates that folder and sets the league up there; run from the project folder, it asks where the league's folder should go. See [One folder per league](#one-folder-per-league). |
 | `node src/cli.mjs migrate <folder>` | Copy this league — `.env`, league settings, `data/` and `output/` — into a new folder. Nothing is removed. |
 | `node src/cli.mjs doctor` | Checks your settings and connection. Run this when something is wrong. |
 | `node src/cli.mjs preview` | Build this week's matchup previews. |
@@ -450,8 +480,8 @@ It's a separate developer account that bills per use. See
 
 ### `.env` — your league and your keys
 
-Created by `npm run setup`. Holds your league ID, any API keys, and a few
-overrides. Never commit this file; `.gitignore` already prevents it.
+Created by `npm run setup` in your league folder. Holds your league ID, the
+league format, any API keys, and a few overrides. Never commit this file.
 
 `.env.example` documents every available setting.
 
@@ -685,19 +715,22 @@ them.
 ## Where files go
 
 ```
-fantasy-pressbox/
-├── config/          settings you edit
+fantasy-pressbox/        the project: read, never written to by a run
+├── config/          the shipped defaults and templates
 ├── prompts/         the instructions given to the AI
 ├── src/             the code
+└── docs/            how the project is designed
+
+~/leagues/my-league/     your league folder
+├── .env             your settings (never committed)
+├── config/          your league's own settings (rookie draft, guillotine, prospects)
 ├── data/            your league's saved history — stays on your computer
 │   ├── raw/           exactly what Sleeper returned
 │   ├── snapshots/     each week, analyzed and frozen
 │   ├── rankings/      every ranking you've published
 │   ├── predictions/   every pick you've made
 │   └── tank-watch/    the draft order each tank watch reported
-├── output/          the files you paste into a chat, and the finished posts
-├── docs/            how the project is designed
-└── .env             your settings (never committed)
+└── output/          the files you paste into a chat, and the finished posts
 ```
 
 `data/` is the project's memory. Deleting it loses your movement arrows and
@@ -705,9 +738,10 @@ prediction history, so leave it alone.
 
 ### One folder per league
 
-Run from the project folder, as above, the project folder is your league
-folder. Any other folder can be one too, and one copy of the project can serve
-as many leagues as you like, each in its own folder:
+Setup puts your league in a folder of its own, outside the project folder, so
+the project can be updated or reinstalled without touching your league. One
+copy of the project can serve as many leagues as you like, each in its own
+folder:
 
 ```
 ~/leagues/my-dynasty/            ~/leagues/office-guillotine/
@@ -725,8 +759,10 @@ A league folder holds that league's `.env`, its own league settings
 the shipped ones, and its `data/` and `output/`. Nothing is shared between
 leagues.
 
-- **Make one:** `node src/cli.mjs init --workspace ~/leagues/my-dynasty`
-  creates the folder and runs setup in it.
+- **Make one:** `npm run setup` asks where it should go;
+  `node src/cli.mjs init --workspace ~/leagues/my-dynasty` creates the named
+  folder and runs setup in it. Setup never writes a league into the project
+  folder.
 - **Use one:** run commands from inside it with the full path to the project,
   or from anywhere with `--workspace ~/leagues/my-dynasty`.
 - **Outside a league folder nothing runs.** A folder without a `.env` is not a
