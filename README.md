@@ -162,7 +162,7 @@ spreadsheet, not a publication.
 
 ## Requirements
 
-**One thing: Node.js, version 18 or newer.** It comes with `npm`, which is how
+**One thing: Node.js, version 22 or newer.** It comes with `npm`, which is how
 Fantasy Pressbox is installed.
 
 There are no other packages to install. No Python, no database, no account to
@@ -182,7 +182,7 @@ minutes, and you only do it once.
 flowchart TD
     S(["Start"]) --> A["1. Install Node.js<br/>nodejs.org, the LTS button"]
     A --> B["2. Open a terminal<br/>Mac: Terminal / Windows: PowerShell"]
-    B --> C{"Type node --version<br/>Is it v18 or higher?"}
+    B --> C{"Type node --version<br/>Is it v22 or higher?"}
     C -->|"No"| A2["Close the window,<br/>open a new one, try again"]
     A2 --> C
     C -->|"Yes"| D["3. npm install -g fantasy-pressbox"]
