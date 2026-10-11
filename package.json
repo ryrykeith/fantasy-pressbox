@@ -2,10 +2,28 @@
   "name": "fantasy-pressbox",
   "version": "0.1.0",
   "description": "AI-powered fantasy football league coverage from Sleeper data: power rankings, previews, recaps, awards, and trash talk.",
+  "keywords": [
+    "fantasy-football",
+    "sleeper",
+    "dynasty",
+    "guillotine",
+    "power-rankings",
+    "cli",
+    "ai"
+  ],
   "license": "MIT",
+  "author": "ryrykeith",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ryrykeith/fantasy-pressbox.git"
+  },
+  "homepage": "https://github.com/ryrykeith/fantasy-pressbox#readme",
+  "bugs": {
+    "url": "https://github.com/ryrykeith/fantasy-pressbox/issues"
+  },
   "type": "module",
   "bin": {
-    "fantasy-pressbox": "./src/cli.mjs"
+    "fantasy-pressbox": "src/cli.mjs"
   },
   "files": [
     "src/",
@@ -19,6 +37,7 @@
     "setup.mjs",
     ".env.example",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
