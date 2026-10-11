@@ -7,11 +7,11 @@ priority: "medium"
 blockedBy:
   - "44b18efd-6560-4493-bd64-2a9dc09b2cb3"
 startedAt: "2026-10-10T18:19:06.927Z"
-completedAt: "2026-10-10T19:44:41.551Z"
-endedAt: "2026-10-10T19:44:41.551Z"
+completedAt: "2026-10-11T00:03:23.396Z"
+endedAt: "2026-10-11T00:03:23.396Z"
 acceptanceCriteria: []
 description: "Everything needed to actually put this on npm."
-lastModified: "2026-10-10T19:44:41.572Z"
+lastModified: "2026-10-11T00:03:23.452Z"
 lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 ---
 
@@ -22,4 +22,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [CI workflow: test matrix and pack-contents guard](./ci-workflow-test-matrix-and-pack.md) | completed |
 | [Made-up names in shipped examples, and an installed CLI that names itself correctly](./made-up-names-in-shipped-examples-and.md) | completed |
 | [Package metadata and publishable layout](./package-metadata-and-publishable-layout.md) | completed |
+| [Raise the minimum Node version to 22](./raise-the-minimum-node-version-to-22.md) | completed |
 | [Rewrite the docs for the package workflow](./rewrite-the-docs-for-the-package.md) | completed |
