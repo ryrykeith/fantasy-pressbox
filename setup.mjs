@@ -64,7 +64,7 @@ import {
   renderRookieDraftConfig,
 } from './src/init.mjs';
 
-const MIN_NODE_MAJOR = 18;
+const MIN_NODE_MAJOR = 22;
 
 const say = (text = '') => console.log(text);
 const bold = (text) => (process.stdout.isTTY ? `\x1b[1m${text}\x1b[0m` : text);

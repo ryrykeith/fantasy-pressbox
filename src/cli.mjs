@@ -383,7 +383,7 @@ function describeLocalSettings(config) {
 async function commandDoctor(config) {
   say('Fantasy Pressbox check\n');
   const major = Number.parseInt(process.versions.node.split('.')[0], 10);
-  say(`  Node.js            ${process.versions.node} ${major >= 18 ? '✓' : '✗ needs 18 or newer'}`);
+  say(`  Node.js            ${process.versions.node} ${major >= 22 ? '✓' : '✗ needs 22 or newer'}`);
   const inLeague = isLeagueWorkspace(config.workspaceRoot);
   say(`  League ID          ${config.leagueId || `✗ not set — run ${INIT_COMMAND}`}`);
   say(`  AI provider        ${describeProvider(config.ai)}`);
