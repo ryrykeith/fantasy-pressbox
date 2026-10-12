@@ -59,6 +59,7 @@ export const TEAMS_AFTER_WEEK_4 = [
 export const LEAGUE = {
   season: '2026',
   status: 'in_season',
+  draftStatus: 'complete',
   playoffTeams: 6,
   playoffWeekStart: 15,
   lastScoredWeek: 4,
@@ -66,14 +67,21 @@ export const LEAGUE = {
   format: { type: 'dynasty', source: 'detected' },
 };
 
-/** Sleeper's traded_picks shape: only the picks that moved. */
+/** Normalized traded picks (normalizeTradedPicks in src/sleeper/normalize.mjs): only the picks that moved. */
+export const tradedPick = (season, round, originalRosterId, ownerRosterId) => ({
+  season,
+  round,
+  originalRosterId,
+  ownerRosterId,
+  previousOwnerRosterId: originalRosterId,
+});
 export const TRADED_PICKS = [
-  { season: '2027', round: 1, roster_id: TACO_TUESDAY, owner_id: REBUILD_SZN, previous_owner_id: TACO_TUESDAY },
-  { season: '2027', round: 2, roster_id: TACO_TUESDAY, owner_id: LOWERED_EXPECTATIONS, previous_owner_id: TACO_TUESDAY },
-  { season: '2027', round: 3, roster_id: LOWERED_EXPECTATIONS, owner_id: TACO_TUESDAY, previous_owner_id: LOWERED_EXPECTATIONS },
-  { season: '2027', round: 3, roster_id: REBUILD_SZN, owner_id: TACO_TUESDAY, previous_owner_id: REBUILD_SZN },
-  { season: '2028', round: 2, roster_id: REBUILD_SZN, owner_id: TACO_TUESDAY, previous_owner_id: REBUILD_SZN },
-  { season: '2028', round: 3, roster_id: TACO_TUESDAY, owner_id: REBUILD_SZN, previous_owner_id: TACO_TUESDAY },
+  tradedPick('2027', 1, TACO_TUESDAY, REBUILD_SZN),
+  tradedPick('2027', 2, TACO_TUESDAY, LOWERED_EXPECTATIONS),
+  tradedPick('2027', 3, LOWERED_EXPECTATIONS, TACO_TUESDAY),
+  tradedPick('2027', 3, REBUILD_SZN, TACO_TUESDAY),
+  tradedPick('2028', 2, REBUILD_SZN, TACO_TUESDAY),
+  tradedPick('2028', 3, TACO_TUESDAY, REBUILD_SZN),
 ];
 
 export const ROSTER_IDS = TEAMS_AFTER_WEEK_4.map((t) => t.rosterId);

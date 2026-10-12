@@ -17,11 +17,13 @@ import { join } from 'node:path';
 
 import { captureWeek, isSettledSnapshot } from '../src/pipeline.mjs';
 import { createStore } from '../src/store.mjs';
+import { normalizePlayers } from '../src/sleeper/normalize.mjs';
 
-const PLAYERS = {
+const RAW_PLAYERS = {
   qb: { full_name: 'Quinn Arms', position: 'QB', team: 'BUF', injury_status: null },
   rb: { full_name: 'Rex Carter', position: 'RB', team: 'DAL', injury_status: 'Questionable' },
 };
+const PLAYERS = normalizePlayers(RAW_PLAYERS);
 
 function matchups(points = [120, 90]) {
   return [
@@ -82,7 +84,8 @@ const capture = (store, overrides) =>
 
 test('a week captured after Sleeper scored it is settled, and capturing it again rewrites nothing', async () => {
   const store = newStore();
-  const first = await capture(store, { client: client({ transactions: [{ type: 'trade' }] }) });
+  const trade = { type: 'trade', status: 'complete', leg: 4, roster_ids: [1, 2], adds: { qb: 2, rb: 1 }, drops: { qb: 1, rb: 2 } };
+  const first = await capture(store, { client: client({ transactions: [trade] }) });
   assert.equal(first.kept, false);
   assert.equal(store.loadSnapshot('2026', 4).settled, true);
   const onDisk = readFileSync(store.snapshotPath('2026', 4), 'utf8');
@@ -94,14 +97,24 @@ test('a week captured after Sleeper scored it is settled, and capturing it again
     client: later,
     league: league(5),
     teams: teams(['Punt Intended', 'Pick Six Appeal']),
-    players: { ...PLAYERS, rb: { ...PLAYERS.rb, injury_status: 'Out' } },
+    players: normalizePlayers({ ...RAW_PLAYERS, rb: { ...RAW_PLAYERS.rb, injury_status: 'Out' } }),
   });
 
   assert.equal(readFileSync(store.snapshotPath('2026', 4), 'utf8'), onDisk, 'the snapshot is byte for byte the same');
   assert.equal(again.kept, true);
   assert.deepEqual(later.calls, { matchups: 0, transactions: 0 }, 'nothing was fetched');
   assert.deepEqual(again.analysis, store.loadSnapshot('2026', 4).analysis);
-  assert.deepEqual(again.transactions, [{ type: 'trade' }], "transactions come from the week's raw bundle");
+  // Read from the week's saved raw bundle, normalized against today's teams.
+  assert.deepEqual(
+    again.transactions.map((t) => [t.type, t.week, t.rosterIds, t.moves]),
+    [['trade', 4, [1, 2], [
+      'Pick Six Appeal gets Quinn Arms (QB, BUF)',
+      'Punt Intended gets Rex Carter (RB, DAL) [Out]',
+      'Punt Intended drops Quinn Arms (QB, BUF)',
+      'Pick Six Appeal drops Rex Carter (RB, DAL) [Out]',
+    ]]],
+    "transactions come from the week's raw bundle",
+  );
   assert.ok(store.loadTeamNameHistory('2026').some((entry) => entry.name === 'user4817'), 'the old name survives');
 });
 

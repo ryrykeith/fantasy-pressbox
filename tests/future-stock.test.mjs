@@ -28,6 +28,7 @@ import { FUTURE_STOCK_TASK, refuseFutureStock } from '../src/futureStock.mjs';
 import { buildContext, buildPrompt, TASKS } from '../src/promptContext.mjs';
 import { buildRosterWindow } from '../src/analysis/rosterWindow.mjs';
 import { readDraftOrder, readPickCapital } from '../src/pipeline.mjs';
+import { normalizePlayers } from '../src/sleeper/normalize.mjs';
 import {
   RULE,
   TEAMS_AFTER_WEEK_4,
@@ -50,16 +51,17 @@ const LINEUPS = {
 /** Points per starter per week: the old core and the young core both produce; Rebuild Szn's barely does. */
 const WEEKLY_POINTS = { [TACO_TUESDAY]: 22, [REBUILD_SZN]: 9, [WAIVER_WIRE]: 21 };
 
-const players = {};
+const rawPlayers = {};
 const rosterIds = new Map();
 for (const [rosterId, lineup] of Object.entries(LINEUPS)) {
   const ids = lineup.map(([position, age], i) => {
     const id = `p${rosterId}-${i}`;
-    players[id] = { full_name: `Player ${rosterId}-${i}`, position, team: 'FA', age };
+    rawPlayers[id] = { full_name: `Player ${rosterId}-${i}`, position, team: 'FA', age };
     return id;
   });
   rosterIds.set(Number(rosterId), ids);
 }
+const players = normalizePlayers(rawPlayers);
 
 const TEAMS = TEAMS_AFTER_WEEK_4.map((team) => {
   const ids = rosterIds.get(team.rosterId) ?? [];

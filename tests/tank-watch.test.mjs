@@ -14,7 +14,7 @@ import {
 } from '../src/tankWatch.mjs';
 import { buildContext, buildPrompt, TASKS } from '../src/promptContext.mjs';
 import { projectDraftOrder } from '../src/analysis/draftOrder.mjs';
-import { futurePickOwnership } from '../src/sleeper/normalize.mjs';
+import { futurePickOwnership } from '../src/league/draftCapital.mjs';
 import { createStore } from '../src/store.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { checkPosts } from '../src/validate.mjs';

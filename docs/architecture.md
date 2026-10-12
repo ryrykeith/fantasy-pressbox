@@ -3,10 +3,10 @@
 ## The pipeline
 
 ```
-Sleeper API
-    ↓  src/sleeper/client.mjs
+League provider (Sleeper today)   src/providers.mjs picks it from LEAGUE_PROVIDER
+    ↓  provider client, in its own directory (src/sleeper/client.mjs)
 Fetch
-    ↓  src/sleeper/normalize.mjs
+    ↓  provider normalizer (src/sleeper/normalize.mjs), through provider.mjs
 Normalize
     ↓  src/store.mjs
 Snapshot / persist
@@ -19,7 +19,7 @@ Generate
     ↓  src/validate.mjs
 Validate
     ↓
-Sleeper chat / iMessage / a file
+the league's chat / iMessage / a file
 ```
 
 `src/pipeline.mjs` is the sequence. `src/cli.mjs` is the interface. Neither
@@ -30,10 +30,10 @@ contains domain logic.
 Because the failure modes are different, and mixing them makes bugs
 undiagnosable.
 
-- Sleeper API code contains no roast-writing logic.
+- Provider code (the platform's API and its field names) contains no roast-writing logic.
 - Prompt files do not determine matchup pairings.
 - Renderers do not calculate rankings.
-- Ranking logic knows nothing about Sleeper chat formatting.
+- Ranking logic knows nothing about any platform's chat formatting.
 - Snapshots are written before any editorial generation happens.
 
 When output is wrong, this separation makes it answerable whether the data was
@@ -57,16 +57,16 @@ is taken from the workspace.
 A folder is a league workspace when it holds a `.env` (`src/workspace.mjs`).
 Every command that reads or writes a league (`requireLeague` in `cli.mjs`)
 refuses to run outside one, naming `init` as the fix — even with
-`SLEEPER_LEAGUE_ID` exported in the shell, so a league's history is never
+the provider's league ID (`SLEEPER_LEAGUE_ID` for Sleeper) exported in the shell, so a league's history is never
 started in whatever folder happens to be current. `doctor` reports the same and
-stops before contacting Sleeper; `check` needs no league.
+stops before contacting the provider; `check` needs no league.
 
 `.env` is read into the config, never into `process.env`
 (`environmentWithFile`), so loading one league leaves nothing behind for the
 next. A real environment variable still overrides the file.
 
 `init` makes the folder and runs `setup.mjs` in it. Setup asks for the league
-(confirmed against Sleeper at entry), declares the format (Sleeper's reading is
+(confirmed against the provider at entry, through `lookupLeague`), declares the format (Sleeper's reading is
 offered first, but guillotine can only be chosen), shows the scoring profile
 back, then asks what that format needs: a dynasty league's rookie draft order
 from common presets, its later-round order and tank watch start week; a
@@ -131,8 +131,13 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/init.mjs` | What init offers and writes, without the terminal: format choices, rookie draft presets, answers read by the loader's parsers, and a `rookie-draft.yml` checked back through them. `setup.mjs` asks the questions |
 | `src/format.mjs` | The league format taxonomy: valid types, declaration parsing, resolution |
 | `src/rookieDraft.mjs` | The declared rookie draft order rule (`config/rookie-draft.yml`): parsing, group sizes, plain-words description, and the refusal to project an order without one |
+| `src/providers.mjs` | The provider registry: `getProvider(name)`, `PROVIDER_NAMES`, `DEFAULT_PROVIDER` (`sleeper`). The only module outside a provider directory that imports one |
+| `src/sleeper/provider.mjs` | Sleeper behind the provider interface: its descriptor (name, `capabilities`, `playerIdSpace`) and an instance bound to a client (`openLeague`, `fetchWeek`, `currentWeek`, `lookupLeague`, `normalizeWeek`) |
 | `src/sleeper/client.mjs` | HTTP only. Retries, friendly errors, player-file cache |
-| `src/sleeper/normalize.mjs` | Sleeper shapes → league concepts |
+| `src/sleeper/normalize.mjs` | Sleeper shapes → league concepts, including a saved week as WeekData (`normalizeWeek`) |
+| `src/league/players.mjs` | The player dictionary lookup and the one-line player description every edition prints |
+| `src/league/draftCapital.mjs` | Draft capital from normalized traded picks and the league's draft status: who holds each pick, and whether it is still a future asset |
+| `src/league/pairing.mjs` | Head-to-head pairing on a WeekData roster's `pairingKey` |
 | `src/analysis/lineup.mjs` | Optimal lineup solving |
 | `src/analysis/week.mjs` | Week facts and award candidates |
 | `src/analysis/elimination.mjs` | Who is still alive in a guillotine league, and who was chopped when |
@@ -160,12 +165,49 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 
 ## Domain concepts
 
-`League`, `Team`, `Player`, `Matchup`, `Transaction`, `WeeklySnapshot`,
-`Ranking`, `Prediction`, `Award`, `Format`.
+`League`, `Team`, `Player`, `WeekData`, `DraftCapital`, `Matchup`,
+`Transaction`, `WeeklySnapshot`, `Ranking`, `Prediction`, `Award`, `Format`.
 
-Sleeper-specific fields normalize into these rather than leaking through the
+A provider's fields normalize into these rather than leaking through the
 application. `roster_id` and `fpts_decimal` are not concepts; they are one
-provider's storage details.
+provider's storage details. `tests/provider-boundary.test.mjs` enforces this
+(see "Adding another platform").
+
+The shapes a provider hands back:
+
+- **League**: the normalized league (season, format, scoring profile, draft
+  status, `lastScoredWeek`, and so on), tagged with `provider`, the name of
+  the provider it came from.
+- **Team**: a roster joined with its manager, from `normalizeTeams`.
+- **Player**: the normalized player dictionary, built once per run from the
+  provider's player file (`normalizePlayers`). Lookups and the one-line
+  description go through `src/league/players.mjs`.
+- **DraftCapital**: `{ tradedPicks }`, each pick as `{ season, round,
+  originalRosterId, ownerRosterId, previousOwnerRosterId }`.
+  `src/league/draftCapital.mjs` reads only these and the league's `season` and
+  `draftStatus` (`pre_draft`, `drafting` or `complete`).
+- **WeekData**: one week, below.
+
+A provider also declares `capabilities` (`futurePicks`, `taxi`, `guillotine`,
+`lastScoredWeek`). Callers read them, as `hasEliminations` and
+`hasFutureDraftCapital` in `src/format.mjs` and the week resolution in
+`src/pipeline.mjs` do, rather than assuming a platform. `playerIdSpace` names
+the ID space the provider's players use.
+
+A week is read as **WeekData** (`provider.normalizeWeek`; Sleeper's is in
+`src/sleeper/normalize.mjs`):
+
+- `rosters`: `{ rosterId, playerIds, starterIds, starterPoints, playerPoints,
+  points, pairingKey }` per roster. `starterIds` lines up with the league's
+  starting slots, and null is an empty slot. Two rosters sharing a
+  `pairingKey` are opponents (`src/league/pairing.mjs`).
+- `transactions`: `normalizeTransactions` output, with `moves` and `sides`.
+- `bids`: `{ playerId, rosterId, week, amount, outcome, type, transactionId }`,
+  won and lost.
+
+The raw bundles under `data/raw/` are saved as the provider returned them,
+tagged with that provider, and normalized on read, so a league folder written
+before WeekData existed needs no migration.
 
 ### Format
 
@@ -603,19 +645,17 @@ ordinary league sees. `src/analysis/faab.mjs` answers two questions:
   reconstructed by diffing today's now-empty roster against anything. What
   *does* survive is that week's own matchup entry — Sleeper scores a week
   against the roster as it stood when the week was played, before a
-  commissioner force-drops it afterward — and its raw `players` array
-  (`src/store.mjs`'s raw bundle, saved the moment the week was fetched) is the
-  full squad, bench included. A week whose raw bundle was never saved reports
+  commissioner force-drops it afterward — and its players (`src/store.mjs`'s
+  raw bundle, saved the moment the week was fetched, read back as a WeekData
+  roster) are the full squad, bench included. A week whose raw bundle was never saved reports
   the gap explicitly (`note`), rather than an empty pool that would look the
   same as "this roster released nothing".
 - **`buildFaabMarket`** combines both, and attaches any winning FAAB bid
-  already placed on a released player: `waiverBidsFor` in
-  `src/sleeper/normalize.mjs` reads the same raw transaction fields
-  `normalizeTransactions` reads (`status`, `adds`, `settings.waiver_bid`)
-  rather than a second parser, matching a bid to one specific player id
-  instead of turning it into a prose line. A released player can be claimed
-  any week from the chop onward, not only the week it happened, so every
-  later raw bundle's transactions are searched, not just the chop week's own.
+  already placed on a released player: `waiverBidsFor` matches WeekData's
+  won bids to one specific player id instead of turning them into prose
+  lines. A released player can be claimed any week from the chop onward, not
+  only the week it happened, so every later week's bids are searched, not
+  just the chop week's own.
 
 `captureWeek` computes the FAAB market from the elimination ledger it just
 built, using `store.loadRawThrough` to pick up every earlier week's raw
@@ -740,7 +780,7 @@ consumed.
 on disk and fetches nothing.
 
 - **Roster shape, as of the move.** Sleeper keeps no roster history, so the
-  roster comes from that week's matchup entry (`normalizeWeekRosters`), not
+  roster comes from that week's WeekData roster (`normalizeWeek`), not
   from today's roster, which already carries later moves. The "before" picture
   removes what the side received and restores what it gave up, so it comes out
   the same whether the entry was saved before the move cleared or after. Each
@@ -767,9 +807,10 @@ draft from this season's standings. It applies the rule declared in
 to the projected playoff field (`projectPlayoffField`). It returns numbers
 only.
 
-- **Ownership.** `futurePickOwnership` (`src/sleeper/normalize.mjs`) starts
-  every team with its own pick in every round and applies Sleeper's
-  `traded_picks` on top. `normalizeFutureDraftCapital` is built on the same
+- **Ownership.** `futurePickOwnership` (`src/league/draftCapital.mjs`) starts
+  every team with its own pick in every round and applies the normalized
+  traded picks (`openLeague`'s `draftCapital.tradedPicks`, which Sleeper's normalizer
+  builds from its `traded_picks`) on top. `normalizeFutureDraftCapital` is built on the same
   walk. Each slot carries `originalTeam` (whose finish decides the slot) and
   `owner` (who holds the pick). Anything reporting a pick names the owner.
 - **Slots.** Each slot reports its group, its max points-for, and the gap to
@@ -800,7 +841,7 @@ snapshot's `teams`.
 (through `requireDraftOrderRule`), and a week before the start week unless
 `--early` is passed. The start week is `tank_watch.start_week` in
 `config/rookie-draft.yml`, or the regular season's midpoint
-(`resolveTankWatchStartWeek`). The CLI runs the gate twice: before Sleeper is
+(`resolveTankWatchStartWeek`). The CLI runs the gate twice: before the provider is
 contacted, with the declared format, and again with the resolved format and
 week. `buildPrompt` refuses as well, as a second line of defence.
 
@@ -910,8 +951,9 @@ This is why a week's snapshot, once settled, is never rewritten.
 
 A week is captured more than once in the ordinary course of things: its own
 preview captures it before kickoff, a run during the games captures it half
-played, and only a capture after Sleeper has scored it (`last_scored_leg`, as
-`league.lastScoredWeek`) holds the final result. That capture writes
+played, and only a capture after the provider has scored it (for Sleeper,
+`last_scored_leg`, as `league.lastScoredWeek`, when the provider's
+`lastScoredWeek` capability is set) holds the final result. That capture writes
 `settled: true`, and from then on `captureWeek` reads the week back from disk
 instead of fetching it (`isSettledSnapshot` in `src/pipeline.mjs`). Earlier
 captures are `settled: false` and are replaced.
@@ -926,6 +968,17 @@ Snapshots written before the flag count as settled when they have scores for a
 week Sleeper has since scored. The rule errs toward keeping history. The one
 value still computed fresh for a settled week is a projected draft order the
 snapshot never recorded, which is what every edition did before.
+
+### Raw bundles carry their provider
+
+Each raw bundle under `data/raw/` records the provider it was saved from (a
+`provider` field, written by `src/pipeline.mjs` when it saves a fetched week).
+A bundle with no `provider` was saved before bundles were tagged, when every
+league was Sleeper, so it is read as Sleeper (`DEFAULT_PROVIDER`) and an
+existing league folder needs no migration. A bundle tagged with a different
+provider than the league's is refused, naming both and the file, because
+reading one platform's week as another's would invent a season. A league
+folder holds one league.
 
 ### Team renames
 
@@ -975,6 +1028,34 @@ further in this direction makes rankings more testable and more explainable.
 
 ## Adding another platform
 
-Write a new client and normalizer that emit the same normalized shapes.
-Nothing downstream of `src/sleeper/` should need to change. If it does, a
-Sleeper detail has leaked and belongs back in the normalizer.
+A platform is a directory next to `src/sleeper/` (ESPN's would be `src/espn/`)
+holding a client, a normalizer and a `provider.mjs`. The provider is an object
+with the shape of `sleeperProvider` in `src/sleeper/provider.mjs`:
+
+- `name`, `displayName`, `experimental`, `capabilities`, `playerIdSpace`;
+- `fromConfig(config)`, an instance for the league in the config, which refuses
+  a missing league ID by naming the fix; `forClient(client, ...)`, an instance
+  around an existing client; and `lookupLeague({ id })` for setup;
+- on an instance, `openLeague()` returning `{ league, teams, players,
+  draftCapital }`, `fetchWeek(week)` returning a raw bundle, and
+  `currentWeek()`;
+- `normalizeWeek(rawBundle, context)` returning WeekData. It is pure, so saved
+  history can be read with no client.
+
+Register it in `src/providers.mjs`; nothing else outside its directory names
+it. `LEAGUE_PROVIDER` selects it, and absent means `sleeper`.
+
+Nothing downstream of a provider directory should need to change. If it does,
+a platform detail has leaked and belongs back in the normalizer.
+
+**The guard.** `tests/provider-boundary.test.mjs` reads the source (`src/`,
+`setup.mjs` and `scripts/`) and fails, naming the file, when:
+
+1. a file outside `src/sleeper/`, `src/espn/` and `src/providers.mjs` imports
+   from a provider directory;
+2. a raw Sleeper field name (`roster_id`, `owner_id`, `matchup_id`,
+   `players_points`, `starters_points`, `fpts_decimal`, `waiver_bid`,
+   `last_scored_leg`) appears in code outside `src/sleeper/`. Comments that
+   explain Sleeper are allowed.
+
+The Sleeper data itself is described in `docs/sleeper-data.md`.

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { analyzeWeek } from '../src/analysis/week.mjs';
 import { buildContext } from '../src/promptContext.mjs';
-import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
+import { deriveScoringProfile, normalizePlayers, normalizeWeekRosters } from '../src/sleeper/normalize.mjs';
 
 /**
  * Sleeper has no guillotine support, so it reports a guillotine league as an
@@ -20,7 +20,7 @@ const STARTING_SLOTS = ['QB', 'RB', 'WR'];
 
 const TEAM_NAMES = ['Chopping Block', 'Late Bloomers', 'Faab Hoarders', 'Bye Week Blues'];
 
-const PLAYERS = {
+const PLAYERS = normalizePlayers({
   qb1: { full_name: 'Quinn Arms', position: 'QB', team: 'BUF', age: 27 },
   rb1: { full_name: 'Rex Carter', position: 'RB', team: 'DAL', age: 24 },
   wr1: { full_name: 'Wes Lane', position: 'WR', team: 'MIA', age: 26 },
@@ -28,7 +28,7 @@ const PLAYERS = {
   rb2: { full_name: 'Roy Marsh', position: 'RB', team: 'GB', age: 23 },
   wr2: { full_name: 'Wade Pike', position: 'WR', team: 'SF', age: 25 },
   bench1: { full_name: 'Bo Tanner', position: 'RB', team: 'NYJ', age: 22 },
-};
+});
 
 const GUILLOTINE_WEIGHTS = { weekly_floor: 0.6, starting_lineup: 0.4 };
 
@@ -142,7 +142,7 @@ function analyze(formatType, week = 3) {
   return analyzeWeek({
     league: testLeague(formatType),
     teams: testTeams(),
-    matchups: testMatchups(),
+    rosters: normalizeWeekRosters(testMatchups()),
     players: PLAYERS,
     week,
   });

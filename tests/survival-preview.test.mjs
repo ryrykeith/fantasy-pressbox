@@ -17,7 +17,7 @@ import {
 import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { buildDangerBoard } from '../src/analysis/danger.mjs';
 import { gradePredictions } from '../src/store.mjs';
-import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
+import { deriveScoringProfile, normalizePlayers } from '../src/sleeper/normalize.mjs';
 import { PACKAGE_ROOT } from '../src/config.mjs';
 
 /**
@@ -164,11 +164,11 @@ const BYE_EXPOSURE = [
   },
 ];
 
-const PLAYERS = {
+const PLAYERS = normalizePlayers({
   p1: { full_name: 'Quinn Arms', position: 'QB', team: 'BUF' },
   p2: { full_name: 'Rhys Back', position: 'RB', team: 'KC' },
   p3: { full_name: 'Wes Reed', position: 'WR', team: 'KC' },
-};
+});
 
 function survivalContext({
   week = 3,

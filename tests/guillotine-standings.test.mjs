@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildContext } from '../src/promptContext.mjs';
-import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
+import { deriveScoringProfile, normalizePlayers } from '../src/sleeper/normalize.mjs';
 
 /**
  * Guillotine has no head-to-head record — Sleeper's is a fiction from
@@ -230,9 +230,9 @@ test('every guillotine task keeps rosters and standings free of a win-loss recor
 
 /* --------------------------------------------------------------- FAAB market */
 
-const FAAB_PLAYERS = {
+const FAAB_PLAYERS = normalizePlayers({
   rb2: { full_name: 'Rex Carter', position: 'RB', team: 'DAL' },
-};
+});
 
 test('a guillotine context with a FAAB market carries balances and released pools, players resolved to lines', () => {
   const faabMarket = {

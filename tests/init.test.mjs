@@ -247,6 +247,8 @@ test('a dynasty league gets a folder that loads, with its declared format and dr
   const env = loadEnvFile(join(workspace, '.env'));
   assert.equal(env.SLEEPER_LEAGUE_ID, DYNASTY_ID);
   assert.equal(env.LEAGUE_FORMAT, 'dynasty');
+  assert.equal(env.POST_MAX_LENGTH, '900');
+  assert.ok(!env.SLEEPER_POST_MAX_LENGTH, 'the legacy key is left empty, not given the answer');
   assert.ok(existsSync(join(workspace, 'data')) && existsSync(join(workspace, 'output')));
 
   const config = loadConfig({ workspaceRoot: workspace });

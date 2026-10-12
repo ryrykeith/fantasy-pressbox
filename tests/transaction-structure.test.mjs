@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeTransactions, normalizeWeekRosters } from '../src/sleeper/normalize.mjs';
+import { normalizePlayers, normalizeTransactions, normalizeWeekRosters } from '../src/sleeper/normalize.mjs';
 import { buildContext, describePlayer } from '../src/promptContext.mjs';
 
 const teamsByRosterId = new Map([
@@ -10,12 +10,12 @@ const teamsByRosterId = new Map([
   [3, { rosterId: 3, name: 'Third Team' }],
 ]);
 
-const players = {
+const players = normalizePlayers({
   p_wr: { full_name: 'DJ Moore', position: 'WR', team: 'CHI', age: 29 },
   p_rb: { full_name: 'Some Back', position: 'RB', team: 'DET', age: 24 },
   p_te: { full_name: 'Waiver Tight End', position: 'TE', team: 'NYG', age: 26 },
   p_cut: { full_name: 'Cut Receiver', position: 'WR', team: 'NE', age: 31 },
-};
+});
 
 const inSeason = { season: '2026', status: 'in_season' };
 
@@ -199,8 +199,17 @@ test('a week of matchup entries becomes rosters keyed by roster id', () => {
     },
     { roster_id: 2, matchup_id: null, players: null, starters: null },
   ]);
+  // WeekData rosters: the fields this always had, plus starterPoints, points and pairingKey.
   assert.deepEqual(rosters, [
-    { rosterId: 1, playerIds: ['p_wr', 'p_cut'], starterIds: ['p_wr'], playerPoints: { p_wr: 12.4, p_cut: 3 } },
-    { rosterId: 2, playerIds: [], starterIds: [], playerPoints: {} },
+    {
+      rosterId: 1,
+      playerIds: ['p_wr', 'p_cut'],
+      starterIds: ['p_wr'],
+      starterPoints: [],
+      playerPoints: { p_wr: 12.4, p_cut: 3 },
+      points: null,
+      pairingKey: 1,
+    },
+    { rosterId: 2, playerIds: [], starterIds: [], starterPoints: [], playerPoints: {}, points: null, pairingKey: null },
   ]);
 });

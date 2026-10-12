@@ -56,6 +56,10 @@ week; those are reported as unpaired rather than dropped.
 
 Bench is `players` minus `starters`.
 
+`normalizeWeek` turns these into WeekData rosters (`docs/architecture.md`).
+The `"0"` empty-slot marker becomes null there, and in a team's `starterIds`.
+Nothing past `src/sleeper/` reads these field names.
+
 ### Roster positions
 
 `league.roster_positions` lists starting slots followed by bench slots:
@@ -108,7 +112,11 @@ season === league.season and status is
 otherwise                                   → spent
 ```
 
-`isFuturePick` implements exactly that, and it filters two places:
+The normalizer maps Sleeper's `status` to `league.draftStatus` (`pre_draft`,
+`drafting` or `complete`) and the traded picks to `{ season, round,
+originalRosterId, ownerRosterId, previousOwnerRosterId }`. `isFuturePick`
+(`src/league/draftCapital.mjs`) reads only those fields and implements exactly
+that, and it filters two places:
 `normalizeFutureDraftCapital` (which builds the per-team picture) and
 `normalizeTransactions` (so a trade of spent picks does not appear as news).
 

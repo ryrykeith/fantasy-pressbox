@@ -8,6 +8,7 @@ import { weekDanger, rollingFloor, buildDangerBoard } from '../src/analysis/dang
 import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { captureWeek, readDangerBoard } from '../src/pipeline.mjs';
 import { createStore } from '../src/store.mjs';
+import { normalizePlayers } from '../src/sleeper/normalize.mjs';
 
 /**
  * The chop-line math a guillotine week is actually about: who scored the
@@ -269,10 +270,10 @@ const MATCHUPS = [
   { roster_id: 2, matchup_id: 1, points: 90, starters: ['rb'], starters_points: [90], players: ['rb'], players_points: { rb: 90 } },
 ];
 
-const PLAYERS = {
+const PLAYERS = normalizePlayers({
   qb: { full_name: 'Quinn Arms', position: 'QB', team: 'BUF' },
   rb: { full_name: 'Rex Carter', position: 'RB', team: 'DAL' },
-};
+});
 
 function fakeClient() {
   return {

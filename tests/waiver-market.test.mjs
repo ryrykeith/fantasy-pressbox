@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { claimMarket, weekBids } from '../src/analysis/faab.mjs';
 import { enrichTransactions } from '../src/analysis/transactions.mjs';
-import { normalizeTransactions } from '../src/sleeper/normalize.mjs';
+import { normalizeBids, normalizePlayers, normalizeTransactions } from '../src/sleeper/normalize.mjs';
 import { describePlayer } from '../src/promptContext.mjs';
 
 /**
@@ -11,13 +11,13 @@ import { describePlayer } from '../src/promptContext.mjs';
  * same player, where the price ranks, and what else went for similar money.
  */
 
-const players = {
+const players = normalizePlayers({
   wrA: { full_name: 'Receiver A', position: 'WR', team: 'MIA' },
   rbB: { full_name: 'Back B', position: 'RB', team: 'DET' },
   teC: { full_name: 'Tight End C', position: 'TE', team: 'NYG' },
   qbD: { full_name: 'Quarterback D', position: 'QB', team: 'KC' },
   rbE: { full_name: 'Back E', position: 'RB', team: 'NE' },
-};
+});
 
 const teams = [
   { rosterId: 1, name: 'Alpha' },
@@ -52,7 +52,7 @@ const week3 = [
   { transaction_id: 'h', type: 'free_agent', status: 'complete', leg: 3, adds: { rbE: 1 }, settings: {} },
 ];
 
-const bids = () => weekBids({ transactions: week3, week: 3, players, teamsByRosterId });
+const bids = () => weekBids({ bids: normalizeBids(week3), week: 3, players, teamsByRosterId });
 const winner = (id) => bids().find((entry) => entry.transactionId === id);
 
 test('weekBids reads won and lost bids for that week only, dearest first', () => {

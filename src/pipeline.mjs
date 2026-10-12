@@ -5,15 +5,8 @@
  *
  * Each step is a separate module. This file is only the sequence.
  */
-import { createClient } from './sleeper/client.mjs';
-import {
-  futurePickOwnership,
-  isFuturePick,
-  normalizeLeague,
-  normalizeTeams,
-  normalizeTransactions,
-  normalizeWeekRosters,
-} from './sleeper/normalize.mjs';
+import { futurePickOwnership, isFuturePick } from './league/draftCapital.mjs';
+import { DEFAULT_PROVIDER, openProvider, providerDisplayName, providerInstance, providerOf } from './providers.mjs';
 import { projectDraftOrder, projectedDraftSeason } from './analysis/draftOrder.mjs';
 import { isProjectableDraftOrder } from './rookieDraft.mjs';
 import { analyzeWeek } from './analysis/week.mjs';
@@ -34,23 +27,24 @@ import { hasEliminations, hasFutureDraftCapital } from './format.mjs';
 import { createStore } from './store.mjs';
 import { loadByeWeekTable } from './config.mjs';
 
+/** Are teams knocked out of this league, by its format and its provider's capabilities? */
+const eliminates = (league) => hasEliminations(league.format, providerOf(league).capabilities);
+
+/** Does this league hold future draft capital, by its format and its provider's capabilities? */
+const holdsFutureDraftCapital = (league) => hasFutureDraftCapital(league.format, providerOf(league).capabilities);
+
 export async function openLeague(config, { refreshPlayers = false } = {}) {
-  const client = createClient({ leagueId: config.leagueId, dataDir: config.dataDir });
+  // The league's provider (src/providers.mjs), bound to this league. Nothing
+  // past it reads a provider's own field names.
+  const provider = openProvider(config);
   const store = createStore({ dataDir: config.dataDir });
-
-  const [rawLeague, users, rosters, tradedPicks] = await Promise.all([
-    client.league(),
-    client.users(),
-    client.rosters(),
-    client.tradedPicks(),
-  ]);
-  const players = await client.players({ refresh: refreshPlayers });
-
-  const league = normalizeLeague(rawLeague, { declaredFormatType: config.leagueFormat });
-  const teams = normalizeTeams({ rosters, users });
+  const { league, teams, players, draftCapital } = await provider.openLeague({ refreshPlayers });
 
   return {
-    client,
+    provider,
+    // The provider's client, for the callers that have not moved to the
+    // provider yet.
+    client: provider.client,
     store,
     league,
     teams,
@@ -60,38 +54,79 @@ export async function openLeague(config, { refreshPlayers = false } = {}) {
     // ledger's declared source, for one — need a setting rather than a fact
     // about the league.
     config,
-    tradedPicks: tradedPicks ?? [],
-    raw: { league: rawLeague, users, rosters },
+    draftCapital,
   };
 }
 
 /**
  * Which week are we talking about?
  *
- * Explicit flag wins, then .env, then Sleeper's own idea of the current week.
- * `offset` is how far back a command naturally looks: a recap is about the week
- * that just finished, a preview is about the one starting.
+ * Explicit flag wins, then .env, then the provider's own idea of the current
+ * week. `offset` is how far back a command naturally looks: a recap is about
+ * the week that just finished, a preview is about the one starting.
+ *
+ * `provider` is openLeague's; a caller holding only a `client` gets the
+ * league's provider wrapped around it.
  */
-export async function resolveWeek({ client, league, config, requested, offset = 0 }) {
+export async function resolveWeek({ provider = null, client = null, league, config, requested, offset = 0 }) {
   if (Number.isInteger(requested) && requested > 0) return { week: requested, source: '--week' };
   if (Number.isInteger(config.week) && config.week > 0) {
     return { week: config.week, source: 'FANTASY_WEEK in .env' };
   }
 
-  // Recaps and rankings look backwards. Sleeper tracks the last week it
-  // finished scoring, which is exactly the week they are about — and unlike
+  const source = providerInstance({ provider, client, league, config });
+
+  // Recaps and rankings look backwards. A provider that tracks the last week
+  // it finished scoring names exactly the week they are about — and unlike
   // "current week minus one" it keeps up once a week finishes.
-  if (offset < 0 && Number.isInteger(league.lastScoredWeek) && league.lastScoredWeek > 0) {
-    return { week: league.lastScoredWeek, source: 'Sleeper (last completed week)' };
+  if (
+    offset < 0 &&
+    source.capabilities.lastScoredWeek &&
+    Number.isInteger(league.lastScoredWeek) &&
+    league.lastScoredWeek > 0
+  ) {
+    return { week: league.lastScoredWeek, source: `${source.displayName} (last completed week)` };
   }
 
-  let current = league.currentWeek;
-  if (!current) {
-    const state = await client.state();
-    current = state?.week ?? null;
+  const current = await source.currentWeek({ league });
+  if (!current.week) throw new Error('Could not determine the current week. Pass --week explicitly.');
+  return { week: Math.max(1, current.week + offset), source: current.source };
+}
+
+/**
+ * A saved raw bundle as WeekData, through the league's provider.
+ *
+ * A bundle with no `provider` was saved before bundles were tagged, when
+ * every league was Sleeper, so it is read as Sleeper and an existing league
+ * folder needs no migration. A bundle tagged with another provider than the
+ * league's is refused, naming both: reading one platform's week as another's
+ * would invent a season.
+ */
+function readBundle(bundle, { store, league, teams = [], players = {}, describePlayer }) {
+  const provider = providerOf(league);
+  const tag = bundle?.provider ?? DEFAULT_PROVIDER;
+  if (tag !== provider.name) {
+    const path = store.rawPath(league.season, bundle.week);
+    throw new Error(
+      `${path} was saved from ${providerDisplayName(tag)}, but this league is on ${provider.displayName}. ` +
+        'A league folder holds one league.\n\n' +
+        `If this folder is the ${providerDisplayName(tag)} league, set LEAGUE_PROVIDER=${tag} in its .env. ` +
+        `Otherwise move ${path} out of this folder.`,
+    );
   }
-  if (!current) throw new Error('Could not determine the current week. Pass --week explicitly.');
-  return { week: Math.max(1, current + offset), source: 'Sleeper (current week)' };
+  return provider.normalizeWeek(bundle, { league, teams, players, ...(describePlayer ? { describePlayer } : {}) });
+}
+
+/**
+ * Every raw bundle on disk through `throughWeek`, oldest first, read as
+ * WeekData. The bundles stay exactly as they were saved; normalizing happens
+ * here, on read, so a league folder written before WeekData existed needs no
+ * migration.
+ */
+function savedWeeks({ store, league, teams = [], players = {}, describePlayer, throughWeek }) {
+  return store
+    .loadRawThrough(league.season, throughWeek)
+    .map((bundle) => readBundle(bundle, { store, league, teams, players, describePlayer }));
 }
 
 /** Every week already written down, reduced to the scores the ledger reads. */
@@ -115,7 +150,7 @@ function storedWeekScores(store, season, throughWeek) {
  * nobody is ever eliminated.
  */
 export function readEliminationLedger({ store, league, teams, config = null, throughWeek }) {
-  if (!hasEliminations(league.format)) return null;
+  if (!eliminates(league)) return null;
   return buildEliminationLedger({
     teams,
     startingSlots: league.startingSlots,
@@ -133,7 +168,7 @@ export function readEliminationLedger({ store, league, teams, config = null, thr
  * ever eliminated — there is no chop line to report.
  */
 export function readDangerBoard({ store, league, teams, config = null, throughWeek }) {
-  if (!hasEliminations(league.format)) return null;
+  if (!eliminates(league)) return null;
   const weeks = storedWeekScores(store, league.season, throughWeek);
   const ledger = buildEliminationLedger({
     teams,
@@ -153,7 +188,7 @@ export function readDangerBoard({ store, league, teams, config = null, throughWe
  * to report.
  */
 export function readFaabMarket({ store, league, teams, config = null, throughWeek }) {
-  if (!hasEliminations(league.format)) return null;
+  if (!eliminates(league)) return null;
   const weeks = storedWeekScores(store, league.season, throughWeek);
   const ledger = buildEliminationLedger({
     teams,
@@ -166,7 +201,7 @@ export function readFaabMarket({ store, league, teams, config = null, throughWee
     teams,
     waiverBudget: league.waiverBudget,
     ledger,
-    rawWeeks: store.loadRawThrough(league.season, throughWeek),
+    weeks: savedWeeks({ store, league, teams, throughWeek }),
     teamsByRosterId: new Map(teams.map((team) => [team.rosterId, team])),
   });
 }
@@ -183,20 +218,18 @@ export function readFaabMarket({ store, league, teams, config = null, throughWee
  * so the readable `moves` match the ones every edition already prints.
  */
 export function readTransactions({ store, league, teams, players, describePlayer, week, throughWeek = week }) {
-  const raw = store.loadRawThrough(league.season, throughWeek);
+  const weeks = savedWeeks({ store, league, teams, players, describePlayer, throughWeek });
   const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]));
-  const normalize = (transactions) =>
-    normalizeTransactions(transactions, { teamsByRosterId, players, describePlayer, league });
 
   // The FAAB a claimant had left is only known from every claim before it.
-  const seasonTransactions = raw.filter((bundle) => bundle.week <= week).flatMap((b) => normalize(b.transactions));
-  // The week's losing bids exist only in the raw entries, and a chop pool only
-  // in a format with eliminations.
-  const thisWeek = raw.find((bundle) => bundle.week === week);
+  const seasonTransactions = weeks.filter((weekData) => weekData.week <= week).flatMap((w) => w.transactions);
+  // The week's losing bids are only in its bids, and a chop pool only in a
+  // format with eliminations.
+  const thisWeek = weeks.find((weekData) => weekData.week === week);
   const faab = readFaabMarket({ store, league, teams, throughWeek: week });
   return enrichTransactions({
     market: {
-      bids: weekBids({ transactions: thisWeek?.transactions ?? [], week, players, teamsByRosterId }),
+      bids: weekBids({ bids: thisWeek?.bids ?? [], week, players, teamsByRosterId }),
       releasedPools: faab?.releasedPools ?? [],
     },
     transactions: seasonTransactions.filter((transaction) => transaction.week === week),
@@ -204,7 +237,7 @@ export function readTransactions({ store, league, teams, players, describePlayer
     league,
     teams,
     players,
-    weeks: raw.map((bundle) => ({ week: bundle.week, rosters: normalizeWeekRosters(bundle.matchups) })),
+    weeks: weeks.map((weekData) => ({ week: weekData.week, rosters: weekData.rosters })),
   });
 }
 
@@ -274,7 +307,7 @@ export function readByeExposure({
   fromWeek = throughWeek,
   weekCount,
 }) {
-  if (!hasEliminations(league.format)) return null;
+  if (!eliminates(league)) return null;
   const weeks = storedWeekScores(store, league.season, throughWeek);
   const ledger = buildEliminationLedger({
     teams,
@@ -305,7 +338,7 @@ export function readByeExposure({
  */
 export function readDraftOrder({ league, teams, config = null, tradedPicks = [] }) {
   const rule = config?.rookieDraft?.order ?? null;
-  if (!hasFutureDraftCapital(league.format)) return null;
+  if (!holdsFutureDraftCapital(league)) return null;
   if (!isProjectableDraftOrder(rule)) return null;
   if (!Number.isInteger(league.playoffTeams) || league.playoffTeams < 1) return null;
   const picks = futurePickOwnership({
@@ -330,7 +363,7 @@ export function readDraftOrder({ league, teams, config = null, tradedPicks = [] 
  * for the reason src/cli.mjs gives at normalizeFutureDraftCapital.
  */
 export function readPickCapital({ league, teams, tradedPicks = [], market = null, config = null }) {
-  if (!hasFutureDraftCapital(league.format)) return null;
+  if (!holdsFutureDraftCapital(league)) return null;
   const future = tradedPicks.filter((pick) => isFuturePick(pick, league));
   const priced = Object.values(market?.picks ?? {}).filter((pick) => isFuturePick(pick, league));
   const seasons = pickCapitalSeasons({
@@ -353,18 +386,18 @@ export function readPickCapital({ league, teams, tradedPicks = [], market = null
  * has no window to look through.
  */
 export function readRosterWindow({ store, league, teams, players, throughWeek, ageBandEdges }) {
-  if (!hasFutureDraftCapital(league.format)) return null;
+  if (!holdsFutureDraftCapital(league)) return null;
   return buildRosterWindow({
     teams,
     players,
-    weeks: store
-      .loadRawThrough(league.season, throughWeek)
-      .map((bundle) => ({ week: bundle.week, rosters: normalizeWeekRosters(bundle.matchups) })),
+    weeks: savedWeeks({ store, league, teams, players, throughWeek }).map((weekData) => ({
+      week: weekData.week,
+      rosters: weekData.rosters,
+    })),
     ageBandEdges,
   });
 }
 
-/** Fetch one week, save the raw bundle and the analyzed snapshot. */
 /**
  * Whether a stored snapshot is the settled record of its week, which nothing
  * may rewrite.
@@ -387,21 +420,24 @@ export function readRosterWindow({ store, league, teams, players, throughWeek, a
 export function isSettledSnapshot(snapshot, league) {
   if (!snapshot) return false;
   if (typeof snapshot.settled === 'boolean') return snapshot.settled;
-  if (hasEliminations(league.format) && !snapshot.elimination) return false;
+  if (eliminates(league) && !snapshot.elimination) return false;
   return Boolean(snapshot.played) && Number.isInteger(league.lastScoredWeek) && snapshot.week <= league.lastScoredWeek;
 }
 
 /**
  * A settled week, read back from disk in the shape captureWeek returns. Its
- * transactions come from the raw bundle saved beside it. The projected draft
+ * transactions come from the raw bundle saved beside it, read as WeekData. The projected draft
  * order is the one exception that may be computed now: a snapshot written
  * before the order was recorded has none, and computing it from today's
  * standings is what every edition did before this rule. Nothing is written,
  * and `kept` says so.
  */
-async function readSettledWeek({ client, store, league, teams, week, config, tradedPicks, snapshot }) {
+async function readSettledWeek({ provider, store, league, teams, players, week, config, tradedPicks, snapshot }) {
   const raw = store.loadRaw(league.season, week);
-  const transactions = raw?.transactions ?? (await client.transactions(week));
+  // A settled week whose raw bundle is gone is fetched again for its
+  // transactions; nothing is saved, so the settled record stays as it is.
+  const bundle = raw ?? { ...(await provider.fetchWeek(week)), provider: provider.name };
+  const { transactions } = readBundle(bundle, { store, league, teams, players });
   const draftOrder = snapshot.draftOrder ?? readDraftOrder({ league, teams, config, tradedPicks });
   return {
     analysis: snapshot.analysis,
@@ -418,26 +454,37 @@ async function readSettledWeek({ client, store, league, teams, week, config, tra
   };
 }
 
-export async function captureWeek({ client, store, league, teams, players, week, config = null, tradedPicks = [] }) {
+/**
+ * Fetch one week, save the raw bundle and the analyzed snapshot.
+ *
+ * `provider` is openLeague's; a caller holding only a `client` gets the
+ * league's provider wrapped around it.
+ */
+export async function captureWeek({
+  provider = null,
+  client = null,
+  store,
+  league,
+  teams,
+  players,
+  week,
+  config = null,
+  draftCapital = null,
+}) {
+  const source = providerInstance({ provider, client, league, config });
+  const tradedPicks = draftCapital?.tradedPicks ?? [];
   const stored = store.loadSnapshot(league.season, week);
   if (isSettledSnapshot(stored, league)) {
-    return readSettledWeek({ client, store, league, teams, week, config, tradedPicks, snapshot: stored });
+    return readSettledWeek({ provider: source, store, league, teams, players, week, config, tradedPicks, snapshot: stored });
   }
 
-  const [matchups, transactions] = await Promise.all([
-    client.matchups(week),
-    client.transactions(week),
-  ]);
+  // Saved exactly as fetched, tagged with the provider it came from; analysis
+  // reads it as WeekData.
+  const bundle = { provider: source.name, ...(await source.fetchWeek(week)) };
+  const rawPath = store.saveRaw(league.season, week, bundle);
+  const weekData = readBundle(bundle, { store, league, teams, players });
 
-  const rawPath = store.saveRaw(league.season, week, {
-    fetchedAt: new Date().toISOString(),
-    leagueId: league.id,
-    week,
-    matchups,
-    transactions,
-  });
-
-  const analysis = analyzeWeek({ league, teams, matchups, players, week });
+  const analysis = analyzeWeek({ league, teams, rosters: weekData.rosters, players, week });
   const played = analysis.teamWeeks.some((entry) => entry.points > 0);
 
   // Who is still in the league, and how close each survivor is to joining
@@ -447,7 +494,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
   // into the snapshot beside them: the field a week was judged against is as
   // much a part of that week's record as the scores are, and history is not
   // rewritten here.
-  const weeksThroughNow = hasEliminations(league.format)
+  const weeksThroughNow = eliminates(league)
     ? [
         ...storedWeekScores(store, league.season, week - 1),
         {
@@ -479,7 +526,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
 
   // The waiver market (src/analysis/faab.mjs): what every survivor has left
   // to spend, and what each chop in the ledger just built above released.
-  // The raw bundle for this week was already saved above, so loadRawThrough
+  // The raw bundle for this week was already saved above, so savedWeeks
   // picks it straight back up alongside every earlier week already on disk —
   // no second fetch, no separate "this week" case to special-case in.
   const faab = elimination
@@ -487,7 +534,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
         teams,
         waiverBudget: league.waiverBudget,
         ledger: elimination,
-        rawWeeks: store.loadRawThrough(league.season, week),
+        weeks: savedWeeks({ store, league, teams, throughWeek: week }),
         teamsByRosterId: new Map(teams.map((team) => [team.rosterId, team])),
       })
     : null;
@@ -541,7 +588,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
 
   return {
     analysis,
-    transactions,
+    transactions: weekData.transactions,
     played,
     ...(elimination ? { elimination } : {}),
     ...(danger ? { danger } : {}),

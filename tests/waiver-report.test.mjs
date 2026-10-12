@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 
 import { weekBids } from '../src/analysis/faab.mjs';
 import { enrichTransactions } from '../src/analysis/transactions.mjs';
-import { deriveScoringProfile, normalizeTransactions, normalizeWeekRosters } from '../src/sleeper/normalize.mjs';
+import {
+  deriveScoringProfile,
+  normalizeBids,
+  normalizePlayers,
+  normalizeTransactions,
+  normalizeWeekRosters,
+} from '../src/sleeper/normalize.mjs';
 import { TASKS, TRANSACTION_TASKS, buildContext, buildPrompt, describePlayer, taskPromptOnly } from '../src/promptContext.mjs';
 
 /**
@@ -15,7 +21,7 @@ import { TASKS, TRANSACTION_TASKS, buildContext, buildPrompt, describePlayer, ta
 
 const STARTING_SLOTS = ['QB', 'WR', 'WR', 'TE', 'FLEX'];
 
-const players = {
+const players = normalizePlayers({
   qbA: { full_name: 'Quarterback A', position: 'QB', team: 'BUF' },
   wrA1: { full_name: 'Receiver A1', position: 'WR', team: 'MIA' },
   wrA2: { full_name: 'Receiver A2', position: 'WR', team: 'CIN' },
@@ -33,7 +39,7 @@ const players = {
   teB: { full_name: 'Tight End B', position: 'TE', team: 'DEN' },
   rbB: { full_name: 'Back B', position: 'RB', team: 'HOU' },
   wrB3: { full_name: 'Receiver B3', position: 'WR', team: 'PHI' },
-};
+});
 
 const team = (rosterId, name, wins, losses, pointsFor, potential) => ({
   rosterId,
@@ -185,7 +191,7 @@ function enriched(l, rawEntries = raw) {
     teams,
     players,
     weeks,
-    market: { bids: weekBids({ transactions: rawEntries, week: 3, players, teamsByRosterId }), releasedPools: [] },
+    market: { bids: weekBids({ bids: normalizeBids(rawEntries), week: 3, players, teamsByRosterId }), releasedPools: [] },
   });
 }
 

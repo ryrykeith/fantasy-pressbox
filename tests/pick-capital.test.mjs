@@ -21,6 +21,7 @@ import {
   RULE,
   TEAMS_AFTER_WEEK_4,
   TRADED_PICKS,
+  tradedPick,
 } from './fixtures/mock-dynasty-league.mjs';
 
 const CONFIG = { rookieDraft: { order: RULE, rounds: null } };
@@ -86,14 +87,14 @@ test('the horizon is the seasons with tradeable or priced picks, never a fixed t
   // A 2029 pick listed nowhere is not a column; a 2029 trade would make it one.
   assert.ok(!result.seasons.includes('2029'));
   const with2029 = capital({
-    tradedPicks: [...TRADED_PICKS, { season: '2029', round: 1, roster_id: REBUILD_SZN, owner_id: LOWERED_EXPECTATIONS }],
+    tradedPicks: [...TRADED_PICKS, tradedPick('2029', 1, REBUILD_SZN, LOWERED_EXPECTATIONS)],
   });
   assert.deepEqual(with2029.seasons, ['2027', '2028', '2029']);
 });
 
 test('a spent draft is outside the horizon even when Sleeper still lists its moves', () => {
   const result = capital({
-    tradedPicks: [...TRADED_PICKS, { season: '2026', round: 1, roster_id: REBUILD_SZN, owner_id: LOWERED_EXPECTATIONS }],
+    tradedPicks: [...TRADED_PICKS, tradedPick('2026', 1, REBUILD_SZN, LOWERED_EXPECTATIONS)],
   });
   assert.deepEqual(result.seasons, ['2027', '2028']);
 });

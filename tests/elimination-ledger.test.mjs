@@ -18,6 +18,7 @@ import { describeEliminationLedger } from '../src/eliminationReport.mjs';
 import { hasEliminations } from '../src/format.mjs';
 import { createStore } from '../src/store.mjs';
 import { captureWeek } from '../src/pipeline.mjs';
+import { normalizePlayers } from '../src/sleeper/normalize.mjs';
 
 /**
  * Sleeper reports a guillotine league as an ordinary head-to-head one and has
@@ -358,10 +359,10 @@ const MATCHUPS = [
   { roster_id: 2, matchup_id: 1, points: 90, starters: ['rb'], starters_points: [90], players: ['rb'], players_points: { rb: 90 } },
 ];
 
-const PLAYERS = {
+const PLAYERS = normalizePlayers({
   qb: { full_name: 'Quinn Arms', position: 'QB', team: 'BUF' },
   rb: { full_name: 'Rex Carter', position: 'RB', team: 'DAL' },
-};
+});
 
 function fakeClient() {
   return {

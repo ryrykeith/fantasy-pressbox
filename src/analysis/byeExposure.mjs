@@ -121,9 +121,9 @@ export function byeWeekFor(byeWeeks, nflTeam, { source = 'the bye-week table' } 
   return byeWeeks.get(nflTeam);
 }
 
-/** A roster's real starters — Sleeper pads an incomplete lineup with "0" placeholders for an empty slot. */
+/** A roster's real starters — an empty slot in an incomplete lineup is a null starter id. */
 function starterIdsFor(team) {
-  return (team.starterIds ?? []).filter((id) => id && id !== '0');
+  return (team.starterIds ?? []).filter(Boolean);
 }
 
 /**
@@ -142,7 +142,7 @@ function starterIdsFor(team) {
  * left to be exposed in. Omit the ledger to treat every team as alive.
  *
  * @param teams      normalized teams (src/sleeper/normalize.mjs#normalizeTeams)
- * @param players    the raw Sleeper player dictionary, keyed by player id
+ * @param players    the player dictionary (src/league/players.mjs), keyed by player id
  * @param byeWeeks   a resolved table from parseByeWeekTable
  * @param fromWeek   the first week to report exposure for
  * @param weekCount  how many weeks ahead to report; defaults to DEFAULT_WEEK_COUNT

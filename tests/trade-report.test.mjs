@@ -7,7 +7,12 @@ import { join } from 'node:path';
 import { marketValueQuery, normalizeMarketValues } from '../src/fantasycalc/client.mjs';
 import { currentSeeds } from '../src/analysis/standings.mjs';
 import { enrichTransactions } from '../src/analysis/transactions.mjs';
-import { deriveScoringProfile, normalizeTransactions, normalizeWeekRosters } from '../src/sleeper/normalize.mjs';
+import {
+  deriveScoringProfile,
+  normalizePlayers,
+  normalizeTransactions,
+  normalizeWeekRosters,
+} from '../src/sleeper/normalize.mjs';
 import { TASKS, buildContext, buildPrompt, describePlayer } from '../src/promptContext.mjs';
 import { readMarketValues } from '../src/pipeline.mjs';
 import { createStore } from '../src/store.mjs';
@@ -20,7 +25,7 @@ import { checkPosts } from '../src/validate.mjs';
 
 const STARTING_SLOTS = ['QB', 'WR', 'WR', 'TE', 'SUPER_FLEX'];
 
-const players = {
+const players = normalizePlayers({
   qbA: { full_name: 'Quarterback A', position: 'QB', team: 'BUF' },
   qbB: { full_name: 'Quarterback B', position: 'QB', team: 'KC' },
   wrDJ: { full_name: 'DJ Moore', position: 'WR', team: 'BUF', age: 29, injury_status: 'Questionable' },
@@ -28,7 +33,7 @@ const players = {
   teA: { full_name: 'Tight End A', position: 'TE', team: 'LV' },
   wrB1: { full_name: 'Receiver B1', position: 'WR', team: 'CIN' },
   teB: { full_name: 'Tight End B', position: 'TE', team: 'DET' },
-};
+});
 
 const team = (rosterId, name, wins, losses, pointsFor, potential) => ({
   rosterId,

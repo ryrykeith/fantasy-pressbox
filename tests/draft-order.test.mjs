@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { draftOrderMovement, projectDraftOrder } from '../src/analysis/draftOrder.mjs';
-import { futurePickOwnership, normalizeFutureDraftCapital } from '../src/sleeper/normalize.mjs';
+import { futurePickOwnership, normalizeFutureDraftCapital } from '../src/league/draftCapital.mjs';
 import { captureWeek } from '../src/pipeline.mjs';
 import { createStore } from '../src/store.mjs';
 
@@ -280,7 +280,7 @@ test('captureWeek records the projected draft order in the snapshot', async () =
     players: {},
     week: 4,
     config: { rookieDraft: { order: RULE } },
-    tradedPicks: TRADED_PICKS,
+    draftCapital: { tradedPicks: TRADED_PICKS },
   });
   assert.equal(result.draftOrder.slots[6].owner, 'Rebuild Szn');
   const saved = store.loadSnapshot('2026', 4);
@@ -299,7 +299,7 @@ test('captureWeek leaves the draft order out when no rule is declared, or the fo
       players: {},
       week: 4,
       config,
-      tradedPicks: TRADED_PICKS,
+      draftCapital: { tradedPicks: TRADED_PICKS },
     });
   const undeclared = await run(LEAGUE, { rookieDraft: { order: null } });
   assert.equal('draftOrder' in undeclared, false);

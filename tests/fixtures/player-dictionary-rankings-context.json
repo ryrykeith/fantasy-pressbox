@@ -1,0 +1,268 @@
+{
+  "teams": [
+    {
+      "team": "Bye Week Blues",
+      "manager": "manager1",
+      "record": "3-0",
+      "pointsAgainst": 290,
+      "pointsFor": 300,
+      "potentialPoints": 350,
+      "roster": [
+        "Quinn Arms (QB, BUF, age 27)",
+        "Rex Carter (RB, DAL, age 24) [Questionable]",
+        "Wes Lane (WR, FA, age 26)",
+        "Tad Bloom (TE, MIA)",
+        "Wire Pickup (WR, NYG, age 22)"
+      ],
+      "injuredReserve": []
+    },
+    {
+      "team": "Punt Intended",
+      "manager": "manager2",
+      "record": "2-1",
+      "pointsAgainst": 289,
+      "pointsFor": 307,
+      "potentialPoints": 351,
+      "roster": [
+        "Case Holt (QB, KC, age 29) [Out]",
+        "rb2 (RB, GB, age 23)",
+        "Wade Pike (WR, FA, age 25)",
+        "Bo Tanner (TE, SF) [Doubtful]"
+      ],
+      "injuredReserve": []
+    },
+    {
+      "team": "Lowered Expectations",
+      "manager": "manager3",
+      "record": "1-2",
+      "pointsAgainst": 288,
+      "pointsFor": 314,
+      "potentialPoints": 352,
+      "roster": [
+        "Quinn Arms (QB, BUF, age 27)",
+        "rb2 (RB, GB, age 23)",
+        "Wes Lane (WR, FA, age 26)",
+        "Unknown player 9999"
+      ],
+      "injuredReserve": []
+    },
+    {
+      "team": "Sunday Scaries",
+      "manager": "manager4",
+      "record": "0-3",
+      "pointsAgainst": 287,
+      "pointsFor": 321,
+      "potentialPoints": 353,
+      "roster": [
+        "Case Holt (QB, KC, age 29) [Out]",
+        "Rex Carter (RB, DAL, age 24) [Questionable]",
+        "Wade Pike (WR, FA, age 25)",
+        "Bo Tanner (TE, SF) [Doubtful]"
+      ],
+      "injuredReserve": []
+    }
+  ],
+  "thisWeek": {
+    "week": 3,
+    "games": [
+      {
+        "winner": "Punt Intended",
+        "loser": "Bye Week Blues",
+        "margin": 12.4,
+        "teams": [
+          {
+            "team": "Bye Week Blues",
+            "manager": "manager1",
+            "points": 75.5,
+            "record": "3-0",
+            "potentialPoints": 84,
+            "lineupEfficiency": 89.9,
+            "starters": [
+              "QB Quinn Arms (BUF) 12.5",
+              "RB Rex Carter (DAL) [Questionable] 16.75",
+              "WR Wes Lane 21",
+              "FLEX Tad Bloom (MIA) 25.25"
+            ],
+            "bestBenchPerformances": [
+              "WR Wire Pickup (NYG) 29.5"
+            ],
+            "bestPossibleLineup": [
+              "QB Quinn Arms 12.5",
+              "RB Rex Carter 16.75",
+              "WR Wire Pickup 29.5",
+              "FLEX Tad Bloom 25.25"
+            ]
+          },
+          {
+            "team": "Punt Intended",
+            "manager": "manager2",
+            "points": 87.9,
+            "record": "2-1",
+            "potentialPoints": 87.9,
+            "lineupEfficiency": 100,
+            "starters": [
+              "QB Case Holt (KC) [Out] 15.6",
+              "RB rb2 (GB) 19.85",
+              "WR Wade Pike 24.1",
+              "FLEX Bo Tanner (SF) [Doubtful] 28.35"
+            ],
+            "bestBenchPerformances": [],
+            "bestPossibleLineup": [
+              "QB Case Holt 15.6",
+              "RB rb2 19.85",
+              "WR Wade Pike 24.1",
+              "FLEX Bo Tanner 28.35"
+            ]
+          }
+        ]
+      },
+      {
+        "winner": "Sunday Scaries",
+        "loser": "Lowered Expectations",
+        "margin": 12.4,
+        "teams": [
+          {
+            "team": "Lowered Expectations",
+            "manager": "manager3",
+            "points": 100.3,
+            "record": "1-2",
+            "potentialPoints": 68.85,
+            "lineupEfficiency": 145.7,
+            "starters": [
+              "QB Quinn Arms (BUF) 18.7",
+              "RB rb2 (GB) 22.95",
+              "WR Wes Lane 27.2",
+              "FLEX Unknown player 9999 31.45"
+            ],
+            "bestBenchPerformances": [],
+            "bestPossibleLineup": [
+              "QB Quinn Arms 18.7",
+              "RB rb2 22.95",
+              "WR Wes Lane 27.2"
+            ]
+          },
+          {
+            "team": "Sunday Scaries",
+            "manager": "manager4",
+            "points": 112.7,
+            "record": "0-3",
+            "potentialPoints": 112.7,
+            "lineupEfficiency": 100,
+            "starters": [
+              "QB Case Holt (KC) [Out] 21.8",
+              "RB Rex Carter (DAL) [Questionable] 26.05",
+              "WR Wade Pike 30.3",
+              "FLEX Bo Tanner (SF) [Doubtful] 34.55"
+            ],
+            "bestBenchPerformances": [],
+            "bestPossibleLineup": [
+              "QB Case Holt 21.8",
+              "RB Rex Carter 26.05",
+              "WR Wade Pike 30.3",
+              "FLEX Bo Tanner 34.55"
+            ]
+          }
+        ]
+      }
+    ],
+    "scoringOrder": [
+      {
+        "rank": 1,
+        "team": "Sunday Scaries",
+        "points": 112.7
+      },
+      {
+        "rank": 2,
+        "team": "Lowered Expectations",
+        "points": 100.3
+      },
+      {
+        "rank": 3,
+        "team": "Punt Intended",
+        "points": 87.9
+      },
+      {
+        "rank": 4,
+        "team": "Bye Week Blues",
+        "points": 75.5
+      }
+    ],
+    "awardFacts": {
+      "teamOfTheWeek": {
+        "team": "Sunday Scaries",
+        "points": 112.7
+      },
+      "lowestScore": {
+        "team": "Bye Week Blues",
+        "points": 75.5
+      },
+      "playerOfTheWeek": {
+        "name": "Bo Tanner",
+        "position": "TE",
+        "points": 34.55,
+        "team": "Sunday Scaries"
+      },
+      "benchPain": {
+        "team": "Bye Week Blues",
+        "name": "Wire Pickup",
+        "position": "WR",
+        "nflTeam": "NYG",
+        "points": 29.5,
+        "replacedStarter": "Quinn Arms",
+        "replacedPoints": 12.5
+      },
+      "biggestBlowout": {
+        "winner": "Punt Intended",
+        "loser": "Bye Week Blues",
+        "margin": 12.4
+      },
+      "closestGame": {
+        "winner": "Sunday Scaries",
+        "loser": "Lowered Expectations",
+        "margin": 12.4
+      },
+      "managerOfTheWeek": {
+        "team": "Lowered Expectations",
+        "lineupEfficiency": 145.7
+      },
+      "lineupMalpractice": {
+        "team": "Bye Week Blues",
+        "lineupEfficiency": 89.9,
+        "pointsLeftOnBench": 8.5
+      },
+      "highestLosingScore": {
+        "team": "Lowered Expectations",
+        "points": 100.3
+      }
+    }
+  },
+  "transactions": [
+    {
+      "type": "trade",
+      "week": 3,
+      "teams": [
+        "Bye Week Blues",
+        "Punt Intended"
+      ],
+      "bid": null,
+      "moves": [
+        "Punt Intended gets Wes Lane (WR, FA, age 26)",
+        "Bye Week Blues gets Bo Tanner (TE, SF) [Doubtful]",
+        "Bye Week Blues drops Wes Lane (WR, FA, age 26)",
+        "Punt Intended drops Bo Tanner (TE, SF) [Doubtful]"
+      ]
+    },
+    {
+      "type": "free_agent",
+      "week": 3,
+      "teams": [
+        "Lowered Expectations"
+      ],
+      "bid": null,
+      "moves": [
+        "Lowered Expectations gets Wire Pickup (WR, NYG, age 22)",
+        "Lowered Expectations drops Unknown player 9999"
+      ]
+    }
+  ]
+}

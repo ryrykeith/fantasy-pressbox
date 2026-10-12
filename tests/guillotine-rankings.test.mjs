@@ -17,7 +17,7 @@ import {
 } from '../src/promptContext.mjs';
 import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { buildDangerBoard } from '../src/analysis/danger.mjs';
-import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
+import { deriveScoringProfile, normalizePlayers } from '../src/sleeper/normalize.mjs';
 import { loadConfig, rankEmoji, resolveRankingWeights, PACKAGE_ROOT } from '../src/config.mjs';
 
 /**
@@ -144,11 +144,11 @@ function dangerThrough(throughWeek) {
   return buildDangerBoard({ teams: TEAMS, weeks: WEEKS, ledger: ledgerThrough(throughWeek) });
 }
 
-const PLAYERS = {
+const PLAYERS = normalizePlayers({
   p1: { full_name: 'Quinn Arms', position: 'QB', team: 'BUF' },
   p2: { full_name: 'Rhys Back', position: 'RB', team: 'KC' },
   p3: { full_name: 'Wes Reed', position: 'WR', team: 'KC' },
-};
+});
 
 const BYE_EXPOSURE = [
   {

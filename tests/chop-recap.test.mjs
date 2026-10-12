@@ -10,7 +10,7 @@ import {
 import { TASKS, ELIMINATION_ONLY_TASKS, buildContext, buildPrompt } from '../src/promptContext.mjs';
 import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { buildDangerBoard } from '../src/analysis/danger.mjs';
-import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
+import { deriveScoringProfile, normalizePlayers } from '../src/sleeper/normalize.mjs';
 import { PACKAGE_ROOT } from '../src/config.mjs';
 
 /**
@@ -186,7 +186,7 @@ function weekAnalysisFixture() {
   };
 }
 
-const PLAYERS = { p1: { full_name: 'Quinn Arms', position: 'QB', team: 'BUF' } };
+const PLAYERS = normalizePlayers({ p1: { full_name: 'Quinn Arms', position: 'QB', team: 'BUF' } });
 
 function chopRecapContext({
   week = 3,

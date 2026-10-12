@@ -15,7 +15,7 @@ import { parseDeclaredRoundOrder } from '../src/rookieDraft.mjs';
 import { pickNumber, positionInRound, projectDraftOrder } from '../src/analysis/draftOrder.mjs';
 import { pickProjection, draftProjectionView, tradePicksUnavailable } from '../src/tradePicks.mjs';
 import { tankWatchView, tankWatchUnavailable } from '../src/tankWatch.mjs';
-import { futurePickOwnership } from '../src/sleeper/normalize.mjs';
+import { futurePickOwnership } from '../src/league/draftCapital.mjs';
 import {
   RULE,
   TEAMS_AFTER_WEEK_4,
