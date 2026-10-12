@@ -123,11 +123,16 @@ function readPrompt(file, formatType, promptsDir = null) {
 // transaction lines every edition prints.
 export { describePlayer };
 
-/** e.g. "QB Josh Allen (BUF) 35.66" */
+/**
+ * e.g. "QB Josh Allen (BUF) 35.66". A starter the provider reported no points
+ * for (null) is never printed as a number: he was on his bye, or his points
+ * are not known.
+ */
 function describeStarter(entry) {
   const where = entry.nflTeam ? ` (${entry.nflTeam})` : '';
   const injury = entry.injuryStatus ? ` [${entry.injuryStatus}]` : '';
-  return `${entry.slot} ${entry.name}${where}${injury} ${entry.points}`;
+  const points = entry.points === null ? (entry.onBye ? 'on bye, no points' : 'no points reported') : entry.points;
+  return `${entry.slot} ${entry.name}${where}${injury} ${points}`;
 }
 
 function describeBench(entry) {
@@ -187,9 +192,14 @@ function teamWeekView(side, { includeRecord = true } = {}) {
     lineupEfficiency: side.lineupEfficiency,
     starters: side.starters.map(describeStarter),
     bestBenchPerformances: side.benchHighlights.map(describeBench),
-    bestPossibleLineup: side.optimalLineup
-      .filter((slot) => slot.name)
-      .map((slot) => `${slot.slot} ${slot.name} ${slot.points}`),
+    // Absent when a player's points are unknown (src/analysis/week.mjs): never built around the gap.
+    ...(side.optimalLineup
+      ? {
+          bestPossibleLineup: side.optimalLineup
+            .filter((slot) => slot.name)
+            .map((slot) => `${slot.slot} ${slot.name} ${slot.points}`),
+        }
+      : {}),
   };
 }
 

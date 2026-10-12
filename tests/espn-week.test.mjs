@@ -16,6 +16,7 @@ import {
 } from '../src/espn/normalize.mjs';
 import { EspnShapeError } from '../src/espn/shape.mjs';
 import { captureWeek } from '../src/pipeline.mjs';
+import { buildContext } from '../src/promptContext.mjs';
 import { getProvider } from '../src/providers.mjs';
 import { normalizeBids as sleeperBids, normalizeTransactions as sleeperTransactions } from '../src/sleeper/normalize.mjs';
 import { createStore } from '../src/store.mjs';
@@ -222,6 +223,35 @@ test('a starter with no points who was not on a bye leaves his team\'s lineup ef
   assert.notEqual(analysis.awards.managerOfTheWeek.team, blues.team);
   assert.notEqual(analysis.awards.lineupMalpractice.team, blues.team);
   assert.notEqual(analysis.awards.playerOfTheWeek.points, null);
+});
+
+test('a recap context builds when a team\'s lineup efficiency is unavailable, and never prints a null score', () => {
+  const raw = bundle();
+  const rb1Team = withoutPoints(raw, 1); // RB1: no points, not on a bye
+  const qbTeam = withoutPoints(raw, 0); // QB: no points, on his bye
+  const week = weekOf(PUBLIC_LEAGUE_ID, raw, { byeWeeks: new Map([[rb1Team, 9], [qbTeam, SCORED_WEEK]]) });
+  const { league, teams, players } = opened();
+  const config = {
+    leagueDisplayName: null,
+    editorial: {
+      tone: 'dry',
+      roast_intensity: 1,
+      ranking_emoji: '',
+      output: { sleeper_max_chars: 500, include_emoji: false },
+      banned_phrases: [],
+      awards: {},
+    },
+    rankings: { weights: { redraft: { starting_lineup: 1 } }, weekly: {} },
+  };
+  const context = buildContext({ task: 'recap', config, league, teams, players, week: SCORED_WEEK, weekAnalysis: analyze(week) });
+  const blues = context.thisWeek.games.flatMap((g) => g.teams).find((t) => t.team === teams[0].name);
+  assert.ok(!('bestPossibleLineup' in blues));
+  // Undefined, so the prompt's JSON carries no such field.
+  assert.equal(blues.lineupEfficiency, undefined);
+  assert.ok(!('lineupEfficiency' in JSON.parse(JSON.stringify(blues))));
+  assert.ok(blues.starters[0].endsWith('on bye, no points'), blues.starters[0]);
+  assert.ok(blues.starters[1].endsWith('no points reported'), blues.starters[1]);
+  assert.ok(!JSON.stringify(blues).includes('null'));
 });
 
 test('a player with no points is never given 0 by default, even with no bye table', () => {
