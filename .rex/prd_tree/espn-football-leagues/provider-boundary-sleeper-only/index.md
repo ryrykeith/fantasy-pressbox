@@ -19,7 +19,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 |-------|--------|
 | [Normalized draft capital and draft status](./normalized-draft-capital-and-draft.md) | completed |
 | [Normalized player dictionary](./normalized-player-dictionary.md) | completed |
-| [Normalized week data and the readers of saved weeks](./normalized-week-data-and-the-readers.md) | pending |
+| [Normalized week data and the readers of saved weeks](./normalized-week-data-and-the-readers.md) | completed |
 | [Provider boundary guard test and architecture docs](./provider-boundary-guard-test-and.md) | pending |
 | [Provider interface, registry and LEAGUE_PROVIDER](./provider-interface-registry-and-league.md) | pending |
 | [Setup, doctor and the CLI through the provider](./setup-doctor-and-the-cli-through-the.md) | pending |
