@@ -399,35 +399,34 @@ export function scoringStat(id) {
 }
 
 /**
- * A player's position, from eligibleSlots, by espn-api's rule
- * (football/player.py:30-34, via docs/espn-data.md "Positions"): the first
- * eligible slot that is neither a combined slot (its espn-api name contains
- * '/') nor slot 25 (Rookie). Returns that slot's shared name, so an unmapped
- * slot (a DT, say) throws. An unknown slot ID throws; so does a list with no
- * such slot, rather than guessing a position. Reaching the bench or IR slot
- * (20, 21) first also counts as none: it is not a position.
+ * A player's position, from eligibleSlots and the player's full name, by
+ * espn-api's rule (football/player.py:30-34, docs/espn-data.md "Positions"):
+ * the first eligible slot for which either the slot is not 25 (Rookie) and its
+ * name has no '/', or the player's own name has a '/'. The second clause gives
+ * a team defense ("... D/ST", eligibleSlots like [16, 20, 21]) its position:
+ * it takes the first slot whatever it is.
  *
- * KNOWN GAP, followed literally from the doc: the D/ST slot's name ("D/ST")
- * contains '/', so a defense whose eligibleSlots are only [16, 20, 21] has no
- * position under this rule and is refused. The doc does not say how espn-api
- * gets a position for a defense; resolve that before the normalizer reads one.
+ * Returns the espn-api slot NAME, never the shared slot. A position is not a
+ * starting slot, so DT, DE, CB, S, P and HC are positions, not refusals. 'D/ST'
+ * is rewritten to 'DEF'; no other name is rewritten. An unknown slot ID throws.
+ * A chosen slot of BE (20), IR (21) or 22 means no position was found, and
+ * throws, naming the player.
  */
-export function positionFromEligibleSlots(eligibleSlots) {
+export function positionFromEligibleSlots(eligibleSlots, fullName) {
   if (!Array.isArray(eligibleSlots)) {
     throw new EspnCodeError(
       `ESPN eligibleSlots must be an array of slot IDs, got ${JSON.stringify(eligibleSlots)}.`,
     );
   }
+  const slashInName = typeof fullName === 'string' && fullName.includes('/');
   for (const id of eligibleSlots) {
     const entry = lineupSlotEntry(id);
-    if (entry.name.includes('/') || id === 25) continue;
-    const slot = lineupSlot(id);
-    // Bench and IR hold any player; reaching one means no position slot came
-    // first, and "BN" is not a position. Refuse rather than return it.
-    if (slot === 'BN' || slot === 'IR') break;
-    return slot;
+    if (!slashInName && (id === 25 || entry.name.includes('/'))) continue;
+    if (id === 20 || id === 21 || id === 22) break;
+    return entry.name === 'D/ST' ? 'DEF' : entry.name;
   }
   throw new EspnCodeError(
-    `ESPN eligibleSlots ${JSON.stringify(eligibleSlots)} has no slot that is neither combined nor Rookie, so no position can be read.`,
+    `ESPN player ${JSON.stringify(fullName)} has no position: eligibleSlots ${JSON.stringify(eligibleSlots)} ` +
+      'reach no slot that is a position (a bench, IR or empty slot came first, or none qualified).',
   );
 }

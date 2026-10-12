@@ -124,22 +124,31 @@ test('position comes from eligibleSlots: first slot that is not combined and not
   assert.equal(positionFromEligibleSlots([10, 20, 21]), 'LB');
 });
 
-test('position: refusals', () => {
-  // Unknown slot ID.
-  assert.throws(() => positionFromEligibleSlots([3, 99]), /lineup slot ID 99/);
-  // A refused slot as the position (a DT) is refused, naming the slot.
-  assert.throws(() => positionFromEligibleSlots([8, 20]), /lineup slot 8 \("DT"\)/);
-  // Nothing usable.
-  assert.throws(() => positionFromEligibleSlots([]), /no slot that is neither combined nor Rookie/);
-  assert.throws(() => positionFromEligibleSlots([3, 25]), /no slot that is neither combined nor Rookie/);
-  assert.throws(() => positionFromEligibleSlots(undefined), EspnCodeError);
-  assert.throws(() => positionFromEligibleSlots('2'), EspnCodeError);
+test('a team defense (a "/" in the name) takes its first slot: D/ST becomes DEF', () => {
+  assert.equal(positionFromEligibleSlots([16, 20, 21], 'Taco Tuesday D/ST'), 'DEF');
 });
 
-test('known gap, pinned: a defense (D/ST contains "/") has no position under espn-api\'s rule', () => {
-  assert.throws(() => positionFromEligibleSlots([16, 20, 21]), /no slot that is neither combined nor Rookie/);
-  // The bench is never returned as a position.
-  assert.throws(() => positionFromEligibleSlots([20, 21]), /no slot that is neither combined nor Rookie/);
+test('a position is a slot name, not a starting slot: DT, DE, CB, S, P, HC do not throw', () => {
+  const cases = [[8, 'DT'], [9, 'DE'], [12, 'CB'], [13, 'S'], [18, 'P'], [19, 'HC']];
+  for (const [id, name] of cases) {
+    assert.equal(positionFromEligibleSlots([id, 20, 21], 'Pat Invented'), name);
+  }
+});
+
+test('position: refusals', () => {
+  assert.throws(() => positionFromEligibleSlots([3, 99], 'Pat Invented'), /lineup slot ID 99/);
+  assert.throws(() => positionFromEligibleSlots([], 'Pat Invented'), EspnCodeError);
+  assert.throws(() => positionFromEligibleSlots([3, 25], 'Pat Invented'), EspnCodeError);
+  assert.throws(() => positionFromEligibleSlots(undefined, 'Pat Invented'), EspnCodeError);
+  assert.throws(() => positionFromEligibleSlots('2', 'Pat Invented'), EspnCodeError);
+});
+
+test('position: bench, IR or slot 22 as the chosen slot throws, naming the player', () => {
+  assert.throws(() => positionFromEligibleSlots([20, 21], 'Pat Invented'), /Pat Invented/);
+  assert.throws(() => positionFromEligibleSlots([21], 'Pat Invented'), EspnCodeError);
+  assert.throws(() => positionFromEligibleSlots([22, 20], 'Pat Invented'), /Pat Invented/);
+  // A "/" in the name takes the first slot whatever it is, so it cannot rescue a bench slot.
+  assert.throws(() => positionFromEligibleSlots([20, 21], 'Taco Tuesday D/ST'), EspnCodeError);
 });
 
 test('there is no defaultPositionId table', () => {
