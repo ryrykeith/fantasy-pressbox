@@ -19,7 +19,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [ESPN client and shape guards](./espn-client-and-shape-guards.md) | completed |
 | [ESPN code tables](./espn-code-tables.md) | completed |
 | [ESPN fixtures and fake fetch](./espn-fixtures-and-fake-fetch.md) | completed |
-| [ESPN league, team and player normalizer](./espn-league-team-and-player-normalizer.md) | pending |
+| [ESPN league, team and player normalizer](./espn-league-team-and-player-normalizer.md) | completed |
 | [ESPN week normalizer and provider](./espn-week-normalizer-and-provider.md) | pending |
 | [Fix positionFromEligibleSlots: team defenses and IDP positions](./fix-positionfromeligibleslots-team.md) | completed |
 | [guardSchedule refuses a whole week when one lineup player has no actual-points stats entry](./guardschedule-refuses-a-whole-week.md) | completed |

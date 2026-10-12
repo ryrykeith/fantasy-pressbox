@@ -17,6 +17,8 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
+| [describeFormat and the not-modelled scoring heading name Sleeper for every provider](./describeformat-and-the-not-modelled.md) | pending |
 | [Doctor for ESPN leagues](./doctor-for-espn-leagues.md) | pending |
+| [Doctor prints "unknown (null per catch)" for an ESPN league that lists no reception stat](./doctor-prints-unknown-null-per-catch.md) | pending |
 | [ESPN config keys and secrets](./espn-config-keys-and-secrets.md) | pending |
 | [Setup for ESPN leagues](./setup-for-espn-leagues.md) | pending |
