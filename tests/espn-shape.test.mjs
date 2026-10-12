@@ -175,16 +175,12 @@ test('a winner or transaction type outside the doc is refused, naming the allowe
   refuses(() => guardTransactions(x.mTransactions2), 'mTransactions2', 'transactions[1].type', /WAIVER/);
 });
 
-test('a week asked for needs each lineup entry to carry that week\'s actual points', () => {
+test('a lineup entry with no actual-points entry passes and stays absent; a present one is type-checked', () => {
   const v = views();
   const stats = v.mMatchupWeek4.schedule[0].home.rosterForCurrentScoringPeriod.entries[0].playerPoolEntry.player.stats;
   stats.splice(0, 1); // drop the statSourceId 0 entry
-  refuses(
-    () => guardSchedule(v.mMatchupWeek4, { week: SCORED_WEEK }),
-    'mMatchup/mMatchupScore/mScoreboard',
-    'schedule[0].home.rosterForCurrentScoringPeriod.entries[0].playerPoolEntry.player.stats',
-    /statSourceId 0.*scoring period 4/,
-  );
+  guardSchedule(v.mMatchupWeek4, { week: SCORED_WEEK });
+  assert.ok(!stats.some((s) => s.statSourceId === 0 && s.scoringPeriodId === SCORED_WEEK), 'the guard adds nothing');
 
   const w = views();
   const entry = w.mMatchupWeek4.schedule[0].away.rosterForCurrentScoringPeriod.entries[1];

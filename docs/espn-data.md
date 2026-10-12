@@ -809,3 +809,9 @@ confirms them against a real league.
 31. Which positions may fill ESPN's IDP slots (`DL`, `DB`, `DP`): for
     example, whether a `DT` or `DE` fills a `DL` slot. Until answered,
     leagues that start an IDP slot are refused.
+32. Whether ESPN writes a `statSourceId` 0 (actual points) entry in
+    `stats[]` for a player who did not play that week (bye, inactive, IR).
+    **Unknown.** `guardSchedule` allows the entry to be absent and leaves it
+    absent. **decision**: the week normalizer must never turn it into 0. A
+    starter with no entry is refused, naming the player; a bench or IR player
+    with no entry has unavailable points.

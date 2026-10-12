@@ -211,11 +211,11 @@ function teamEntry(view, path, entry, { week } = {}) {
   const p = player(view, `${path}.playerPoolEntry.player`, pool.player);
   if (week !== undefined) {
     // The week's points live in the stats entry with this scoringPeriodId and statSourceId 0 (doc, "Matchups").
+    // A player may have no actual-points entry (bye, inactive, IR: open question 32). That is allowed and
+    // left absent, never 0; the week normalizer decides per player. A present entry is type-checked.
     const stats = array(view, `${path}.playerPoolEntry.player.stats`, p.stats);
     const at = stats.findIndex((s) => s && s.scoringPeriodId === week && s.statSourceId === 0);
-    if (at === -1) {
-      fail(view, `${path}.playerPoolEntry.player.stats`, `has no actual-points entry (statSourceId 0) for scoring period ${week}`);
-    }
+    if (at === -1) return;
     const statPath = `${path}.playerPoolEntry.player.stats[${at}]`;
     number(view, `${statPath}.appliedTotal`, stats[at].appliedTotal);
     // That week's team: not the player's current one (doc, "Matchups").
