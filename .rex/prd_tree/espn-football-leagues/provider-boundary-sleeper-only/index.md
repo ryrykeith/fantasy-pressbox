@@ -17,7 +17,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Normalized draft capital and draft status](./normalized-draft-capital-and-draft.md) | pending |
+| [Normalized draft capital and draft status](./normalized-draft-capital-and-draft.md) | completed |
 | [Normalized player dictionary](./normalized-player-dictionary.md) | completed |
 | [Normalized week data and the readers of saved weeks](./normalized-week-data-and-the-readers.md) | pending |
 | [Provider boundary guard test and architecture docs](./provider-boundary-guard-test-and.md) | pending |
