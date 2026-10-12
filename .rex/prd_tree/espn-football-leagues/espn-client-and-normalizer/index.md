@@ -18,7 +18,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 |-------|--------|
 | [ESPN client and shape guards](./espn-client-and-shape-guards.md) | pending |
 | [ESPN code tables](./espn-code-tables.md) | completed |
-| [ESPN fixtures and fake fetch](./espn-fixtures-and-fake-fetch.md) | pending |
+| [ESPN fixtures and fake fetch](./espn-fixtures-and-fake-fetch.md) | completed |
 | [ESPN league, team and player normalizer](./espn-league-team-and-player-normalizer.md) | pending |
 | [ESPN week normalizer and provider](./espn-week-normalizer-and-provider.md) | pending |
 | [Fix positionFromEligibleSlots: team defenses and IDP positions](./fix-positionfromeligibleslots-team.md) | completed |
