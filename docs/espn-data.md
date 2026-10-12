@@ -46,8 +46,10 @@ entry is still **assumed**. Where they disagree, both readings are given and
 the entry is treated as open.
 
 **History of this file:** the first version (2026-10-12, run 95c5c76e) was
-written without network access, so every table was empty. This version fills
-them from the sources above.
+written without network access, so every table was empty. The second
+(6a730ae) filled them from the sources above, but dropped the player-name
+clause from espn-api's position rule, which made every team defense fail. The
+review of task 3.2 caught it; [Positions](#positions) now has the full rule.
 
 ## Host
 
@@ -228,7 +230,8 @@ integer keys) and JS `constants.js:7-34` (`slotCategoryIdToPositionMap`).
 The shared-slot column is a **decision**, not an ESPN fact. Slots whose
 meaning the sources don't spell out (`TQB`, `ER`, `Rookie`, slot 22) and
 defensive slots with no counterpart in `lineup.mjs` (`DT`, `DE`, `CB`, `S`),
-plus `P` and `HC`, are refused rather than guessed.
+plus `P` and `HC`, are refused as *starting* slots rather than guessed. (A
+player's position is a different question: see [Positions](#positions).)
 
 | Slot ID | espn-api name | JS client name | Shared slot (decision) |
 |---|---|---|---|
@@ -265,11 +268,29 @@ plus `P` and `HC`, are refused rather than guessed.
 |---|---|
 | Players carry `defaultPositionId` and `eligibleSlots`. | **operator-checked** (plan §4) |
 | `eligibleSlots` holds lineup slot IDs (the table above). | **assumed**: espn-api `football/player.py:17-19`; JS `player/player.js:107-112` |
-| A player's position is the first entry of `eligibleSlots` that is neither a combined slot (one containing `/`) nor slot 25 (`Rookie`). | **assumed**: espn-api `football/player.py:30-34` |
+| A player's position is the espn-api name of the first entry of `eligibleSlots` for which either: the slot is not 25 (`Rookie`) and its name contains no `/`; **or the player's own name contains `/`**. The second clause is what gives a team defense (named like "… D/ST") the position `D/ST`: its first eligible slot, 16, is named `D/ST`, which the first clause would skip. | **assumed**: espn-api `football/player.py:30-34`, condition `(pos != 25 and "/" not in POSITION_MAP[pos]) or "/" in self.name` |
 | What `defaultPositionId` values mean. | **Unknown: the sources disagree.** The JS client decodes it through the *slot* table (`player/player.js:103-106`). espn-api never decodes it, deriving the position from `eligibleSlots` instead, and uses it only as a lookup key (`football/box_player.py:70`). Open question 2. |
 
-**decision**: the position comes from `eligibleSlots`, by espn-api's rule.
-`defaultPositionId` is not used until open question 2 is answered.
+**decision**: the position comes from `eligibleSlots`, by espn-api's rule
+above, both clauses. It needs the player's `fullName` as well as the
+slots. `defaultPositionId` is not used until open question 2 is answered.
+
+**decision**: a position is the espn-api **slot name**, never the shared
+lineup slot. The "not mapped: refused" column above is about *starting* a
+slot in a league's lineup, and does not apply to positions: a player whose
+position is `DT`, `CB`, `P` or `HC` is still a player with that position.
+One name changes, to match the position names Sleeper and
+`src/analysis/lineup.mjs` use: `D/ST` becomes `DEF`, and no other name is
+rewritten. A first eligible slot that is `BE`, `IR` or the empty slot 22 means
+no position was found, and is refused, naming the player ID.
+
+**decision**: individual defensive players (IDP) are not covered in v1. A
+league whose starting slots include any of `DT`, `DE`, `LB`, `DL`, `CB`, `S`,
+`DB` or `DP` is refused, naming the slots. The sources don't show which IDP
+positions ESPN lets fill its `DL`, `DB` and `DP` slots, so lineup efficiency
+in such a league could not be computed honestly (open question 31). An IDP
+player in the player list of a league that starts no IDP slot is harmless:
+his position is simply his slot name.
 
 ## Scoring
 
@@ -785,3 +806,6 @@ confirms them against a real league.
 28. Draft status values beyond `draftDetail.drafted`.
 29. Whether rosters are reported before week 1 (needed by
     `preseason-rankings`).
+31. Which positions may fill ESPN's IDP slots (`DL`, `DB`, `DP`): for
+    example, whether a `DT` or `DE` fills a `DL` slot. Until answered,
+    leagues that start an IDP slot are refused.
