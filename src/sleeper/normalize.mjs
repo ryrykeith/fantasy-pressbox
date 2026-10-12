@@ -7,6 +7,7 @@
  * stored as two integers.
  */
 import { parseDeclaredFormatType, resolveFormatType } from '../format.mjs';
+import { playerFor, unknownPlayer } from '../league/players.mjs';
 
 const BENCH_SLOTS = new Set(['BN', 'IR', 'TAXI']);
 
@@ -306,7 +307,7 @@ export function normalizeTeams({ rosters, users }) {
 
 /** Compact player record. The full Sleeper player blob is far too large to send to a model. */
 export function normalizePlayer(id, player) {
-  if (!player) return { id, name: `Unknown player ${id}`, position: null, team: null };
+  if (!player) return unknownPlayer(id);
   const name =
     player.full_name || [player.first_name, player.last_name].filter(Boolean).join(' ') || id;
   return {
@@ -319,6 +320,22 @@ export function normalizePlayer(id, player) {
     injuryStatus: player.injury_status ?? null,
     status: player.status ?? null,
   };
+}
+
+/**
+ * Sleeper's /players/nfl file as the player dictionary (src/league/players.mjs),
+ * keyed by the same ids. Around 12,000 players, so it is built once per run by
+ * `openLeague`, never per lookup.
+ *
+ * An empty entry is left out rather than turned into a stand-in: a lookup of
+ * it then misses, exactly as it did against the raw file.
+ */
+export function normalizePlayers(rawPlayers) {
+  const players = {};
+  for (const [id, player] of Object.entries(rawPlayers ?? {})) {
+    if (player) players[id] = normalizePlayer(id, player);
+  }
+  return players;
 }
 
 /**
@@ -459,7 +476,7 @@ export function normalizeTransactions(transactions, { teamsByRosterId, players, 
 
 /** A player as a reference: enough to identify and judge, no prose. */
 function playerRef(id, players) {
-  const player = normalizePlayer(id, players[id]);
+  const player = playerFor(players, id);
   return { id, name: player.name, position: player.position, nflTeam: player.team, age: player.age ?? null };
 }
 

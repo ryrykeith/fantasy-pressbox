@@ -30,7 +30,8 @@
  * reliable source for "what got released", and it is why this module reads
  * raw matchups rather than any normalized roster.
  */
-import { normalizePlayer, waiverBidsFor } from '../sleeper/normalize.mjs';
+import { waiverBidsFor } from '../sleeper/normalize.mjs';
+import { playerFor } from '../league/players.mjs';
 
 /**
  * Remaining FAAB per surviving team, and what each has spent so far.
@@ -180,7 +181,7 @@ export function weekBids({ transactions = [], week, players = {}, teamsByRosterI
     if (!outcome || entry.type !== 'waiver' || (entry.leg ?? null) !== week) continue;
     if (amount === undefined || amount === null) continue;
     for (const [playerId, rosterId] of Object.entries(entry.adds || {})) {
-      const player = normalizePlayer(playerId, players[playerId]);
+      const player = playerFor(players, playerId);
       bids.push({
         playerId,
         player: player.name,

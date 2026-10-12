@@ -17,11 +17,13 @@ import { join } from 'node:path';
 
 import { captureWeek, isSettledSnapshot } from '../src/pipeline.mjs';
 import { createStore } from '../src/store.mjs';
+import { normalizePlayers } from '../src/sleeper/normalize.mjs';
 
-const PLAYERS = {
+const RAW_PLAYERS = {
   qb: { full_name: 'Quinn Arms', position: 'QB', team: 'BUF', injury_status: null },
   rb: { full_name: 'Rex Carter', position: 'RB', team: 'DAL', injury_status: 'Questionable' },
 };
+const PLAYERS = normalizePlayers(RAW_PLAYERS);
 
 function matchups(points = [120, 90]) {
   return [
@@ -94,7 +96,7 @@ test('a week captured after Sleeper scored it is settled, and capturing it again
     client: later,
     league: league(5),
     teams: teams(['Punt Intended', 'Pick Six Appeal']),
-    players: { ...PLAYERS, rb: { ...PLAYERS.rb, injury_status: 'Out' } },
+    players: normalizePlayers({ ...RAW_PLAYERS, rb: { ...RAW_PLAYERS.rb, injury_status: 'Out' } }),
   });
 
   assert.equal(readFileSync(store.snapshotPath('2026', 4), 'utf8'), onDisk, 'the snapshot is byte for byte the same');

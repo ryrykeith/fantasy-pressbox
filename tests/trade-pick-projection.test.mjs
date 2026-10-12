@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { buildContext, buildPrompt } from '../src/promptContext.mjs';
 import { projectDraftOrder } from '../src/analysis/draftOrder.mjs';
-import { futurePickOwnership } from '../src/sleeper/normalize.mjs';
+import { futurePickOwnership, normalizePlayers } from '../src/sleeper/normalize.mjs';
 import { prospectsAroundPick } from '../src/tradePicks.mjs';
 import {
   RULE,
@@ -22,9 +22,9 @@ import {
  * seed, so the 1st is projected 1.07 — and 1.02 if it falls out of the field.
  */
 
-const players = {
+const players = normalizePlayers({
   wrDJ: { full_name: 'DJ Moore', position: 'WR', team: 'BUF', age: 29 },
-};
+});
 
 const pick = (season, round, originalRosterId) => ({ season, round, originalRosterId });
 

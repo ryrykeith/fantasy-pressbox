@@ -15,6 +15,7 @@ import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { loadByeWeekTable } from '../src/config.mjs';
 import { captureWeek, readByeExposure } from '../src/pipeline.mjs';
 import { createStore } from '../src/store.mjs';
+import { normalizePlayers } from '../src/sleeper/normalize.mjs';
 
 /**
  * A bye is not a Sleeper field — src/analysis/byeExposure.mjs reads the
@@ -151,11 +152,11 @@ test('an NFL team not in the table is refused rather than treated as "no bye"', 
 
 /* ------------------------------------------------------- upcomingByeExposure */
 
-const PLAYERS = {
+const PLAYERS = normalizePlayers({
   qb: { full_name: 'Quinn Arms', position: 'QB', team: 'BUF' },
   rb: { full_name: 'Rex Carter', position: 'RB', team: 'DAL' },
   fa: { full_name: 'Free Agent', position: 'WR', team: null },
-};
+});
 
 test('a starter is counted in the week its NFL team is on a bye, and no other week', () => {
   const [entry] = upcomingByeExposure({
@@ -213,7 +214,7 @@ test('a starter with no NFL team on record contributes nothing, and is never loo
 });
 
 test('an NFL team not in the table is refused, not silently read as no bye', () => {
-  const players = { mystery: { full_name: 'Mystery Player', position: 'WR', team: 'ZZZ' } };
+  const players = normalizePlayers({ mystery: { full_name: 'Mystery Player', position: 'WR', team: 'ZZZ' } });
   assert.throws(
     () =>
       upcomingByeExposure({

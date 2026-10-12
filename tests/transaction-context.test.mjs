@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { enrichTransactions, positionalShape, scoringContext } from '../src/analysis/transactions.mjs';
-import { deriveScoringProfile, normalizeTransactions, normalizeWeekRosters } from '../src/sleeper/normalize.mjs';
+import {
+  deriveScoringProfile,
+  normalizePlayers,
+  normalizeTransactions,
+  normalizeWeekRosters,
+} from '../src/sleeper/normalize.mjs';
 import { describePlayer } from '../src/promptContext.mjs';
 import { readTransactions } from '../src/pipeline.mjs';
 import { createStore } from '../src/store.mjs';
@@ -18,7 +23,7 @@ import { join } from 'node:path';
 
 const STARTING_SLOTS = ['QB', 'WR', 'WR', 'TE', 'FLEX'];
 
-const players = {
+const players = normalizePlayers({
   qbA: { full_name: 'Quarterback A', position: 'QB', team: 'BUF' },
   qbB: { full_name: 'Quarterback B', position: 'QB', team: 'KC' },
   wrDJ: { full_name: 'DJ Moore', position: 'WR', team: 'CHI', age: 29 },
@@ -30,7 +35,7 @@ const players = {
   rbB: { full_name: 'Back B', position: 'RB', team: 'DET' },
   rbCut: { full_name: 'Cut Back', position: 'RB', team: 'NE' },
   teWire: { full_name: 'Wire Tight End', position: 'TE', team: 'NYG' },
-};
+});
 
 const teams = [
   { rosterId: 1, name: 'Pick Six Appeal' },

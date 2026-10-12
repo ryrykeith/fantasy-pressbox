@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { faabBalances, releasedPool, buildFaabMarket } from '../src/analysis/faab.mjs';
-import { waiverBidsFor } from '../src/sleeper/normalize.mjs';
+import { normalizePlayers, waiverBidsFor } from '../src/sleeper/normalize.mjs';
 import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { captureWeek, readFaabMarket } from '../src/pipeline.mjs';
 import { createStore } from '../src/store.mjs';
@@ -246,10 +246,10 @@ const CURRENT_MATCHUPS = [
   { roster_id: 2, matchup_id: 1, points: 90, starters: ['rb'], starters_points: [90], players: ['rb'], players_points: { rb: 90 } },
 ];
 
-const PLAYERS = {
+const PLAYERS = normalizePlayers({
   qb: { full_name: 'Quinn Arms', position: 'QB', team: 'BUF' },
   rb: { full_name: 'Rex Carter', position: 'RB', team: 'DAL' },
-};
+});
 
 function fakeClient(transactions = []) {
   return {

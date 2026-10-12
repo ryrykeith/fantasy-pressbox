@@ -6,7 +6,8 @@
  * model editorialises on top of this; if a fact is not here, it may not be
  * claimed.
  */
-import { normalizePlayer, pairMatchups } from '../sleeper/normalize.mjs';
+import { pairMatchups } from '../sleeper/normalize.mjs';
+import { playerFor } from '../league/players.mjs';
 import { hasMatchups } from '../format.mjs';
 import { bestLineup, lineupEfficiency } from './lineup.mjs';
 
@@ -22,7 +23,7 @@ function entriesFor(side, players) {
   const starters = starterIds.map((id, index) => ({
     id,
     points: Number((starterPoints[index] ?? playerPoints[id] ?? 0).toFixed(2)),
-    player: normalizePlayer(id, players[id]),
+    player: playerFor(players, id),
   }));
 
   const starterIdSet = new Set(starterIds.filter((id) => id && id !== '0'));
@@ -31,7 +32,7 @@ function entriesFor(side, players) {
     .map((id) => ({
       id,
       points: Number((playerPoints[id] ?? 0).toFixed(2)),
-      player: normalizePlayer(id, players[id]),
+      player: playerFor(players, id),
     }));
 
   return { starters, bench };

@@ -23,7 +23,7 @@
  * matchup entries (normalizeWeekRosters) — today's roster already carries
  * every later move, and grading against it would invent context.
  */
-import { normalizePlayer } from '../sleeper/normalize.mjs';
+import { playerFor } from '../league/players.mjs';
 import { claimMarket } from './faab.mjs';
 import { bestLineup, eligiblePositions } from './lineup.mjs';
 
@@ -64,7 +64,7 @@ export function positionalShape({ playerIds, startingSlots, players, valueOf }) 
     if (positions.length === 1) dedicated[positions[0]] = (dedicated[positions[0]] ?? 0) + 1;
   }
 
-  const roster = playerIds.map((id) => ({ id, player: normalizePlayer(id, players[id]) }));
+  const roster = playerIds.map((id) => ({ id, player: playerFor(players, id) }));
   const byPosition = {};
   for (const position of startable) {
     byPosition[position] = {

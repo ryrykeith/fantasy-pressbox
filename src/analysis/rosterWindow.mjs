@@ -82,7 +82,7 @@ export function ageBandsFor(edges = DEFAULT_AGE_BAND_EDGES) {
 
 /**
  * @param teams        normalizeTeams output; `playerIds` and `starterIds` are today's roster
- * @param players      the raw Sleeper player dictionary, keyed by player id
+ * @param players      the player dictionary (src/league/players.mjs), keyed by player id
  * @param weeks        `[{ week, rosters: normalizeWeekRosters(...) }]` — each stored week's
  *                     fielded starters and their points. Only starters' points count: they are
  *                     the points that went on the team's score.

@@ -124,16 +124,17 @@ function readPrompt(file, formatType, promptsDir = null) {
  * pretty-printed JSON object turns the prompt into something too large to
  * paste into a chat window and expensive to send to an API, without telling
  * the model anything the line below does not.
+ *
+ * `player` is a record from the player dictionary (src/league/players.mjs),
+ * or undefined for an id the dictionary does not know.
  */
 export function describePlayer(id, player) {
   if (!player) return `Unknown player ${id}`;
-  const name =
-    player.full_name || [player.first_name, player.last_name].filter(Boolean).join(' ') || id;
   const details = [player.position, player.team || 'FA', player.age ? `age ${player.age}` : null]
     .filter(Boolean)
     .join(', ');
-  const injury = player.injury_status ? ` [${player.injury_status}]` : '';
-  return `${name} (${details})${injury}`;
+  const injury = player.injuryStatus ? ` [${player.injuryStatus}]` : '';
+  return `${player.name || id} (${details})${injury}`;
 }
 
 /** e.g. "QB Josh Allen (BUF) 35.66" */

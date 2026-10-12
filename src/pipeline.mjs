@@ -10,6 +10,7 @@ import {
   futurePickOwnership,
   isFuturePick,
   normalizeLeague,
+  normalizePlayers,
   normalizeTeams,
   normalizeTransactions,
   normalizeWeekRosters,
@@ -44,7 +45,9 @@ export async function openLeague(config, { refreshPlayers = false } = {}) {
     client.rosters(),
     client.tradedPicks(),
   ]);
-  const players = await client.players({ refresh: refreshPlayers });
+  // Normalized once per run (src/league/players.mjs): the file is around
+  // 12,000 players, and nothing past src/sleeper/ reads Sleeper's field names.
+  const players = normalizePlayers(await client.players({ refresh: refreshPlayers }));
 
   const league = normalizeLeague(rawLeague, { declaredFormatType: config.leagueFormat });
   const teams = normalizeTeams({ rosters, users });

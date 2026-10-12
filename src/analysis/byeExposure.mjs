@@ -142,7 +142,7 @@ function starterIdsFor(team) {
  * left to be exposed in. Omit the ledger to treat every team as alive.
  *
  * @param teams      normalized teams (src/sleeper/normalize.mjs#normalizeTeams)
- * @param players    the raw Sleeper player dictionary, keyed by player id
+ * @param players    the player dictionary (src/league/players.mjs), keyed by player id
  * @param byeWeeks   a resolved table from parseByeWeekTable
  * @param fromWeek   the first week to report exposure for
  * @param weekCount  how many weeks ahead to report; defaults to DEFAULT_WEEK_COUNT

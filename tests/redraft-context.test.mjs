@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { buildContext } from '../src/promptContext.mjs';
 import { hasFutureDraftCapital } from '../src/format.mjs';
+import { normalizePlayers } from '../src/sleeper/normalize.mjs';
 
 /**
  * Redraft leagues re-draft every season: no future picks, and usually no taxi
@@ -10,7 +11,7 @@ import { hasFutureDraftCapital } from '../src/format.mjs';
  * "nothing traded" note reads as "this exists and happens to be empty".
  */
 
-const PLAYERS = { p1: { full_name: 'One', position: 'QB', team: 'AAA' } };
+const PLAYERS = normalizePlayers({ p1: { full_name: 'One', position: 'QB', team: 'AAA' } });
 
 const FUTURE_DRAFT_CAPITAL = { rounds: 4, teams: [{ team: 'Alpha', picks: ['2027 R1'] }] };
 
