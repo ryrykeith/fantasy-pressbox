@@ -21,5 +21,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [ESPN fixtures and fake fetch](./espn-fixtures-and-fake-fetch.md) | pending |
 | [ESPN league, team and player normalizer](./espn-league-team-and-player-normalizer.md) | pending |
 | [ESPN week normalizer and provider](./espn-week-normalizer-and-provider.md) | pending |
-| [Fix positionFromEligibleSlots: team defenses and IDP positions](./fix-positionfromeligibleslots-team.md) | pending |
+| [Fix positionFromEligibleSlots: team defenses and IDP positions](./fix-positionfromeligibleslots-team.md) | completed |
 | [One NFL team alias module](./one-nfl-team-alias-module.md) | completed |
