@@ -815,3 +815,8 @@ confirms them against a real league.
     absent. **decision**: the week normalizer must never turn it into 0. A
     starter with no entry is refused, naming the player; a bench or IR player
     with no entry has unavailable points.
+33. Whether ESPN sends `waiverRank` or `wavierRank` on `teams[]` (espn-api and
+    the JS client disagree; one is a typo). **Unknown.** `guardTeams` requires
+    `waiverRank` only in a rolling-waiver league (`{ faab: false }`); a FAAB
+    league does not read it. If ESPN sends `wavierRank`, rolling-waiver leagues
+    refuse until this is answered.

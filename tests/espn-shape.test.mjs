@@ -58,6 +58,15 @@ test('the rolling-waiver league passes, with no FAAB fields required', () => {
   guardTransactions(v.mTransactions2);
 });
 
+test('waiverRank is required only in a rolling-waiver league', () => {
+  const f = views();
+  for (const t of f.mTeam.teams) delete t.waiverRank;
+  guardTeams(f.mTeam, { faab: true });
+  const r = views(ROLLING_LEAGUE_ID);
+  delete r.mTeam.teams[0].waiverRank;
+  refuses(() => guardTeams(r.mTeam, { faab: false }), 'mTeam', 'teams[0].waiverRank', /is missing/);
+});
+
 test('a missing number is an error naming the view and path, never 0', () => {
   const v = views();
   delete v.mSettings.settings.size;

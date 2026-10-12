@@ -225,7 +225,8 @@ function teamEntry(view, path, entry, { week } = {}) {
 
 /**
  * `mTeam`. `faab` says whether the league uses a FAAB budget (from mSettings):
- * only then must each team report what it has spent.
+ * only then must each team report what it has spent. Without FAAB, each must report its
+ * waiver rank instead.
  */
 export function guardTeams(body, { faab }) {
   const view = 'mTeam';
@@ -236,7 +237,9 @@ export function guardTeams(body, { faab }) {
     integer(view, `${path}.id`, t.id);
     string(view, `${path}.name`, t.name);
     each(view, `${path}.owners`, t.owners, (at, owner) => string(view, at, owner));
-    integer(view, `${path}.waiverRank`, t.waiverRank);
+    // Waiver order only matters to rolling-waiver coverage. The doc cannot say whether ESPN
+    // spells it waiverRank or wavierRank (open question 33), so a FAAB league never needs it.
+    if (!faab) integer(view, `${path}.waiverRank`, t.waiverRank);
     const overall = object(view, `${path}.record.overall`, object(view, `${path}.record`, t.record).overall);
     for (const field of ['wins', 'losses', 'ties']) integer(view, `${path}.record.overall.${field}`, overall[field]);
     for (const field of ['pointsFor', 'pointsAgainst']) number(view, `${path}.record.overall.${field}`, overall[field]);
