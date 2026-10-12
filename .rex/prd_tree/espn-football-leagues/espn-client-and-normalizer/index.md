@@ -22,6 +22,6 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [ESPN league, team and player normalizer](./espn-league-team-and-player-normalizer.md) | pending |
 | [ESPN week normalizer and provider](./espn-week-normalizer-and-provider.md) | pending |
 | [Fix positionFromEligibleSlots: team defenses and IDP positions](./fix-positionfromeligibleslots-team.md) | completed |
-| [guardSchedule refuses a whole week when one lineup player has no actual-points stats entry](./guardschedule-refuses-a-whole-week.md) | pending |
+| [guardSchedule refuses a whole week when one lineup player has no actual-points stats entry](./guardschedule-refuses-a-whole-week.md) | completed |
 | [guardTeams requires teams[].waiverRank in every league, a field the doc says may be spelled wavierRank](./guardteams-requires-teams-waiverrank.md) | pending |
 | [One NFL team alias module](./one-nfl-team-alias-module.md) | completed |
