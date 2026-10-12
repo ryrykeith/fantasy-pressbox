@@ -19,32 +19,17 @@
  */
 import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { STALE_CODES, canonicalTeamCode } from '../src/nflTeams.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const REGULAR_SEASON = 2;
 const WEEKS = 18;
 
-/**
- * ESPN's abbreviations are not Sleeper's, and the differences are silent.
- *
- * Washington is the live one: Sleeper says WAS, ESPN says WSH. Left unmapped,
- * every Washington player looks like it never has a bye — which reads as good
- * news rather than as a bug, and so would reach print unchallenged.
- */
-const ESPN_TO_SLEEPER = { WSH: 'WAS' };
+// Team-code aliases (WSH -> WAS, OAK -> LV) live in src/nflTeams.mjs, shared
+// with the ESPN normalizer. An abbreviation it does not know is refused.
 
-/**
- * Abbreviations Sleeper still uses that no longer have a schedule.
- *
- * Sleeper carries OAK on players who were Raiders before the move to Las
- * Vegas. Those players are long retired, but a stale id on a roster must not
- * hard-fail an edition, so the alias resolves it to the franchise's current
- * abbreviation rather than leaving it unknown.
- */
-const STALE_ALIASES = { OAK: 'LV' };
-
-async function teamsPlayingIn(season, week) {
+export async function teamsPlayingIn(season, week) {
   const url =
     'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard' +
     `?seasontype=${REGULAR_SEASON}&week=${week}&dates=${season}`;
@@ -56,14 +41,14 @@ async function teamsPlayingIn(season, week) {
   for (const event of payload.events || []) {
     for (const side of event.competitions?.[0]?.competitors || []) {
       const abbreviation = side.team?.abbreviation;
-      if (abbreviation) playing.add(ESPN_TO_SLEEPER[abbreviation] ?? abbreviation);
+      if (abbreviation) playing.add(canonicalTeamCode(abbreviation));
     }
   }
   if (playing.size === 0) throw new Error(`Week ${week}: no teams found — schedule not published?`);
   return playing;
 }
 
-async function buildTable(season) {
+export async function buildTable(season) {
   const weeksPlayed = new Map();
   const teams = new Set();
 
@@ -95,9 +80,9 @@ async function buildTable(season) {
   return byes;
 }
 
-function render(season, byes) {
+export function render(season, byes) {
   const rows = [...byes.entries()].map(([team, week]) => `  ${team}: ${week}`).join('\n');
-  const aliases = Object.entries(STALE_ALIASES)
+  const aliases = Object.entries(STALE_CODES)
     .map(([from, to]) => `  ${from}: ${to}`)
     .join('\n');
 
@@ -130,20 +115,25 @@ ${aliases}
 `;
 }
 
-const args = process.argv.slice(2);
-const season = Number.parseInt(args.find((a) => /^\d{4}$/.test(a)) ?? '', 10);
-if (!Number.isInteger(season)) {
-  console.error('Usage: node scripts/fetch-bye-weeks.mjs <season> [--print]');
-  process.exit(1);
+async function main() {
+  const args = process.argv.slice(2);
+  const season = Number.parseInt(args.find((a) => /^\d{4}$/.test(a)) ?? '', 10);
+  if (!Number.isInteger(season)) {
+    console.error('Usage: node scripts/fetch-bye-weeks.mjs <season> [--print]');
+    process.exit(1);
+  }
+
+  const byes = await buildTable(season);
+  const text = render(season, byes);
+
+  if (args.includes('--print')) {
+    process.stdout.write(text);
+  } else {
+    const path = join(ROOT, 'config', `bye-weeks.${season}.yml`);
+    writeFileSync(path, text);
+    console.log(`Wrote config/bye-weeks.${season}.yml — ${byes.size} teams, one bye each.`);
+  }
 }
 
-const byes = await buildTable(season);
-const text = render(season, byes);
-
-if (args.includes('--print')) {
-  process.stdout.write(text);
-} else {
-  const path = join(ROOT, 'config', `bye-weeks.${season}.yml`);
-  writeFileSync(path, text);
-  console.log(`Wrote config/bye-weeks.${season}.yml — ${byes.size} teams, one bye each.`);
-}
+// Importable for tests; runs only when invoked as a script.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
