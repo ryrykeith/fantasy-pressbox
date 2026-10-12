@@ -42,8 +42,7 @@ import {
   workspaceIsPackage,
 } from './src/config.mjs';
 import { isLeagueWorkspace } from './src/workspace.mjs';
-import { createClient } from './src/sleeper/client.mjs';
-import { normalizeLeague } from './src/sleeper/normalize.mjs';
+import { getProvider } from './src/providers.mjs';
 import { FORMAT_LABELS } from './src/format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './src/scoringReport.mjs';
 import { describeDraftOrder } from './src/rookieDraft.mjs';
@@ -238,25 +237,25 @@ function isInside(parent, child) {
  * Returns null when the user gives up. An ID Sleeper does not know, or a
  * Sleeper that cannot be reached, is reported here, at the point of entry.
  */
-async function askLeague(fallbackId) {
+async function askLeague(fallbackId, provider) {
+  const name = provider.displayName;
   let leagueId = fallbackId;
   while (true) {
-    const answer = await askWithDefault('Sleeper league ID or URL', leagueId);
+    const answer = await askWithDefault(`${name} league ID or URL`, leagueId);
     const candidate = extractLeagueId(answer);
     if (!candidate) {
       say(red("  That doesn't contain a league ID. It should be a long run of digits."));
       continue;
     }
-    say(dim('  Checking with Sleeper...'));
-    let raw;
+    say(dim(`  Checking with ${name}...`));
+    let league;
     try {
-      raw = await createClient({ leagueId: candidate, dataDir: null }).league();
+      league = await provider.lookupLeague({ id: candidate });
     } catch (error) {
       say(red(`  ${error.message}`));
       if (!(await askYesNo('  Try a different ID?', true))) return null;
       continue;
     }
-    const league = normalizeLeague(raw);
     say(green(`  ✓ Found "${league.name}" — ${league.teamCount ?? '?'} teams, ${league.season} season`));
     if (await askYesNo('  Is this your league?', true)) return { leagueId: candidate, league };
     leagueId = '';
@@ -377,12 +376,14 @@ async function main() {
     say(dim(`  Found an existing .env in ${workspaceRoot} — your current answers are the defaults.`));
   }
 
-  heading('Your Sleeper league');
+  // Setup offers Sleeper only; ESPN arrives with its own provider.
+  const leagueProvider = getProvider('sleeper');
+  heading(`Your ${leagueProvider.displayName} league`);
   say('Open your league on sleeper.com and copy the address from the browser bar.');
   say(dim('  Example: https://sleeper.com/leagues/1234567890123456789/team'));
   say('You can paste the whole address — the ID will be picked out of it.');
   say('');
-  const found = await askLeague(existing.SLEEPER_LEAGUE_ID ?? '');
+  const found = await askLeague(existing.SLEEPER_LEAGUE_ID ?? '', leagueProvider);
   if (!found) return 1;
   const { leagueId, league } = found;
 
@@ -412,13 +413,17 @@ async function main() {
 
   heading('What kind of league it is');
   const detectedType = league.format.detectedType;
-  say(`Sleeper's settings say this is a ${FORMAT_LABELS[detectedType].toLowerCase()} league.`);
-  say('Sleeper cannot tell a guillotine league from an ordinary one, because the');
+  say(`${leagueProvider.displayName}'s settings say this is a ${FORMAT_LABELS[detectedType].toLowerCase()} league.`);
+  say(`${leagueProvider.displayName} cannot tell a guillotine league from an ordinary one, because the`);
   say('commissioner runs it by hand. If yours is one, choose it here.');
   say('');
   const formatType = await askChoice(
     'Which kind of league is it?',
-    formatChoices({ detectedType, currentType: existing.LEAGUE_FORMAT?.trim().toLowerCase() || null }),
+    formatChoices({
+      detectedType,
+      currentType: existing.LEAGUE_FORMAT?.trim().toLowerCase() || null,
+      providerName: leagueProvider.displayName,
+    }),
     defaultFormatType({ detectedType, existing: existing.LEAGUE_FORMAT }),
   );
 
@@ -506,8 +511,8 @@ async function main() {
   );
 
   const maxChars = await askWithDefault(
-    'Longest single Sleeper post, in characters',
-    existing.SLEEPER_POST_MAX_LENGTH || '900',
+    `Longest single ${leagueProvider.displayName} post, in characters`,
+    existing.POST_MAX_LENGTH || existing.SLEEPER_POST_MAX_LENGTH || '900',
   );
 
   heading('Saving');
@@ -529,7 +534,10 @@ async function main() {
     FANTASY_WEEK: existing.FANTASY_WEEK ?? '',
     LEAGUE_DISPLAY_NAME: displayName,
     PRESSBOX_TONE: tone,
-    SLEEPER_POST_MAX_LENGTH: maxChars,
+    // A new folder gets the neutral key; an existing legacy key stays where it is.
+    ...(existing.SLEEPER_POST_MAX_LENGTH !== undefined && existing.POST_MAX_LENGTH === undefined
+      ? { SLEEPER_POST_MAX_LENGTH: maxChars }
+      : { POST_MAX_LENGTH: maxChars }),
     INCLUDE_EMOJI: existing.INCLUDE_EMOJI ?? '',
     DATA_DIR: existing.DATA_DIR ?? '',
     OUTPUT_DIR: existing.OUTPUT_DIR ?? '',

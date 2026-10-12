@@ -393,7 +393,7 @@ function firstSet(env, keys) {
  * provider exists so that a folder naming both IDs is refused rather than
  * quietly read as Sleeper.
  */
-const LEAGUE_ID_KEYS = { sleeper: 'SLEEPER_LEAGUE_ID', espn: 'ESPN_LEAGUE_ID' };
+export const LEAGUE_ID_KEYS = { sleeper: 'SLEEPER_LEAGUE_ID', espn: 'ESPN_LEAGUE_ID' };
 
 /** The .env key that names a league's provider. */
 export const LEAGUE_PROVIDER_KEY = 'LEAGUE_PROVIDER';

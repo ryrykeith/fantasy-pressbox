@@ -11,7 +11,9 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { providerDisplayName } from './providers.mjs';
 import {
+  LEAGUE_ID_KEYS,
   loadConfig,
   loadProspectBoard,
   PACKAGE_ROOT,
@@ -214,7 +216,7 @@ function requireLeague(config) {
   requireLeagueWorkspace(config.workspaceRoot, { initCommand: INIT_COMMAND });
   if (config.leagueId) return;
   throw new Error(
-    `No SLEEPER_LEAGUE_ID found in ${join(config.workspaceRoot, '.env')}.\n` +
+    `No ${LEAGUE_ID_KEYS[config.league.provider]} found in ${join(config.workspaceRoot, '.env')}.\n` +
       `Run init to set the league up: ${INIT_COMMAND}\n` +
       'Or add the ID to .env by hand.',
   );
@@ -393,7 +395,7 @@ async function commandDoctor(config) {
   );
   say(`  Data folder       ${config.dataDir}`);
   say(`  Output folder      ${config.outputDir}`);
-  say(`  Sleeper post limit ${config.editorial.output.sleeper_max_chars} characters`);
+  say(`  ${providerDisplayName(config.league.provider)} post limit ${config.editorial.output.sleeper_max_chars} characters`);
 
   const missingPrompts = ['system.md', 'weekly-preview.md', 'weekly-recap.md', 'weekly-power-rankings.md']
     .filter((file) => {
@@ -416,7 +418,7 @@ async function commandDoctor(config) {
   // in the shell, as every league command does.
   if (!inLeague || !config.leagueId) return 1;
 
-  say('\n  Contacting Sleeper...');
+  say(`\n  Contacting ${providerDisplayName(config.league.provider)}...`);
   const ctx = await openLeague(config);
   const { league, teams, client } = ctx;
   const { week, source } = await resolveWeek({ client, league, config });

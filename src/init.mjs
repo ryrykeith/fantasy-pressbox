@@ -72,10 +72,10 @@ const FORMAT_CHOICE_LABELS = {
  * marked. Sleeper never reports guillotine (src/sleeper/normalize.mjs), so that
  * option is never marked as detected: choosing it is always a declaration.
  */
-export function formatChoices({ detectedType, currentType = null }) {
+export function formatChoices({ detectedType, currentType = null, providerName = 'Sleeper' }) {
   return FORMAT_TYPES.map((type) => {
     const marks = [];
-    if (type === detectedType) marks.push('what Sleeper reports');
+    if (type === detectedType) marks.push(`what ${providerName} reports`);
     if (type === currentType) marks.push('current');
     const suffix = marks.length ? ` (${marks.join(', ')})` : '';
     return { value: type, label: `${FORMAT_CHOICE_LABELS[type]}${suffix}` };
