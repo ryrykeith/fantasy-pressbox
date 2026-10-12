@@ -1,0 +1,21 @@
+---
+id: "e5169f1d-6c76-408d-95e9-a65b1cdb3fc9"
+level: "task"
+title: "Provider boundary guard test and architecture docs"
+status: "pending"
+priority: "high"
+tags:
+  - "providers"
+  - "docs"
+  - "tests"
+blockedBy:
+  - "26c7029a-5ab3-4670-a8b9-4df17cf8ad2b"
+acceptanceCriteria:
+  - "tests/provider-boundary.test.mjs passes, and fails on a deliberately planted leak (checked by hand, not committed)"
+  - "docs/architecture.md describes the provider boundary and no longer claims anything about Sleeper the code does not do"
+  - "The 671 existing tests plus the new ones pass"
+run: {"models":{"claude":"claude-sonnet-5-5"}}
+description: "Lock the boundary in with a test, and make docs/architecture.md describe it. This is the last task of PR 1, feat/provider-boundary.\n\nTEST (tests/provider-boundary.test.mjs)\nIt fails when:\n- a file outside src/sleeper/, src/espn/ and src/providers.mjs imports from either provider directory;\n- a listed raw Sleeper field name appears in src/ outside src/sleeper/. The list includes roster_id, owner_id, matchup_id, players_points, starters_points, fpts_decimal, waiver_bid and last_scored_leg. Comments explaining Sleeper are allowed.\n\nModel it on tests/workspace-root.test.mjs, which already enforces a similar line.\n\nDOCS (docs/architecture.md)\nUpdate:\n- the pipeline diagram (a provider, not Sleeper);\n- the module map (src/providers.mjs, src/league/, provider.mjs);\n- 'Domain concepts': the shared League, Team, Player, WeekData and DraftCapital shapes;\n- 'Adding another platform': the provider interface and the guard;\n- 'Historical integrity': raw bundles are tagged with their provider, untagged means Sleeper.\n\nRemove every claim about Sleeper that the code no longer makes. docs/sleeper-data.md stays the Sleeper data reference.\n\nHOUSE RULES\n- Never invent a fact.\n- No real league data anywhere."
+lastModified: "2026-10-12T03:15:03.862Z"
+lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
+---
