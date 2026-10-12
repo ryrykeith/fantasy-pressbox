@@ -174,6 +174,27 @@ All **assumed**, read from `settings` in the `mSettings` view.
 | `scoringSettings.matchupTieRule`, `playoffMatchupTieRule`, `scoringType`, `scoringEnhancementType` | Tie rules; scoring type; `WIN_BONUS_TOP_HALF` means an extra win for a top-half score | espn-api `base_settings.py:19-31` |
 | `isPublic` | Whether the league is public | JS `league/league.js:60, 74`. Which object it sits on is not clear from the client. |
 
+**decisions** (task 3.5, `src/espn/normalize.mjs`), for fields the League
+reads:
+- `startingSlots` lists each slot with a count above 0, except `BE` (20) and
+  `IR` (21), in ascending slot ID order, one entry per count. A slot missing
+  from `lineupSlotCounts` counts as 0, for bench and IR as well.
+- `playoffWeekStart` is the first scoring period of matchup period
+  `matchupPeriodCount + 1`, when `matchupPeriods` lists one. Otherwise it is
+  null: no field reports it directly, and it is not inferred from the regular
+  season's end.
+- `tradeDeadline` (a week, on Sleeper) is null. `deadlineDate` is a date, so it
+  goes into its own `tradeDeadlineDate`, read as epoch milliseconds (the type
+  is assumed), and null when absent.
+- `playoffSeeding` is the seeding rule in lower case (`H2H_RECORD` becomes
+  `head_to_head_record`); `UNKNOWN` and an absent rule are null.
+- `currentWeek` is `scoringPeriodId`, capped at `status.finalScoringPeriod`,
+  as espn-api does. `lastScoredWeek` is the week before it, also capped (plan
+  §9, R6; see [Working out the week](#working-out-the-week)).
+- `seasonType`, `status`, `draftRounds`, `draftId` and `previousLeagueId` are
+  null: no documented field reports them. `taxiSlots` is 0 (no taxi squad,
+  above).
+
 The meaning of `lineupSlotCounts` keys as slot IDs is an inference: espn-api
 zips the counts with the slot names in key order (`football/settings.py:11-14`),
 and the JS client maps each key through the slot table
@@ -206,6 +227,13 @@ never built from `firstName`/`lastName`.
 
 **decision** (plan §2, decision 11): no first or last name ever reaches a team,
 a snapshot or a prompt, whichever object carries it.
+
+**decision** (task 3.5): a Team's `manager` is the `displayName` of the
+member named first in `owners[]`, when that member has one, and absent
+otherwise. Member IDs are not carried into the Team (no `ownerId` or
+`coOwnerIds`): they are written in the same braced form as the `SWID` cookie,
+and may be one. Season potential points are null: no source shows them.
+`waiverBudgetUsed` is null in a rolling-waiver league.
 
 ## Rosters and lineups
 
@@ -318,6 +346,18 @@ his position is simply his slot name.
 With no ESPN defaults table, `nonDefault` cannot be computed. It lists every
 scored item, and `isDefault` is `false`, with a note saying so: the safe
 direction described in `docs/architecture.md` ("Scoring profile").
+
+**decisions** (task 3.5, `deriveEspnScoringProfile`):
+- each `nonDefault` entry is `{ key, label, value, default: null, note }`;
+  `key` is the stat's abbreviation below (`REC`) and `label` its label;
+- a stat the league does not list is `null` in the profile, never 0 (whether
+  an unlisted stat is unscored is open question 5); a reception base of `null`
+  has the tier `unknown`;
+- a stat ID missing from the table below is listed in `notModelled` as
+  `STAT_<id>`, not dropped;
+- every `pointsOverrides` entry, on any stat, is listed in `nonDefault` and
+  `notModelled` as `<abbr>[override <key>]`;
+- a stat listed twice in `scoringItems` is refused.
 
 ### Scoring stat IDs
 
@@ -626,6 +666,10 @@ team he played for.
 | ESPN has no trading of **future** draft picks. | **assumed**: plan §4, uncited. **Weakened** by the field above: it suggests some pick trading exists, though not whether it reaches future seasons. Neither client reads a traded-picks list. Open question 25. |
 | Other draft states (in progress, not started) and where they are. | **Unknown.** Open question 28. |
 
+**decision** (task 3.5): the League's `draftStatus` is `complete` when
+`draftDetail.drafted` is `true` and `pre_draft` when it is `false`. It is never
+`drafting`, because nothing documented says a draft is under way.
+
 **decision** (plan §2, decision 8): v1 still treats ESPN as having no traded
 future picks, so tank watch, future stock and pick capital refuse on ESPN. If
 open question 25 shows future picks can be traded, those editions get
@@ -715,6 +759,13 @@ null.
 
 As with Sleeper, **a raw ESPN player ID or numeric code must never reach a
 prompt.**
+
+**decision** (task 3.5): `injuryStatus` is printed as a label
+(`src/espn/codes.mjs`). `ACTIVE` means no injury and leaves the field absent,
+as Sleeper's healthy `null` prints nothing. `INJURY_RESERVE` and `SUSPENSION`
+take Sleeper's spellings `IR` and `Sus`; the rest are spelled out
+(`Questionable`, `Day to day`, `7-day DL`). A value outside the list above is
+refused.
 
 ### Player IDs and FantasyCalc
 

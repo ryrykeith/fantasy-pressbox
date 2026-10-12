@@ -37,7 +37,7 @@ import {
 
 const HOST = 'lm-api-reads.fantasy.espn.com';
 const MATCHUP_VIEWS = ['mMatchup', 'mMatchupScore', 'mScoreboard', 'mBoxscore'];
-const OTHER_VIEWS = ['mSettings', 'mTeam', 'mRoster', 'mTransactions2'];
+const OTHER_VIEWS = ['mSettings', 'mTeam', 'mRoster', 'mTransactions2', 'mDraftDetail'];
 
 /** The 401 body. Only the message text is operator-checked (doc, "Authentication"). */
 const UNAUTHORIZED = { details: [{ message: 'You are not authorized to view this League.' }] };

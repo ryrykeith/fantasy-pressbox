@@ -177,8 +177,11 @@ The shapes a provider hands back:
 
 - **League**: the normalized league (season, format, scoring profile, draft
   status, `lastScoredWeek`, and so on), tagged with `provider`, the name of
-  the provider it came from.
-- **Team**: a roster joined with its manager, from `normalizeTeams`.
+  the provider it came from. ESPN's (`src/espn/normalize.mjs`) also carries
+  `waiverType`, `playoffSeeding`, `tradeDeadlineDate` and `format.keeper`, and
+  holds null wherever ESPN reports nothing (`docs/espn-data.md`).
+- **Team**: a roster joined with its manager, from `normalizeTeams`. On ESPN
+  `manager` is absent unless the member's `displayName` is sent.
 - **Player**: the normalized player dictionary, built once per run from the
   provider's player file (`normalizePlayers`). Lookups and the one-line
   description go through `src/league/players.mjs`.

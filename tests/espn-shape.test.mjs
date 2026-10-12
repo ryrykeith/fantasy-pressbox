@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   EspnShapeError,
+  guardDraftDetail,
   guardPlayers,
   guardRosters,
   guardSchedule,
@@ -249,4 +250,32 @@ test('guardTeams demands to be told whether the league is FAAB', () => {
 
 test('the shape error says the shapes are unverified and nothing was guessed', () => {
   assert.throws(() => guardSeason({}), /unverified.*Nothing was guessed/s);
+});
+
+test('mDraftDetail must carry draftDetail.drafted as true or false', () => {
+  const v = views();
+  assert.equal(guardDraftDetail(v.mDraftDetail), v.mDraftDetail);
+  delete v.mDraftDetail.draftDetail.drafted;
+  refuses(() => guardDraftDetail(v.mDraftDetail), 'mDraftDetail', 'draftDetail.drafted', /is missing/);
+  const w = views();
+  w.mDraftDetail.draftDetail.drafted = 'yes';
+  refuses(() => guardDraftDetail(w.mDraftDetail), 'mDraftDetail', 'draftDetail.drafted', /true or false/);
+  const x = views();
+  delete x.mDraftDetail.draftDetail;
+  refuses(() => guardDraftDetail(x.mDraftDetail), 'mDraftDetail', 'draftDetail', /is missing/);
+});
+
+test('the seeding rule and trade deadline may be absent, but a present one is checked', () => {
+  const v = views();
+  delete v.mSettings.settings.scheduleSettings.playoffSeedingRule;
+  delete v.mSettings.settings.tradeSettings;
+  guardSettings(v.mSettings);
+
+  const s = views();
+  s.mSettings.settings.scheduleSettings.playoffSeedingRule = 'COIN_TOSS';
+  refuses(() => guardSettings(s.mSettings), 'mSettings', 'settings.scheduleSettings.playoffSeedingRule', /not one of the values/);
+
+  const t = views();
+  t.mSettings.settings.tradeSettings.deadlineDate = '2026-11-18';
+  refuses(() => guardSettings(t.mSettings), 'mSettings', 'settings.tradeSettings.deadlineDate', /must be a number/);
 });

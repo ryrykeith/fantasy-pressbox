@@ -15,7 +15,7 @@
  * even redacted.
  *
  * What it holds, per league (see buildLeague):
- *   - mSettings, mTeam, mRoster                    (league views)
+ *   - mSettings, mTeam, mRoster, mDraftDetail      (league views)
  *   - one week's mMatchup (week 4) with each side's lineup, bench included
  *   - mBoxscore: the same week, under that view's name. Neither client requests
  *     it (doc, "League views"); the shape is the mMatchup one, as a guess.
@@ -141,8 +141,10 @@ const PAIRS = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9], [10, 11]];
 function buildSettings({ faab, multiWeek }) {
   // Matchup period n covers scoring period n, except in the multi-week variant,
   // where period 4 covers scoring periods 4 and 5 and the later periods shift by one.
+  // Periods 1-13 are the regular season (matchupPeriodCount) and 14-16 the
+  // playoffs. Whether ESPN lists playoff periods here is not in the doc: a guess.
   const matchupPeriods = {};
-  for (let n = 1; n <= 13; n++) matchupPeriods[n] = multiWeek ? (n < 4 ? [n] : n === 4 ? [4, 5] : [n + 1]) : [n];
+  for (let n = 1; n <= 16; n++) matchupPeriods[n] = multiWeek ? (n < 4 ? [n] : n === 4 ? [4, 5] : [n + 1]) : [n];
   return {
     name: faab ? 'Fixture Pressbox League' : 'Fixture Pressbox League (rolling waivers)',
     size: 12,
@@ -156,6 +158,8 @@ function buildSettings({ faab, multiWeek }) {
       matchupPeriods,
       divisions: [{ id: 0, name: 'Fixture Division' }],
     },
+    // An invented deadline, 2026-11-18T17:00:00Z, in epoch milliseconds (the type is a guess).
+    tradeSettings: { deadlineDate: 1795021200000 },
     draftSettings: { type: 'SNAKE', keeperCount: 0, isTradingEnabled: false },
     acquisitionSettings: faab
       ? { isUsingAcquisitionBudget: true, acquisitionBudget: 100, minimumBid: 0, acquisitionType: 'WAIVERS_TRADITIONAL' }
@@ -342,6 +346,8 @@ export function buildLeague({ faab = true, multiWeek = false } = {}) {
       mMatchupWeek4: matchupWeek4,
       mBoxscore: matchupWeek4,
       mTransactions2: { ...base, transactions: buildTransactions({ faab }) },
+      // Only draftDetail.drafted is documented (doc, "Draft picks"); no picks are listed.
+      mDraftDetail: { ...base, draftDetail: { drafted: true } },
     },
     settings,
     scoredWeek: SCORED_WEEK,

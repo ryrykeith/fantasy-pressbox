@@ -84,6 +84,9 @@ test('the multi-week variant has a matchup period spanning two scoring periods',
   assert.deepEqual(settings.scheduleSettings.matchupPeriods[4], [4, 5]);
   const normal = await (await fake(leagueUrl(PUBLIC_LEAGUE_ID, ['mSettings']))).json();
   assert.ok(Object.values(normal.settings.scheduleSettings.matchupPeriods).every((p) => p.length === 1));
+  // Periods 14-16 are the playoffs, after the 13 regular-season periods.
+  assert.equal(normal.settings.scheduleSettings.matchupPeriodCount, 13);
+  assert.deepEqual(normal.settings.scheduleSettings.matchupPeriods[14], [14]);
 });
 
 test('the season endpoint and players_wl need no login', async () => {
@@ -118,7 +121,13 @@ test('a request the fixtures do not know rejects instead of going anywhere', asy
   const fake = createFakeEspnFetch();
   await assert.rejects(fake('https://example.com/league'), /outside the fixture host/);
   await assert.rejects(fake(`${BASE}?view=proTeamSchedules_wl`), /no fixture/);
-  await assert.rejects(fake(leagueUrl(PUBLIC_LEAGUE_ID, ['mDraftDetail'])), /no fixture for view/);
+  await assert.rejects(fake(leagueUrl(PUBLIC_LEAGUE_ID, ['mStandings'])), /no fixture for view/);
+});
+
+test('mDraftDetail carries only draftDetail.drafted', async () => {
+  const fake = createFakeEspnFetch();
+  const body = await (await fake(leagueUrl(PUBLIC_LEAGUE_ID, ['mDraftDetail']))).json();
+  assert.deepEqual(body.draftDetail, { drafted: true });
 });
 
 test('the fake logs URLs it serves, never cookies', async () => {

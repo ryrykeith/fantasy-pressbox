@@ -7,9 +7,11 @@ import { PACKAGE_ROOT } from '../src/config.mjs';
 import { NFL_TEAM_CODES } from '../src/nflTeams.mjs';
 import {
   EspnCodeError,
+  INJURY_STATUS_VALUES,
   LINEUP_SLOT_IDS,
   PRO_TEAM_IDS,
   SCORING_STAT_IDS,
+  injuryStatusLabel,
   lineupSlot,
   lineupSlotEntry,
   positionFromEligibleSlots,
@@ -149,6 +151,16 @@ test('position: bench, IR or slot 22 as the chosen slot throws, naming the playe
   assert.throws(() => positionFromEligibleSlots([22, 20], 'Pat Invented'), /Pat Invented/);
   // A "/" in the name takes the first slot whatever it is, so it cannot rescue a bench slot.
   assert.throws(() => positionFromEligibleSlots([20, 21], 'Taco Tuesday D/ST'), EspnCodeError);
+});
+
+test('injury statuses: exactly the fourteen the doc lists; ACTIVE prints nothing; others throw', () => {
+  const listed = /Injury status values listed by the JS client: (.*?)\. \|/.exec(DOC)[1].match(/`([A-Z_]+)`/g).map(unticked);
+  assert.deepEqual([...INJURY_STATUS_VALUES].sort(), listed.sort());
+  assert.equal(injuryStatusLabel('ACTIVE'), null);
+  assert.equal(injuryStatusLabel('OUT'), 'Out');
+  assert.equal(injuryStatusLabel('INJURY_RESERVE'), 'IR');
+  assert.throws(() => injuryStatusLabel('HAMSTRING'), EspnCodeError);
+  assert.throws(() => injuryStatusLabel(undefined), EspnCodeError);
 });
 
 test('there is no defaultPositionId table', () => {

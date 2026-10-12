@@ -398,6 +398,39 @@ export function scoringStat(id) {
   return lookup(SCORING_STATS, 'scoring stat ID', id);
 }
 
+// Injury statuses. Source: JS client constants.js INJURY_STATUSES, via
+// docs/espn-data.md "Players". UNVERIFIED. Rows: [ESPN value, printed label or
+// null]. The label is a project decision (doc, "Players"): ACTIVE means no
+// injury and prints nothing, as Sleeper's healthy null does; INJURY_RESERVE and
+// SUSPENSION take Sleeper's spellings IR and Sus; the rest are spelled out.
+const INJURY_STATUS_ROWS = [
+  ['ACTIVE', null],
+  ['BEREAVEMENT', 'Bereavement'],
+  ['DAY_TO_DAY', 'Day to day'],
+  ['DOUBTFUL', 'Doubtful'],
+  ['FIFTEEN_DAY_DL', '15-day DL'],
+  ['INJURY_RESERVE', 'IR'],
+  ['OUT', 'Out'],
+  ['PATERNITY', 'Paternity'],
+  ['PROBABLE', 'Probable'],
+  ['QUESTIONABLE', 'Questionable'],
+  ['SEVEN_DAY_DL', '7-day DL'],
+  ['SIXTY_DAY_DL', '60-day DL'],
+  ['SUSPENSION', 'Sus'],
+  ['TEN_DAY_DL', '10-day DL'],
+];
+const INJURY_STATUSES = new Map(INJURY_STATUS_ROWS);
+
+export const INJURY_STATUS_VALUES = Object.freeze([...INJURY_STATUSES.keys()]);
+
+/**
+ * ESPN's injuryStatus as the label a player line prints, or null for a healthy
+ * player (ACTIVE). A value the doc does not list throws.
+ */
+export function injuryStatusLabel(value) {
+  return lookup(INJURY_STATUSES, 'injury status', value);
+}
+
 /**
  * A player's position, from eligibleSlots and the player's full name, by
  * espn-api's rule (football/player.py:30-34, docs/espn-data.md "Positions"):

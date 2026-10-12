@@ -16,8 +16,9 @@
  *   - A message names the *type* found, never the value: a response is
  *     untrusted, and no value from it is worth the risk of echoing.
  *
- * Scope: what the league, team, player and week normalizers will read. Draft
- * detail (`mDraftDetail`) is not read in v1 and has no guard.
+ * Scope: what the league, team, player and week normalizers will read. Of
+ * draft detail (`mDraftDetail`), only `draftDetail.drafted` is read (doc,
+ * "Draft picks"; open question 28): the picks themselves are not read in v1.
  */
 
 export class EspnShapeError extends Error {
@@ -46,6 +47,9 @@ const TRANSACTION_TYPES = [
 ];
 const ITEM_TYPES = ['NONE', 'LINEUP', 'ADD', 'DROP', 'DRAFT', 'UNDRAFT', 'DRAFT_TRADE'];
 const WINNERS = ['HOME', 'AWAY', 'TIE', 'UNDECIDED'];
+const PLAYOFF_SEEDING_RULES = [
+  'UNKNOWN', 'H2H_RECORD', 'TOTAL_POINTS_SCORED', 'INTRA_DIVISION_RECORD', 'TOTAL_POINTS_AGAINST', 'RAW_STAT',
+];
 
 // --- Primitives ----------------------------------------------------------------
 const typeOf = (value) => (value === null ? 'null' : Array.isArray(value) ? 'an array' : typeof value);
@@ -176,6 +180,15 @@ export function guardSettings(body) {
     if (!/^\d+$/.test(key)) fail(view, path, 'is keyed by something other than a matchup period number');
     each(view, path, scoringPeriods, (at, id) => integer(view, at, id));
   }
+  // The seeding rule is read when present; the doc does not say it is always sent.
+  optional(sched.playoffSeedingRule, (v) =>
+    oneOf(view, 'settings.scheduleSettings.playoffSeedingRule', v, PLAYOFF_SEEDING_RULES));
+
+  // tradeSettings.deadlineDate is absent when the league has no deadline (doc, "League settings").
+  optional(s.tradeSettings, (trade) => {
+    object(view, 'settings.tradeSettings', trade);
+    optional(trade.deadlineDate, (v) => integer(view, 'settings.tradeSettings.deadlineDate', v));
+  });
 
   const draft = object(view, 'settings.draftSettings', s.draftSettings);
   string(view, 'settings.draftSettings.type', draft.type);
@@ -201,6 +214,18 @@ export function guardSettings(body) {
     number(view, `${path}.points`, item.points);
     object(view, `${path}.pointsOverrides`, item.pointsOverrides);
   });
+  return body;
+}
+
+/**
+ * `mDraftDetail`. Only `draftDetail.drafted` is documented (doc, "Draft picks");
+ * other draft states are open question 28, so nothing else is read.
+ */
+export function guardDraftDetail(body) {
+  const view = 'mDraftDetail';
+  envelope(view, body);
+  const detail = object(view, 'draftDetail', body.draftDetail);
+  boolean(view, 'draftDetail.drafted', detail.drafted);
   return body;
 }
 
