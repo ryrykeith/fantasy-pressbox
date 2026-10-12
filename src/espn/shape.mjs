@@ -338,6 +338,8 @@ export function guardTransactions(body) {
     integer(view, `${path}.teamId`, t.teamId);
     // bidAmount: present on FAAB claims only (doc, "Transactions and waivers").
     optional(t.bidAmount, (v) => number(view, `${path}.bidAmount`, v));
+    // processDate: when the move cleared, in epoch milliseconds (assumed). Absent means unknown, never now.
+    optional(t.processDate, (v) => integer(view, `${path}.processDate`, v));
     // `items` may be an empty list (doc: TRADE_ACCEPT rows often are), but never absent.
     each(view, `${path}.items`, t.items, (at, item) => {
       object(view, at, item);

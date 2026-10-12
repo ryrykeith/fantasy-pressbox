@@ -236,8 +236,11 @@ function isInside(parent, child) {
  * Asks for the league until Sleeper confirms one and the user recognises it.
  * Returns null when the user gives up. An ID Sleeper does not know, or a
  * Sleeper that cannot be reached, is reported here, at the point of entry.
+ *
+ * `lookup` is passed to the provider's lookupLeague beside the ID: ESPN needs
+ * `{ season, secrets }` for a private league; Sleeper ignores them.
  */
-async function askLeague(fallbackId, provider) {
+async function askLeague(fallbackId, provider, lookup = {}) {
   const name = provider.displayName;
   let leagueId = fallbackId;
   while (true) {
@@ -250,7 +253,7 @@ async function askLeague(fallbackId, provider) {
     say(dim(`  Checking with ${name}...`));
     let league;
     try {
-      league = await provider.lookupLeague({ id: candidate });
+      league = await provider.lookupLeague({ ...lookup, id: candidate });
     } catch (error) {
       say(red(`  ${error.message}`));
       if (!(await askYesNo('  Try a different ID?', true))) return null;

@@ -593,7 +593,8 @@ async function commandEdition(config, args, task) {
 
   const ctx = await openLeague(config, { refreshPlayers: args.refreshPlayers });
   const { league, teams, players, store, client } = ctx;
-  const { tradedPicks } = ctx.draftCapital;
+  // Null for a provider with no traded future picks (ESPN); every use is gated on that capability.
+  const tradedPicks = ctx.draftCapital?.tradedPicks ?? [];
   const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]));
 
   // Not computed for a format without future picks: Sleeper can still report

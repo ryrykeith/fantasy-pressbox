@@ -198,15 +198,34 @@ A provider also declares `capabilities` (`futurePicks`, `taxi`, `guillotine`,
 the ID space the provider's players use.
 
 A week is read as **WeekData** (`provider.normalizeWeek`; Sleeper's is in
-`src/sleeper/normalize.mjs`):
+`src/sleeper/normalize.mjs`, ESPN's in `src/espn/normalize.mjs`):
 
 - `rosters`: `{ rosterId, playerIds, starterIds, starterPoints, playerPoints,
   points, pairingKey }` per roster. `starterIds` lines up with the league's
   starting slots, and null is an empty slot. Two rosters sharing a
-  `pairingKey` are opponents (`src/league/pairing.mjs`).
+  `pairingKey` are opponents (`src/league/pairing.mjs`). `points` is the
+  team's score as the provider reports it, never a sum of its players.
+  - A provider that may report no points for a player (ESPN) also lists
+    `noPointsIds` and `byeIds`. A player in `noPointsIds` has no key in
+    `playerPoints` and null in `starterPoints`; `analyzeWeek` gives him null
+    points, never 0. If he is also in `byeIds` (the bye table says his NFL
+    team had no game) he is flagged `onBye` and counts 0 for the optimal
+    lineup. Any other player without points makes that team's optimal lineup
+    and lineup efficiency unknowable, so they are left out of its record and
+    `pointsUnreported` names the players. A roster without these lists
+    (Sleeper's) reads a missing value as 0, as it always has.
 - `transactions`: `normalizeTransactions` output, with `moves` and `sides`.
+  An ESPN trade whose contents ESPN did not send has `contentsUnknown: true`
+  and no moves or sides.
 - `bids`: `{ playerId, rosterId, week, amount, outcome, type, transactionId }`,
-  won and lost.
+  won and lost. FAAB only: a rolling-waiver league has none.
+- `multiWeekMatchup`: `{ matchupPeriod, weeks }`, only when the week's
+  matchup spans more than one NFL week (ESPN). The rosters' `points` and
+  `pairingKey` are then null, because the provider's score is the whole
+  period's; preview and recap refuse such a week.
+
+`normalizeWeek` is handed the season's bye table as a function and reads it
+only if it needs it, so a Sleeper week never touches it.
 
 The raw bundles under `data/raw/` are saved as the provider returned them,
 tagged with that provider, and normalized on read, so a league folder written

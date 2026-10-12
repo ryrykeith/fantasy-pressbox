@@ -16,7 +16,9 @@
  *     a declared guillotine (decision 9) and a league that starts individual
  *     defensive players (open question 31).
  */
+import { byeWeekFor } from '../analysis/byeExposure.mjs';
 import { parseDeclaredFormatType, resolveFormatType } from '../format.mjs';
+import { describePlayer as describePlayerLine, playerFor } from '../league/players.mjs';
 import {
   EspnCodeError,
   injuryStatusLabel,
@@ -31,8 +33,10 @@ import {
   guardDraftDetail,
   guardPlayers,
   guardRosters,
+  guardSchedule,
   guardSettings,
   guardTeams,
+  guardTransactions,
 } from './shape.mjs';
 
 /** An ESPN league this version deliberately does not cover. The message says why. */
@@ -469,4 +473,352 @@ export function normalizePlayers(playersWl) {
   const players = {};
   for (const player of playersWl) players[String(player.id)] = normalizePlayer(player);
   return players;
+}
+
+// --- Week ----------------------------------------------------------------------
+
+/**
+ * The matchup period that covers scoring period `week`, from
+ * `scheduleSettings.matchupPeriods` (doc, "Scoring period versus matchup
+ * period"): `{ id, weeks }`, or null when no period lists the week. A week
+ * listed under two periods is refused: which matchup it belongs to would be a
+ * guess.
+ */
+export function matchupPeriodFor(scheduleSettings, week) {
+  const covering = Object.entries(scheduleSettings.matchupPeriods)
+    .filter(([, weeks]) => weeks.includes(week))
+    .map(([id, weeks]) => ({ id: Number(id), weeks: [...weeks].sort((a, b) => a - b) }));
+  if (covering.length > 1) {
+    throw new EspnShapeError(
+      'mSettings',
+      'settings.scheduleSettings.matchupPeriods',
+      `lists scoring period ${week} under more than one matchup period (${covering.map((p) => p.id).join(', ')})`,
+    );
+  }
+  return covering[0] ?? null;
+}
+
+/** The week's actual-points stats entry for a lineup player, or undefined (doc, "Matchups"; open question 32). */
+function actualStats(player, week) {
+  return player.stats.find((s) => s && s.scoringPeriodId === week && s.statSourceId === 0);
+}
+
+/**
+ * Resolves the bye table only when it is needed: `byeWeeks` may be the table
+ * (a Map from parseByeWeekTable) or a function returning it, so a week where
+ * every player has points never reads the file.
+ */
+function byeTableResolver(byeWeeks) {
+  let table;
+  return () => {
+    if (table === undefined) table = typeof byeWeeks === 'function' ? byeWeeks() : byeWeeks ?? null;
+    return table;
+  };
+}
+
+/**
+ * One matchup side as a WeekData roster.
+ *
+ * Team points are ESPN's `totalPoints`, never a sum of players: a player with
+ * no points entry cannot change a team's score.
+ *
+ * A player with no actual-points entry (operator decision, 2026-10-12; doc
+ * open question 32) has no points value: his key is absent from
+ * `playerPoints` and `starterPoints` holds null at his index. He is listed in
+ * `noPointsIds`. When the bye table says his current NFL team had no game
+ * that week, he is also in `byeIds`, a sourced fact. src/analysis/week.mjs
+ * reads both lists; a roster without them (Sleeper's) is read as it always was.
+ */
+function weekRoster(side, { week, layout, pairingKey, points, byeTable, path }) {
+  const entries = side.rosterForCurrentScoringPeriod.entries;
+  const { playerIds, starterIds } = arrangeLineup(entries, layout, {
+    view: 'mMatchupScore/mScoreboard',
+    path: `${path}.rosterForCurrentScoringPeriod.entries`,
+  });
+
+  const playerPoints = {};
+  const noPointsIds = [];
+  const byeIds = [];
+  for (const entry of entries) {
+    const player = entry.playerPoolEntry.player;
+    const id = String(player.id);
+    const stats = actualStats(player, week);
+    if (stats) {
+      playerPoints[id] = round2(stats.appliedTotal);
+      continue;
+    }
+    noPointsIds.push(id);
+    // His team now: with no stats entry there is no record of the team he played for that week.
+    const nflTeam = proTeamCode(player.proTeamId);
+    const table = nflTeam ? byeTable() : null;
+    if (table && byeWeekFor(table, nflTeam, { source: 'the bye-week table' }) === week) byeIds.push(id);
+  }
+
+  return {
+    rosterId: side.teamId,
+    playerIds,
+    starterIds,
+    starterPoints: starterIds.map((id) => (id === null ? null : (playerPoints[id] ?? null))),
+    playerPoints,
+    points,
+    pairingKey,
+    noPointsIds,
+    byeIds,
+  };
+}
+
+/**
+ * The week's rosters, one per matchup side in the week's matchup period.
+ *
+ * `pairingKey` is the matchup's place in that period's schedule (1, 2, ...),
+ * shared by its two sides; a side with no opponent (no `away`: a bye) has
+ * null. In a matchup period covering more than one scoring period, ESPN's
+ * `totalPoints` is the period's, not this week's, so it is not assigned to
+ * the week: `points` and `pairingKey` are null, and the WeekData is marked
+ * (decision 12).
+ */
+function weekRosters(body, { week, period, layout, byeTable }) {
+  if (!period) return [];
+  const multiWeek = period.weeks.length > 1;
+  const rosters = [];
+  let matchupNumber = 0;
+  body.schedule.forEach((m, i) => {
+    if (m.matchupPeriodId !== period.id) return;
+    matchupNumber += 1;
+    const pairingKey = multiWeek || m.away === undefined ? null : matchupNumber;
+    for (const name of ['home', 'away']) {
+      const side = m[name];
+      if (side === undefined) continue;
+      rosters.push(
+        weekRoster(side, {
+          week,
+          layout,
+          pairingKey,
+          points: multiWeek ? null : round2(side.totalPoints),
+          byeTable,
+          path: `schedule[${i}].${name}`,
+        }),
+      );
+    }
+  });
+  return rosters;
+}
+
+/** ESPN transaction types that are completed moves, as the shared types (doc, "Transactions and waivers"). */
+const MOVE_TYPES = {
+  TRADE_ACCEPT: 'trade',
+  WAIVER: 'waiver',
+  FREEAGENT: 'free_agent',
+  // ROSTER carries a manager's own adds and drops (assumed: the fixture's
+  // reading; the doc lists the type without saying what it holds).
+  ROSTER: 'free_agent',
+};
+
+/** Item types that move a player between a team and the pool, or between teams. LINEUP and the rest do not. */
+const MOVING_ITEMS = new Set(['ADD', 'DROP']);
+
+/** A team ID that names a team: ESPN's team IDs start at 1 (the fixture uses 0 for "no team"; assumed). */
+const isTeam = (id) => Number.isInteger(id) && id > 0;
+
+/** A player as a reference: enough to identify and judge, no prose. Same shape as Sleeper's. */
+function playerRef(id, players) {
+  const player = playerFor(players, id);
+  return { id, name: player.name, position: player.position, nflTeam: player.team, age: player.age ?? null };
+}
+
+/**
+ * An ESPN transaction's items as two maps, player ID to team ID: `addedTo`
+ * (who received each player) and `droppedBy` (who gave him up), the same
+ * reading Sleeper's adds and drops are given. An ADD or DROP item names both
+ * ends; an end that is no team is the player pool.
+ */
+function playerMoves(items) {
+  const addedTo = new Map();
+  const droppedBy = new Map();
+  for (const item of items) {
+    if (!MOVING_ITEMS.has(item.type)) continue;
+    const id = String(item.playerId);
+    if (isTeam(item.toTeamId)) addedTo.set(id, item.toTeamId);
+    if (isTeam(item.fromTeamId)) droppedBy.set(id, item.fromTeamId);
+  }
+  return { addedTo, droppedBy };
+}
+
+/** When a move cleared: `processDate` in epoch milliseconds (assumed; doc, "Transactions and waivers"). */
+function completedAt(txn) {
+  return Number.isFinite(txn.processDate) ? new Date(txn.processDate).toISOString() : null;
+}
+
+/**
+ * Completed moves in the shared transaction shape src/sleeper/ produces:
+ * `{ type, week, teams, bid, moves, id, completedAt, rosterIds, sides }`.
+ *
+ * - Filtered on type, never on `status`, whose values are unknown (open
+ *   question 6). TRADE_ACCEPT, WAIVER, FREEAGENT and ROSTER are moves;
+ *   WAIVER_ERROR is a failed claim (a lost bid, not a move); proposals, vetoes
+ *   and the rest are not moves.
+ * - `bid` is a FAAB claim's `bidAmount`, and only that. Under rolling waivers
+ *   no claim carries a bid, whatever the response holds.
+ * - A TRADE_ACCEPT with no items (doc: ESPN often sends them empty) is kept,
+ *   with the team that made it and `contentsUnknown: true`, and no moves or
+ *   sides. It is never "a trade of nothing".
+ * - ESPN trades carry no picks and no FAAB, so those lists are empty and the
+ *   amounts 0, as on a Sleeper trade without them.
+ */
+export function normalizeTransactions(
+  transactions,
+  { league = null, teams = [], players = {}, describePlayer = describePlayerLine } = {},
+) {
+  const teamsByRosterId = new Map((teams || []).map((team) => [team.rosterId, team]));
+  const name = (rosterId) => teamsByRosterId.get(rosterId)?.name ?? `Roster ${rosterId}`;
+  const faab = league?.waiverType === 'faab';
+
+  const out = [];
+  for (const txn of transactions) {
+    const type = MOVE_TYPES[txn.type];
+    if (!type) continue;
+    const { addedTo, droppedBy } = playerMoves(txn.items);
+    const received = [...addedTo];
+    const released = [...droppedBy];
+
+    if (type === 'trade' && txn.items.length === 0) {
+      const rosterIds = isTeam(txn.teamId) ? [txn.teamId] : [];
+      out.push({
+        type,
+        week: txn.scoringPeriodId,
+        teams: rosterIds.map(name),
+        bid: null,
+        moves: [],
+        id: String(txn.id),
+        completedAt: completedAt(txn),
+        rosterIds,
+        sides: [],
+        contentsUnknown: true,
+      });
+      continue;
+    }
+
+    const bid = type === 'waiver' && faab && typeof txn.bidAmount === 'number' ? txn.bidAmount : null;
+    const moves = [
+      ...received.map(([id, rosterId]) => `${name(rosterId)} gets ${describePlayer(id, players[id])}`),
+      ...released.map(([id, rosterId]) => `${name(rosterId)} drops ${describePlayer(id, players[id])}`),
+    ];
+    if (moves.length === 0) continue;
+
+    // Every team that moved a player: the one that made the transaction first, then the others in item order.
+    const movers = [...received.map(([, to]) => to), ...released.map(([, from]) => from)];
+    const rosterIds = [...new Set([txn.teamId, ...movers])].filter((rosterId) => movers.includes(rosterId));
+
+    const sides = rosterIds.map((rosterId) => {
+      const side = {
+        rosterId,
+        team: name(rosterId),
+        received: {
+          players: received
+            .filter(([, to]) => to === rosterId)
+            .map(([id]) => ({ ...playerRef(id, players), from: droppedBy.get(id) ?? null })),
+          picks: [],
+          faab: 0,
+        },
+        gaveUp: {
+          players: released
+            .filter(([, from]) => from === rosterId)
+            .map(([id]) => ({ ...playerRef(id, players), to: addedTo.get(id) ?? null })),
+          picks: [],
+          faab: 0,
+        },
+      };
+      // Only the team that won the claim paid for it.
+      if (bid !== null && side.received.players.length > 0) side.waiverBid = bid;
+      return side;
+    });
+
+    out.push({
+      type,
+      week: txn.scoringPeriodId,
+      teams: rosterIds.map(name),
+      bid,
+      moves,
+      id: String(txn.id),
+      completedAt: completedAt(txn),
+      rosterIds,
+      sides,
+    });
+  }
+  return out;
+}
+
+/**
+ * FAAB bids, won and lost, in the shared shape: `{ playerId, rosterId, week,
+ * amount, outcome, type, transactionId }`. A WAIVER with a `bidAmount` is a
+ * won bid and a WAIVER_ERROR with one a lost bid (doc, "Transactions and
+ * waivers"). One bid per player added. Under rolling waivers there are no
+ * bids: none is made up.
+ */
+export function normalizeBids(transactions, { league = null } = {}) {
+  if (league?.waiverType !== 'faab') return [];
+  const outcomes = { WAIVER: 'won', WAIVER_ERROR: 'lost' };
+  const bids = [];
+  for (const txn of transactions) {
+    const outcome = outcomes[txn.type];
+    if (!outcome || typeof txn.bidAmount !== 'number') continue;
+    for (const item of txn.items) {
+      if (item.type !== 'ADD') continue;
+      bids.push({
+        playerId: String(item.playerId),
+        rosterId: isTeam(item.toTeamId) ? item.toTeamId : txn.teamId,
+        week: txn.scoringPeriodId,
+        amount: txn.bidAmount,
+        outcome,
+        type: 'waiver',
+        transactionId: String(txn.id),
+      });
+    }
+  }
+  return bids;
+}
+
+/**
+ * One saved ESPN week as WeekData (plan §6):
+ *
+ *   week          the scoring period the bundle was saved for
+ *   rosters       one per matchup side (weekRosters)
+ *   transactions  completed moves in the shared shape (normalizeTransactions)
+ *   bids          FAAB bids only (normalizeBids)
+ *
+ * and, only when the week's matchup period covers more than one scoring
+ * period, `multiWeekMatchup: { matchupPeriod, weeks }`, so preview and recap
+ * can refuse it. Such a week is never split or summed (decision 12).
+ *
+ * `rawBundle` is what the ESPN provider's fetchWeek saves: `{ week, matchups,
+ * transactions }`, where `matchups` is the mMatchupScore + mScoreboard +
+ * mSettings response for the week and `transactions` the mTransactions2 one.
+ * Both pass their shape guards before anything is read.
+ *
+ * `byeWeeks` is the season's bye table, or a function returning it, read only
+ * when a player has no points entry. Pure otherwise: fetches nothing.
+ */
+export function normalizeWeek(
+  rawBundle,
+  { league = null, teams = [], players = {}, describePlayer = describePlayerLine, byeWeeks = null } = {},
+) {
+  const bundle = rawBundle || {};
+  const week = bundle.week;
+  if (!Number.isInteger(week)) throw new TypeError('An ESPN week bundle needs its week');
+  guardSettings(bundle.matchups);
+  guardSchedule(bundle.matchups, { week });
+  guardTransactions(bundle.transactions);
+
+  const settings = bundle.matchups.settings;
+  const layout = startingSlotLayout(settings.rosterSettings.lineupSlotCounts);
+  const period = matchupPeriodFor(settings.scheduleSettings, week);
+  const byeTable = byeTableResolver(byeWeeks);
+
+  return {
+    week,
+    rosters: weekRosters(bundle.matchups, { week, period, layout, byeTable }),
+    transactions: normalizeTransactions(bundle.transactions.transactions, { league, teams, players, describePlayer }),
+    bids: normalizeBids(bundle.transactions.transactions, { league }),
+    ...(period && period.weeks.length > 1 ? { multiWeekMatchup: { matchupPeriod: period.id, weeks: period.weeks } } : {}),
+  };
 }

@@ -114,7 +114,11 @@ function readBundle(bundle, { store, league, teams = [], players = {}, describeP
         `Otherwise move ${path} out of this folder.`,
     );
   }
-  return provider.normalizeWeek(bundle, { league, teams, players, ...(describePlayer ? { describePlayer } : {}) });
+  // The bye table is handed over unread: a provider reads it only when it
+  // needs it (ESPN, for a player with no points that week), so a Sleeper week
+  // never touches it.
+  const byeWeeks = () => loadByeWeekTable({ season: league.season });
+  return provider.normalizeWeek(bundle, { league, teams, players, byeWeeks, ...(describePlayer ? { describePlayer } : {}) });
 }
 
 /**

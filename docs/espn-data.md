@@ -657,6 +657,22 @@ team he played for.
   operator doesn't manage trades in. The coverage matrix says so.
 - Picks never appear in an ESPN trade (see [Draft picks](#draft-picks)).
 
+**How the week normalizer reads them** (`src/espn/normalize.mjs`). These are
+readings, not facts from a source; each is **assumed** until task 2.2:
+- Moves are `TRADE_ACCEPT` (a trade), `WAIVER` (a claim), `FREEAGENT` and
+  `ROSTER` (a manager's own adds and drops). `WAIVER_ERROR` is a lost bid,
+  not a move. The other types (proposals, vetoes, declines, draft and lineup
+  rows) are not moves. Only `ADD` and `DROP` items move a player.
+- An item names both ends of a move: `toTeamId` received the player and
+  `fromTeamId` gave him up. A team ID of 0 or below is the player pool, not a
+  team (the fixture uses 0; neither client says).
+- `processDate`, in epoch milliseconds, is when a move cleared
+  (`completedAt`). It is null when absent.
+- A week's matchups are the `schedule[]` entries whose `matchupPeriodId` is
+  the matchup period that `scheduleSettings.matchupPeriods` lists the week
+  under, so the bundle is fetched with `mSettings` alongside
+  `mMatchupScore` and `mScoreboard`.
+
 ## Draft picks
 
 | Fact | Label and source |
@@ -863,9 +879,13 @@ confirms them against a real league.
 32. Whether ESPN writes a `statSourceId` 0 (actual points) entry in
     `stats[]` for a player who did not play that week (bye, inactive, IR).
     **Unknown.** `guardSchedule` allows the entry to be absent and leaves it
-    absent. **decision**: the week normalizer must never turn it into 0. A
-    starter with no entry is refused, naming the player; a bench or IR player
-    with no entry has unavailable points.
+    absent. **decision** (operator, 2026-10-12): unavailable, not refused, and
+    never 0 by default. Team points are always the side's `totalPoints`. A
+    player with no entry has no points value. If the bye table says his
+    current NFL team had no game that week he is flagged `onBye` and counts 0
+    for the optimal lineup. Any other player without an entry, starter or
+    bench, makes his team's lineup efficiency and optimal lineup unavailable
+    for the week (`src/espn/normalize.mjs`, `src/analysis/week.mjs`).
 33. Whether ESPN sends `waiverRank` or `wavierRank` on `teams[]` (espn-api and
     the JS client disagree; one is a typo). **Unknown.** `guardTeams` requires
     `waiverRank` only in a rolling-waiver league (`{ faab: false }`); a FAAB

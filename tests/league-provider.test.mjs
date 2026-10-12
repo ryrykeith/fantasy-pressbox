@@ -113,7 +113,7 @@ test('POST_MAX_LENGTH wins over SLEEPER_POST_MAX_LENGTH, which is still read', (
 /* ----------------------------------------------------------------- registry */
 
 test('the registry knows Sleeper, with every capability', () => {
-  assert.deepEqual(PROVIDER_NAMES, ['sleeper']);
+  assert.deepEqual(PROVIDER_NAMES, ['sleeper', 'espn']);
   const sleeper = getProvider('sleeper');
   assert.equal(sleeper.displayName, 'Sleeper');
   assert.equal(sleeper.experimental, false);
@@ -121,7 +121,25 @@ test('the registry knows Sleeper, with every capability', () => {
   assert.deepEqual({ ...sleeper.capabilities }, { futurePicks: true, taxi: true, guillotine: true, lastScoredWeek: true });
   // A League from before leagues were tagged is Sleeper's.
   assert.equal(providerOf({}).name, 'sleeper');
-  assert.throws(() => getProvider('nope'), /Known providers: sleeper/);
+  assert.throws(() => getProvider('nope'), /Known providers: sleeper, espn/);
+});
+
+test('the registry knows ESPN: experimental, with no future picks, taxi or guillotine', () => {
+  const espn = getProvider('espn');
+  assert.equal(espn.displayName, 'ESPN');
+  assert.equal(espn.experimental, true);
+  assert.equal(espn.playerIdSpace, 'espn');
+  assert.deepEqual({ ...espn.capabilities }, { futurePicks: false, taxi: false, guillotine: false, lastScoredWeek: true });
+  assert.equal(providerOf({ provider: 'espn' }).name, 'espn');
+  for (const method of ['fromConfig', 'forClient', 'lookupLeague', 'normalizeWeek']) {
+    assert.equal(typeof espn[method], 'function', method);
+  }
+});
+
+test('LEAGUE_PROVIDER=espn is accepted at config load', () => {
+  const config = configWith(['LEAGUE_PROVIDER=espn', 'ESPN_LEAGUE_ID=1000001', 'LEAGUE_SEASON=2026']);
+  assert.equal(config.league.provider, 'espn');
+  assert.equal(config.league.id, '1000001');
 });
 
 test("the format gates also take a provider's capabilities", () => {
@@ -172,7 +190,7 @@ test('a saved bundle tagged with another provider is refused, naming both and th
     () => readRosterWindow({ store, league, teams, players, throughWeek: 1 }),
   ]) {
     assert.throws(read, (error) => {
-      assert.ok(error.message.includes(`${path} was saved from espn, but this league is on Sleeper`), error.message);
+      assert.ok(error.message.includes(`${path} was saved from ESPN, but this league is on Sleeper`), error.message);
       assert.match(error.message, /set LEAGUE_PROVIDER=espn in its \.env/);
       assert.ok(error.message.includes(`Otherwise move ${path} out of this folder`));
       return true;
