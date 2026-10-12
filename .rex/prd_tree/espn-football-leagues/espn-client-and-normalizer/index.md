@@ -17,8 +17,10 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [ESPN client and shape guards](./espn-client-and-shape-guards.md) | pending |
-| [ESPN code tables](./espn-code-tables.md) | pending |
+| [ESPN code tables](./espn-code-tables.md) | completed |
 | [ESPN fixtures and fake fetch](./espn-fixtures-and-fake-fetch.md) | pending |
 | [ESPN league, team and player normalizer](./espn-league-team-and-player-normalizer.md) | pending |
 | [ESPN week normalizer and provider](./espn-week-normalizer-and-provider.md) | pending |
 | [One NFL team alias module](./one-nfl-team-alias-module.md) | completed |
+| [positionFromEligibleSlots refuses every D/ST player (slot name "D/ST" contains '/')](./positionfromeligibleslots-refuses.md) | pending |
+| [positionFromEligibleSlots throws for IDP players whose first slot is DT/DE/CB/S, which can break non-IDP leagues](./positionfromeligibleslots-throws-for.md) | pending |
