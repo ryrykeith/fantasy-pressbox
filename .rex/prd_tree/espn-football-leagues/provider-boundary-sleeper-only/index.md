@@ -22,4 +22,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Normalized week data and the readers of saved weeks](./normalized-week-data-and-the-readers.md) | completed |
 | [Provider boundary guard test and architecture docs](./provider-boundary-guard-test-and.md) | pending |
 | [Provider interface, registry and LEAGUE_PROVIDER](./provider-interface-registry-and-league.md) | completed |
-| [Setup, doctor and the CLI through the provider](./setup-doctor-and-the-cli-through-the.md) | pending |
+| [Setup, doctor and the CLI through the provider](./setup-doctor-and-the-cli-through-the.md) | completed |
