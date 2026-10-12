@@ -19,4 +19,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 |-------|--------|
 | [Check league views against a test league (operator-run)](./check-league-views-against-a-test.md) | blocked |
 | [Check the public ESPN endpoints (operator-run)](./check-the-public-espn-endpoints.md) | blocked |
-| [Write docs/espn-data.md from cited sources](./write-docs-espn-data-md-from-cited.md) | pending |
+| [Write docs/espn-data.md from cited sources](./write-docs-espn-data-md-from-cited.md) | completed |
