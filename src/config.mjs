@@ -36,6 +36,7 @@ import { fileURLToPath } from 'node:url';
 import { parseYaml } from './lib/yaml.mjs';
 import { environmentWithFile } from './lib/env.mjs';
 import { parseDeclaredFormatType } from './format.mjs';
+import { DEFAULT_PROVIDER, PROVIDER_NAMES, providerDisplayName } from './providers.mjs';
 import { parseDeclaredEliminations } from './analysis/elimination.mjs';
 import { byeWeekTableSource, parseByeWeekTable } from './analysis/byeExposure.mjs';
 import { parseDeclaredDraftOrder, parseDeclaredRoundOrder } from './rookieDraft.mjs';
@@ -378,6 +379,67 @@ function deepMerge(base, override, trail = []) {
   return result;
 }
 
+/** The first of `keys` set to a non-empty value in `env`, trimmed; null when none is. */
+function firstSet(env, keys) {
+  for (const key of keys) {
+    const value = env[key] === undefined || env[key] === null ? '' : String(env[key]).trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+/**
+ * The .env key holding each platform's league ID. ESPN is listed before its
+ * provider exists so that a folder naming both IDs is refused rather than
+ * quietly read as Sleeper.
+ */
+const LEAGUE_ID_KEYS = { sleeper: 'SLEEPER_LEAGUE_ID', espn: 'ESPN_LEAGUE_ID' };
+
+/** The .env key that names a league's provider. */
+export const LEAGUE_PROVIDER_KEY = 'LEAGUE_PROVIDER';
+
+/**
+ * Reads LEAGUE_PROVIDER, or refuses it.
+ *
+ * Absent or empty means Sleeper, so a league folder written before there was
+ * a choice keeps working. A misspelling stops the command, listing the valid
+ * values, rather than falling back: a league read from the wrong platform is
+ * a run that fails somewhere unrelated, or worse, does not fail.
+ */
+export function parseLeagueProvider(value, { source = `${LEAGUE_PROVIDER_KEY} in .env` } = {}) {
+  const text = value === undefined || value === null ? '' : String(value).trim().toLowerCase();
+  if (text === '') return null;
+  if (PROVIDER_NAMES.includes(text)) return text;
+  const valid = PROVIDER_NAMES.map((name) => `  ${name}  — ${providerDisplayName(name)}`).join('\n');
+  throw new Error(
+    `${source} is "${String(value).trim()}", which is not a league provider.\n\n` +
+      `Set ${LEAGUE_PROVIDER_KEY} to one of:\n${valid}\n\n` +
+      `Or remove the line, and the league is read as ${providerDisplayName(DEFAULT_PROVIDER)}.`,
+  );
+}
+
+/** `config.league`: `{ provider, id, season, secrets }`, from .env. */
+function readLeagueSettings(env) {
+  const declared = parseLeagueProvider(env[LEAGUE_PROVIDER_KEY]);
+  const named = Object.entries(LEAGUE_ID_KEYS).filter(([, key]) => firstSet(env, [key]));
+  if (!declared && named.length > 1) {
+    const keys = named.map(([, key]) => key);
+    throw new Error(
+      `.env sets both ${keys.join(' and ')}, so it does not say which league this folder covers.\n\n` +
+        `Add ${LEAGUE_PROVIDER_KEY} to .env, naming the platform: ` +
+        `${named.map(([name]) => `${LEAGUE_PROVIDER_KEY}=${name}`).join(' or ')}.`,
+    );
+  }
+  const provider = declared ?? DEFAULT_PROVIDER;
+  return {
+    provider,
+    id: firstSet(env, [LEAGUE_ID_KEYS[provider]]) ?? '',
+    season: firstSet(env, ['LEAGUE_SEASON', 'SLEEPER_SEASON']),
+    // Sleeper's API is public: there is nothing secret to hold.
+    secrets: {},
+  };
+}
+
 function bool(value, fallback) {
   if (value === undefined || value === '') return fallback;
   return /^(1|true|yes|on)$/i.test(String(value));
@@ -452,10 +514,15 @@ export function loadConfig({
     source: `tank_watch.start_week in ${rookieDraftPath}`,
   });
 
+  // Which platform the league is on, and which league. Refused here, before
+  // any command runs, when the .env cannot say.
+  const league = readLeagueSettings(env);
+
   // .env may override the two editorial knobs a beginner is most likely to want.
   if (env.PRESSBOX_TONE) editorial.tone = env.PRESSBOX_TONE;
-  if (env.SLEEPER_POST_MAX_LENGTH) {
-    editorial.output.sleeper_max_chars = Number.parseInt(env.SLEEPER_POST_MAX_LENGTH, 10);
+  const postMaxLength = firstSet(env, ['POST_MAX_LENGTH', 'SLEEPER_POST_MAX_LENGTH']);
+  if (postMaxLength) {
+    editorial.output.sleeper_max_chars = Number.parseInt(postMaxLength, 10);
   }
   editorial.output.include_emoji = bool(env.INCLUDE_EMOJI, editorial.output.include_emoji);
 
@@ -473,8 +540,12 @@ export function loadConfig({
     },
     // The workspace prompts folder, or null when there is none to consult.
     promptsDir,
-    leagueId: (env.SLEEPER_LEAGUE_ID || '').trim(),
-    season: env.SLEEPER_SEASON ? String(env.SLEEPER_SEASON).trim() : null,
+    // { provider, id, season, secrets }. Secrets stay here: nothing copies
+    // them into process.env.
+    league,
+    // Aliases of config.league, until every reader has moved to it.
+    leagueId: league.id,
+    season: league.season,
     week: env.FANTASY_WEEK ? Number.parseInt(env.FANTASY_WEEK, 10) : null,
     leagueDisplayName: env.LEAGUE_DISPLAY_NAME || null,
     // What kind of league this is, if the operator said. Null means "work it

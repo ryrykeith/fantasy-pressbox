@@ -67,8 +67,15 @@ export function hasMatchups(format) {
  */
 export const FORMATS_WITH_ELIMINATION = ['guillotine'];
 
-/** Are teams knocked out of this format as the season goes on? */
-export function hasEliminations(format) {
+/**
+ * Are teams knocked out of this format as the season goes on?
+ *
+ * `capabilities` are the league provider's (src/providers.mjs). A provider
+ * that cannot run a guillotine league has no eliminations, whatever the
+ * format says. Omitted, only the format decides.
+ */
+export function hasEliminations(format, capabilities = null) {
+  if (capabilities && capabilities.guillotine === false) return false;
   return FORMATS_WITH_ELIMINATION.includes(format?.type);
 }
 
@@ -82,8 +89,15 @@ export function hasEliminations(format) {
  */
 export const FORMATS_WITHOUT_FUTURE_PICKS = ['redraft'];
 
-/** Do picks for future drafts exist as tradeable assets in this format? */
-export function hasFutureDraftCapital(format) {
+/**
+ * Do picks for future drafts exist as tradeable assets in this format?
+ *
+ * `capabilities` are the league provider's (src/providers.mjs): a provider
+ * that reports no traded future picks has no future draft capital, whatever
+ * the format says. Omitted, only the format decides.
+ */
+export function hasFutureDraftCapital(format, capabilities = null) {
+  if (capabilities && capabilities.futurePicks === false) return false;
   return !FORMATS_WITHOUT_FUTURE_PICKS.includes(format?.type);
 }
 

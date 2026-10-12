@@ -65,14 +65,15 @@ test('the pinned reads cover unpaired rosters, the guillotine no-pairing path an
   assert.equal(PINNED.dynasty.week1Settled.kept, true);
 });
 
-test('captureWeek saves the raw bundle exactly as fetched, with no provider field added', async () => {
+test('captureWeek saves the raw bundle exactly as fetched, tagged with its provider', async () => {
   const store = createStore({ dataDir: mkdtempSync(join(tmpdir(), 'pressbox-week-data-')) });
   const client = { matchups: async () => WEEK_2_MATCHUPS, transactions: async () => WEEK_2_TRANSACTIONS };
   const league = { ...leagueOf('dynasty'), lastScoredWeek: 1 };
   await captureWeek({ client, store, league, teams, players, week: 2 });
 
   const saved = store.loadRaw('2026', 2);
-  assert.deepEqual(Object.keys(saved), ['fetchedAt', 'leagueId', 'week', 'matchups', 'transactions']);
+  assert.deepEqual(Object.keys(saved), ['provider', 'fetchedAt', 'leagueId', 'week', 'matchups', 'transactions']);
+  assert.equal(saved.provider, 'sleeper');
   assert.deepEqual(saved.matchups, WEEK_2_MATCHUPS);
   assert.deepEqual(saved.transactions, WEEK_2_TRANSACTIONS);
 });
