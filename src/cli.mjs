@@ -41,7 +41,8 @@ import {
   readRosterWindow,
 } from './pipeline.mjs';
 import { FUTURE_STOCK_TASK, refuseFutureStock } from './futureStock.mjs';
-import { normalizeTransactions, normalizeFutureDraftCapital } from './sleeper/normalize.mjs';
+import { normalizeTransactions } from './sleeper/normalize.mjs';
+import { normalizeFutureDraftCapital } from './league/draftCapital.mjs';
 import {
   TASKS,
   RANKING_TASKS,
@@ -590,7 +591,8 @@ async function commandEdition(config, args, task) {
   }
 
   const ctx = await openLeague(config, { refreshPlayers: args.refreshPlayers });
-  const { league, teams, players, store, client, tradedPicks } = ctx;
+  const { league, teams, players, store, client } = ctx;
+  const { tradedPicks } = ctx.draftCapital;
   const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]));
 
   // Not computed for a format without future picks: Sleeper can still report

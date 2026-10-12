@@ -767,9 +767,10 @@ draft from this season's standings. It applies the rule declared in
 to the projected playoff field (`projectPlayoffField`). It returns numbers
 only.
 
-- **Ownership.** `futurePickOwnership` (`src/sleeper/normalize.mjs`) starts
-  every team with its own pick in every round and applies Sleeper's
-  `traded_picks` on top. `normalizeFutureDraftCapital` is built on the same
+- **Ownership.** `futurePickOwnership` (`src/league/draftCapital.mjs`) starts
+  every team with its own pick in every round and applies the normalized
+  traded picks (`openLeague`'s `draftCapital.tradedPicks`, from Sleeper's
+  `traded_picks`) on top. `normalizeFutureDraftCapital` is built on the same
   walk. Each slot carries `originalTeam` (whose finish decides the slot) and
   `owner` (who holds the pick). Anything reporting a pick names the owner.
 - **Slots.** Each slot reports its group, its max points-for, and the gap to

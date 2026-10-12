@@ -6,12 +6,12 @@
  * Each step is a separate module. This file is only the sequence.
  */
 import { createClient } from './sleeper/client.mjs';
+import { futurePickOwnership, isFuturePick } from './league/draftCapital.mjs';
 import {
-  futurePickOwnership,
-  isFuturePick,
   normalizeLeague,
   normalizePlayers,
   normalizeTeams,
+  normalizeTradedPicks,
   normalizeTransactions,
   normalizeWeekRosters,
 } from './sleeper/normalize.mjs';
@@ -63,7 +63,9 @@ export async function openLeague(config, { refreshPlayers = false } = {}) {
     // ledger's declared source, for one — need a setting rather than a fact
     // about the league.
     config,
-    tradedPicks: tradedPicks ?? [],
+    // Normalized here (src/sleeper/normalize.mjs): nothing past this point
+    // reads a pick's Sleeper field names.
+    draftCapital: { tradedPicks: normalizeTradedPicks(tradedPicks) },
     raw: { league: rawLeague, users, rosters },
   };
 }
@@ -421,7 +423,8 @@ async function readSettledWeek({ client, store, league, teams, week, config, tra
   };
 }
 
-export async function captureWeek({ client, store, league, teams, players, week, config = null, tradedPicks = [] }) {
+export async function captureWeek({ client, store, league, teams, players, week, config = null, draftCapital = null }) {
+  const tradedPicks = draftCapital?.tradedPicks ?? [];
   const stored = store.loadSnapshot(league.season, week);
   if (isSettledSnapshot(stored, league)) {
     return readSettledWeek({ client, store, league, teams, week, config, tradedPicks, snapshot: stored });

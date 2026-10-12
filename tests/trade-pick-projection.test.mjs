@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 
 import { buildContext, buildPrompt } from '../src/promptContext.mjs';
 import { projectDraftOrder } from '../src/analysis/draftOrder.mjs';
-import { futurePickOwnership, normalizePlayers } from '../src/sleeper/normalize.mjs';
+import { futurePickOwnership } from '../src/league/draftCapital.mjs';
+import { normalizePlayers } from '../src/sleeper/normalize.mjs';
 import { prospectsAroundPick } from '../src/tradePicks.mjs';
 import {
   RULE,
