@@ -12,8 +12,7 @@ import {
   normalizePlayers,
   normalizeTeams,
   normalizeTradedPicks,
-  normalizeTransactions,
-  normalizeWeekRosters,
+  normalizeWeek,
 } from './sleeper/normalize.mjs';
 import { projectDraftOrder, projectedDraftSeason } from './analysis/draftOrder.mjs';
 import { isProjectableDraftOrder } from './rookieDraft.mjs';
@@ -99,6 +98,18 @@ export async function resolveWeek({ client, league, config, requested, offset = 
   return { week: Math.max(1, current + offset), source: 'Sleeper (current week)' };
 }
 
+/**
+ * Every raw bundle on disk through `throughWeek`, oldest first, read as
+ * WeekData. The bundles stay exactly as they were saved; normalizing happens
+ * here, on read, so a league folder written before WeekData existed needs no
+ * migration.
+ */
+function savedWeeks({ store, league, teams = [], players = {}, describePlayer, throughWeek }) {
+  return store
+    .loadRawThrough(league.season, throughWeek)
+    .map((bundle) => normalizeWeek(bundle, { league, teams, players, ...(describePlayer ? { describePlayer } : {}) }));
+}
+
 /** Every week already written down, reduced to the scores the ledger reads. */
 function storedWeekScores(store, season, throughWeek) {
   return store.loadSnapshotsThrough(season, throughWeek).map((snapshot) => ({
@@ -171,7 +182,7 @@ export function readFaabMarket({ store, league, teams, config = null, throughWee
     teams,
     waiverBudget: league.waiverBudget,
     ledger,
-    rawWeeks: store.loadRawThrough(league.season, throughWeek),
+    weeks: savedWeeks({ store, league, teams, throughWeek }),
     teamsByRosterId: new Map(teams.map((team) => [team.rosterId, team])),
   });
 }
@@ -188,20 +199,18 @@ export function readFaabMarket({ store, league, teams, config = null, throughWee
  * so the readable `moves` match the ones every edition already prints.
  */
 export function readTransactions({ store, league, teams, players, describePlayer, week, throughWeek = week }) {
-  const raw = store.loadRawThrough(league.season, throughWeek);
+  const weeks = savedWeeks({ store, league, teams, players, describePlayer, throughWeek });
   const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]));
-  const normalize = (transactions) =>
-    normalizeTransactions(transactions, { teamsByRosterId, players, describePlayer, league });
 
   // The FAAB a claimant had left is only known from every claim before it.
-  const seasonTransactions = raw.filter((bundle) => bundle.week <= week).flatMap((b) => normalize(b.transactions));
-  // The week's losing bids exist only in the raw entries, and a chop pool only
-  // in a format with eliminations.
-  const thisWeek = raw.find((bundle) => bundle.week === week);
+  const seasonTransactions = weeks.filter((weekData) => weekData.week <= week).flatMap((w) => w.transactions);
+  // The week's losing bids are only in its bids, and a chop pool only in a
+  // format with eliminations.
+  const thisWeek = weeks.find((weekData) => weekData.week === week);
   const faab = readFaabMarket({ store, league, teams, throughWeek: week });
   return enrichTransactions({
     market: {
-      bids: weekBids({ transactions: thisWeek?.transactions ?? [], week, players, teamsByRosterId }),
+      bids: weekBids({ bids: thisWeek?.bids ?? [], week, players, teamsByRosterId }),
       releasedPools: faab?.releasedPools ?? [],
     },
     transactions: seasonTransactions.filter((transaction) => transaction.week === week),
@@ -209,7 +218,7 @@ export function readTransactions({ store, league, teams, players, describePlayer
     league,
     teams,
     players,
-    weeks: raw.map((bundle) => ({ week: bundle.week, rosters: normalizeWeekRosters(bundle.matchups) })),
+    weeks: weeks.map((weekData) => ({ week: weekData.week, rosters: weekData.rosters })),
   });
 }
 
@@ -362,9 +371,10 @@ export function readRosterWindow({ store, league, teams, players, throughWeek, a
   return buildRosterWindow({
     teams,
     players,
-    weeks: store
-      .loadRawThrough(league.season, throughWeek)
-      .map((bundle) => ({ week: bundle.week, rosters: normalizeWeekRosters(bundle.matchups) })),
+    weeks: savedWeeks({ store, league, teams, players, throughWeek }).map((weekData) => ({
+      week: weekData.week,
+      rosters: weekData.rosters,
+    })),
     ageBandEdges,
   });
 }
@@ -398,15 +408,18 @@ export function isSettledSnapshot(snapshot, league) {
 
 /**
  * A settled week, read back from disk in the shape captureWeek returns. Its
- * transactions come from the raw bundle saved beside it. The projected draft
+ * transactions come from the raw bundle saved beside it, read as WeekData. The projected draft
  * order is the one exception that may be computed now: a snapshot written
  * before the order was recorded has none, and computing it from today's
  * standings is what every edition did before this rule. Nothing is written,
  * and `kept` says so.
  */
-async function readSettledWeek({ client, store, league, teams, week, config, tradedPicks, snapshot }) {
+async function readSettledWeek({ client, store, league, teams, players, week, config, tradedPicks, snapshot }) {
   const raw = store.loadRaw(league.season, week);
-  const transactions = raw?.transactions ?? (await client.transactions(week));
+  // A settled week whose raw bundle is gone has its transactions fetched
+  // again; nothing is saved, so the settled record stays as it is.
+  const bundle = raw?.transactions ? raw : { week, transactions: await client.transactions(week) };
+  const { transactions } = normalizeWeek(bundle, { league, teams, players });
   const draftOrder = snapshot.draftOrder ?? readDraftOrder({ league, teams, config, tradedPicks });
   return {
     analysis: snapshot.analysis,
@@ -427,7 +440,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
   const tradedPicks = draftCapital?.tradedPicks ?? [];
   const stored = store.loadSnapshot(league.season, week);
   if (isSettledSnapshot(stored, league)) {
-    return readSettledWeek({ client, store, league, teams, week, config, tradedPicks, snapshot: stored });
+    return readSettledWeek({ client, store, league, teams, players, week, config, tradedPicks, snapshot: stored });
   }
 
   const [matchups, transactions] = await Promise.all([
@@ -435,15 +448,18 @@ export async function captureWeek({ client, store, league, teams, players, week,
     client.transactions(week),
   ]);
 
-  const rawPath = store.saveRaw(league.season, week, {
+  // Saved exactly as fetched; analysis reads it as WeekData.
+  const bundle = {
     fetchedAt: new Date().toISOString(),
     leagueId: league.id,
     week,
     matchups,
     transactions,
-  });
+  };
+  const rawPath = store.saveRaw(league.season, week, bundle);
+  const weekData = normalizeWeek(bundle, { league, teams, players });
 
-  const analysis = analyzeWeek({ league, teams, matchups, players, week });
+  const analysis = analyzeWeek({ league, teams, rosters: weekData.rosters, players, week });
   const played = analysis.teamWeeks.some((entry) => entry.points > 0);
 
   // Who is still in the league, and how close each survivor is to joining
@@ -485,7 +501,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
 
   // The waiver market (src/analysis/faab.mjs): what every survivor has left
   // to spend, and what each chop in the ledger just built above released.
-  // The raw bundle for this week was already saved above, so loadRawThrough
+  // The raw bundle for this week was already saved above, so savedWeeks
   // picks it straight back up alongside every earlier week already on disk —
   // no second fetch, no separate "this week" case to special-case in.
   const faab = elimination
@@ -493,7 +509,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
         teams,
         waiverBudget: league.waiverBudget,
         ledger: elimination,
-        rawWeeks: store.loadRawThrough(league.season, week),
+        weeks: savedWeeks({ store, league, teams, throughWeek: week }),
         teamsByRosterId: new Map(teams.map((team) => [team.rosterId, team])),
       })
     : null;
@@ -547,7 +563,7 @@ export async function captureWeek({ client, store, league, teams, players, week,
 
   return {
     analysis,
-    transactions,
+    transactions: weekData.transactions,
     played,
     ...(elimination ? { elimination } : {}),
     ...(danger ? { danger } : {}),

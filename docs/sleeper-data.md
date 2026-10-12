@@ -56,6 +56,10 @@ week; those are reported as unpaired rather than dropped.
 
 Bench is `players` minus `starters`.
 
+`normalizeWeek` turns these into WeekData rosters (`docs/architecture.md`).
+The `"0"` empty-slot marker becomes null there, and in a team's `starterIds`.
+Nothing past `src/sleeper/` reads these field names.
+
 ### Roster positions
 
 `league.roster_positions` lists starting slots followed by bench slots:

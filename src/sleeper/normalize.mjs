@@ -1,16 +1,19 @@
 /**
  * Turns raw Sleeper payloads into the league concepts the rest of the project
- * talks about: League, Team, Player, Matchup.
+ * talks about: League, Team, Player, and a week as WeekData.
  *
  * Sleeper's field names (roster_id, owner_id, starters_points, fpts_decimal)
  * stop here. Nothing downstream should have to know that a team's score is
  * stored as two integers.
  */
 import { parseDeclaredFormatType, resolveFormatType } from '../format.mjs';
-import { playerFor, unknownPlayer } from '../league/players.mjs';
+import { describePlayer as describePlayerLine, playerFor, unknownPlayer } from '../league/players.mjs';
 import { isFuturePick } from '../league/draftCapital.mjs';
 
 const BENCH_SLOTS = new Set(['BN', 'IR', 'TAXI']);
+
+/** Sleeper fills an empty starting slot with the player id "0". */
+const EMPTY_SLOT = '0';
 
 /** Sleeper stores 161.68 as fpts:161 and fpts_decimal:68. */
 function points(whole, decimal) {
@@ -300,7 +303,8 @@ export function normalizeTeams({ rosters, users }) {
       seasonPotentialPoints: points(settings.ppts, settings.ppts_decimal),
       waiverBudgetUsed: settings.waiver_budget_used ?? 0,
       playerIds: roster.players || [],
-      starterIds: roster.starters || [],
+      // Lined up with the starting slots; null is an empty slot.
+      starterIds: starterIdsOf(roster.starters),
       taxiIds: roster.taxi || [],
       reserveIds: roster.reserve || [],
     };
@@ -338,46 +342,6 @@ export function normalizePlayers(rawPlayers) {
     if (player) players[id] = normalizePlayer(id, player);
   }
   return players;
-}
-
-/**
- * Pairs the flat matchup array into head-to-head games.
- *
- * The one rule that matters: two matchup objects sharing a matchup_id are
- * opponents. Entries with a null matchup_id are byes and are reported as such
- * rather than silently dropped.
- */
-export function pairMatchups(matchups, teamsByRosterId) {
-  const groups = new Map();
-  const byes = [];
-
-  for (const entry of matchups || []) {
-    if (entry.matchup_id === null || entry.matchup_id === undefined) {
-      byes.push(entry);
-      continue;
-    }
-    if (!groups.has(entry.matchup_id)) groups.set(entry.matchup_id, []);
-    groups.get(entry.matchup_id).push(entry);
-  }
-
-  const games = [];
-  for (const [matchupId, sides] of [...groups.entries()].sort((a, b) => a[0] - b[0])) {
-    if (sides.length !== 2) {
-      byes.push(...sides);
-      continue;
-    }
-    games.push({
-      matchupId,
-      sides: sides.map((side) => ({
-        rosterId: side.roster_id,
-        team: teamsByRosterId.get(side.roster_id)?.name ?? `Roster ${side.roster_id}`,
-        points: side.points ?? 0,
-        raw: side,
-      })),
-    });
-  }
-
-  return { games, byes };
 }
 
 /**
@@ -545,52 +509,102 @@ function transactionSides({ rosterIds, addEntries, dropEntries, livePicks, budge
 }
 
 /**
+ * Sleeper's starters list, lined up with the league's starting slots, with its
+ * "0" placeholder for an empty slot turned into null. Nothing past
+ * src/sleeper/ knows the placeholder.
+ */
+function starterIdsOf(starters) {
+  return (starters || []).map((id) => (id === EMPTY_SLOT ? null : id));
+}
+
+/**
  * Each roster as it was fielded in one week, out of that week's raw matchup
- * entries.
+ * entries: WeekData's `rosters`.
  *
  * Sleeper keeps no roster history; a week's matchup entry is the only record
  * of what a roster held then, bench included. That makes it the "as of the
  * move" picture a trade or a claim has to be judged against — today's roster
  * already carries every later move.
+ *
+ * `starterPoints` lines up with `starterIds` and is passed through as Sleeper
+ * sent it, which can be shorter than the lineup. `points` is null when Sleeper
+ * sent none. `pairingKey` is the matchup_id: two rosters sharing one are
+ * opponents (src/league/pairing.mjs), and null is a bye.
  */
 export function normalizeWeekRosters(matchups) {
   return (matchups || []).map((entry) => ({
     rosterId: entry.roster_id,
     playerIds: entry.players || [],
-    starterIds: entry.starters || [],
+    starterIds: starterIdsOf(entry.starters),
+    starterPoints: entry.starters_points || [],
     playerPoints: entry.players_points || {},
+    points: entry.points ?? null,
+    pairingKey: entry.matchup_id ?? null,
   }));
 }
 
 /**
- * Winning FAAB bids on a specific set of players, out of raw transactions.
+ * Every FAAB bid in a set of raw transactions, won and lost: WeekData's
+ * `bids`.
  *
- * Reads exactly the same raw fields normalizeTransactions already reads
- * (`status`, `adds`, `settings.waiver_bid`) rather than a second transaction
- * parser — this exists alongside it, not instead of it, because the FAAB
- * market (src/analysis/faab.mjs) needs a bid matched to one specific player
- * id, and normalizeTransactions' `moves` are prose lines built for reading,
- * not for matching against.
+ * normalizeTransactions reports completed moves only — a failed claim is not
+ * news on its own — but a failed bid is exactly what shows whether a winner
+ * overpaid (src/analysis/faab.mjs). A bid has a price: an entry with no
+ * `waiver_bid` at all, such as an ordinary free-agent add, is not a bid, the
+ * same way normalizeTransactions treats a missing bid as null rather than
+ * zero. A completed entry is a won bid and a failed one a lost bid; any other
+ * status is neither.
  *
- * A transaction only counts if it both completed and carried a bid: an
- * ordinary free-agent add has no `waiver_bid` at all and is silently not a
- * bid, the same way normalizeTransactions treats a missing bid as `null`
- * rather than zero.
+ * `type` is carried because only a waiver claim's bids make a week's market,
+ * while any completed entry with a bid can be the price a released player went
+ * for. One entry with several adds is one bid per added player, in Sleeper's
+ * order.
  */
-export function waiverBidsFor(transactions, playerIds, { teamsByRosterId }) {
-  const wanted = new Set(playerIds);
-  const name = (rosterId) => teamsByRosterId.get(rosterId)?.name ?? `Roster ${rosterId}`;
-
+export function normalizeBids(transactions) {
   const bids = [];
   for (const entry of transactions || []) {
-    if (entry.status !== 'complete') continue;
+    const outcome = entry.status === 'complete' ? 'won' : entry.status === 'failed' ? 'lost' : null;
     const amount = entry.settings?.waiver_bid;
-    if (amount === undefined || amount === null) continue;
+    if (!outcome || amount === undefined || amount === null) continue;
     for (const [playerId, rosterId] of Object.entries(entry.adds || {})) {
-      if (!wanted.has(playerId)) continue;
-      bids.push({ playerId, week: entry.leg ?? null, amount, wonBy: name(rosterId) });
+      bids.push({
+        playerId,
+        rosterId,
+        week: entry.leg ?? null,
+        amount,
+        outcome,
+        type: entry.type,
+        transactionId: entry.transaction_id ?? null,
+      });
     }
   }
-  return bids.sort((a, b) => (a.week ?? 0) - (b.week ?? 0));
+  return bids;
+}
+
+/**
+ * One saved week as WeekData, the shape analysis reads:
+ *
+ *   week          the week the bundle was saved for
+ *   rosters       normalizeWeekRosters
+ *   transactions  normalizeTransactions: completed moves, with moves and sides
+ *   bids          normalizeBids: every bid, won and lost
+ *
+ * `rawBundle` is what captureWeek saves under data/raw/: `{ week, matchups,
+ * transactions }`. A bundle with no `provider` field, as every bundle written
+ * before the provider boundary is, is read as Sleeper. Pure: reads nothing,
+ * fetches nothing.
+ *
+ * `describePlayer` writes the transaction lines; it defaults to the one every
+ * edition prints (src/league/players.mjs).
+ */
+export function normalizeWeek(rawBundle, { league = null, teams = [], players = {}, describePlayer = describePlayerLine } = {}) {
+  const bundle = rawBundle || {};
+  const teamsByRosterId = new Map((teams || []).map((team) => [team.rosterId, team]));
+  return {
+    week: bundle.week ?? null,
+    rosters: normalizeWeekRosters(bundle.matchups),
+    transactions: normalizeTransactions(bundle.transactions, { teamsByRosterId, players, describePlayer, league }),
+    bids: normalizeBids(bundle.transactions),
+  };
 }
 

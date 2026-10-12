@@ -121,9 +121,9 @@ export function byeWeekFor(byeWeeks, nflTeam, { source = 'the bye-week table' } 
   return byeWeeks.get(nflTeam);
 }
 
-/** A roster's real starters — Sleeper pads an incomplete lineup with "0" placeholders for an empty slot. */
+/** A roster's real starters — an empty slot in an incomplete lineup is a null starter id. */
 function starterIdsFor(team) {
-  return (team.starterIds ?? []).filter((id) => id && id !== '0');
+  return (team.starterIds ?? []).filter(Boolean);
 }
 
 /**

@@ -199,8 +199,17 @@ test('a week of matchup entries becomes rosters keyed by roster id', () => {
     },
     { roster_id: 2, matchup_id: null, players: null, starters: null },
   ]);
+  // WeekData rosters: the fields this always had, plus starterPoints, points and pairingKey.
   assert.deepEqual(rosters, [
-    { rosterId: 1, playerIds: ['p_wr', 'p_cut'], starterIds: ['p_wr'], playerPoints: { p_wr: 12.4, p_cut: 3 } },
-    { rosterId: 2, playerIds: [], starterIds: [], playerPoints: {} },
+    {
+      rosterId: 1,
+      playerIds: ['p_wr', 'p_cut'],
+      starterIds: ['p_wr'],
+      starterPoints: [],
+      playerPoints: { p_wr: 12.4, p_cut: 3 },
+      points: null,
+      pairingKey: 1,
+    },
+    { rosterId: 2, playerIds: [], starterIds: [], starterPoints: [], playerPoints: {}, points: null, pairingKey: null },
   ]);
 });

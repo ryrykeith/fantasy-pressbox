@@ -25,12 +25,11 @@
  * (now-empty) roster against anything. What *does* survive is that week's own
  * matchup entry: Sleeper scores a week against the roster as it stood when
  * the week was played, before a commissioner force-drops it afterward, and
- * that entry's `players` array (src/store.mjs's raw bundle, saved the moment
- * the week was fetched) is the full squad, bench included. That is the one
- * reliable source for "what got released", and it is why this module reads
- * raw matchups rather than any normalized roster.
+ * that entry's players (src/store.mjs's raw bundle, saved the moment the week
+ * was fetched, read back as WeekData rosters) are the full squad, bench
+ * included. That is the one reliable source for "what got released", and it
+ * is why this module reads that week's rosters rather than today's teams.
  */
-import { waiverBidsFor } from '../sleeper/normalize.mjs';
 import { playerFor } from '../league/players.mjs';
 
 /**
@@ -70,21 +69,22 @@ export function faabBalances({ teams = [], waiverBudget = null, ledger = null } 
  * The player pool one elimination released, attributed to the team that was
  * chopped.
  *
- * `matchups` is that week's raw Sleeper matchup array (src/store.mjs's raw
- * bundle) — not this week's, *that* week's, because a roster's contents are
- * only ever known for the week they were actually fielded. A week nobody has
- * fetched yet (or a chop old enough that its raw bundle was never saved)
- * yields an explicit, reported gap rather than a guess: an empty pool that
- * looked the same as "this roster released nothing" would hide exactly the
- * data problem an operator needs to go fetch that week to fix.
+ * `rosters` is that week's WeekData rosters (normalizeWeek over the raw
+ * bundle src/store.mjs saved) — not this week's, *that* week's, because a
+ * roster's contents are only ever known for the week they were actually
+ * fielded. A week nobody has fetched yet (or a chop old enough that its raw
+ * bundle was never saved) yields an explicit, reported gap rather than a
+ * guess: an empty pool that looked the same as "this roster released nothing"
+ * would hide exactly the data problem an operator needs to go fetch that week
+ * to fix.
  */
-export function releasedPool({ eliminatedEntry, matchups = [] } = {}) {
+export function releasedPool({ eliminatedEntry, rosters = [] } = {}) {
   const base = {
     week: eliminatedEntry.week,
     team: eliminatedEntry.team,
     rosterId: eliminatedEntry.rosterId,
   };
-  const roster = (matchups || []).find((entry) => entry.roster_id === eliminatedEntry.rosterId);
+  const roster = (rosters || []).find((entry) => entry.rosterId === eliminatedEntry.rosterId);
 
   if (!roster) {
     return {
@@ -97,12 +97,35 @@ export function releasedPool({ eliminatedEntry, matchups = [] } = {}) {
     };
   }
 
-  const playerPoints = roster.players_points ?? {};
+  const playerIds = roster.playerIds || [];
+  const playerPoints = roster.playerPoints ?? {};
   return {
     ...base,
-    playerIds: roster.players || [],
-    playerPoints: Object.fromEntries((roster.players || []).map((id) => [id, playerPoints[id] ?? 0])),
+    playerIds,
+    playerPoints: Object.fromEntries(playerIds.map((id) => [id, playerPoints[id] ?? 0])),
   };
+}
+
+/**
+ * Winning FAAB bids on a specific set of players, out of WeekData bids.
+ *
+ * A bid only counts if its transaction completed: a failed claim won nothing.
+ * Any completed entry carrying a bid counts, whatever its type, because the
+ * question is what a released player went for. Sorted by week, earliest
+ * first, keeping the order given within a week.
+ *
+ * @param bids             WeekData bids, from any number of weeks
+ * @param playerIds        the players wanted
+ * @param teamsByRosterId  Map<rosterId, team>, for naming the winner
+ */
+export function waiverBidsFor(bids, playerIds, { teamsByRosterId }) {
+  const wanted = new Set(playerIds);
+  const name = (rosterId) => teamsByRosterId.get(rosterId)?.name ?? `Roster ${rosterId}`;
+
+  return (bids || [])
+    .filter((bid) => bid.outcome === 'won' && wanted.has(bid.playerId))
+    .map((bid) => ({ playerId: bid.playerId, week: bid.week, amount: bid.amount, wonBy: name(bid.rosterId) }))
+    .sort((a, b) => (a.week ?? 0) - (b.week ?? 0));
 }
 
 /**
@@ -114,32 +137,30 @@ export function releasedPool({ eliminatedEntry, matchups = [] } = {}) {
  * @param waiverBudget     league.waiverBudget, or null if the league never set one
  * @param ledger           the elimination ledger (src/analysis/elimination.mjs);
  *                         omit it to treat every team as alive and report no pools
- * @param rawWeeks         `[{ week, matchups, transactions }]`, any order — every
- *                         raw bundle available (src/store.mjs#loadRawThrough)
+ * @param weeks            `[{ week, rosters, bids }]`, any order — WeekData for
+ *                         every raw bundle available (src/store.mjs#loadRawThrough)
  * @param teamsByRosterId  Map<rosterId, team>, for naming a winning bidder
  */
 export function buildFaabMarket({
   teams = [],
   waiverBudget = null,
   ledger = null,
-  rawWeeks = [],
+  weeks = [],
   teamsByRosterId,
 } = {}) {
-  const byWeek = new Map(rawWeeks.map((bundle) => [bundle.week, bundle]));
+  const byWeek = new Map(weeks.map((weekData) => [weekData.week, weekData]));
   const history = ledger?.history ?? [];
 
   const releasedPools = history.map((entry) => {
-    const bundle = byWeek.get(entry.week);
-    const pool = releasedPool({ eliminatedEntry: entry, matchups: bundle?.matchups ?? [] });
+    const weekData = byWeek.get(entry.week);
+    const pool = releasedPool({ eliminatedEntry: entry, rosters: weekData?.rosters ?? [] });
     if (pool.playerIds.length === 0) return pool;
 
     // A released player can be claimed any week from the chop onward, not
-    // only the week it happened — so every later bundle's transactions are
-    // in play, not just the chop week's own.
-    const laterTransactions = rawWeeks
-      .filter((later) => later.week >= entry.week)
-      .flatMap((later) => later.transactions ?? []);
-    const bids = waiverBidsFor(laterTransactions, pool.playerIds, { teamsByRosterId });
+    // only the week it happened — so every later week's bids are in play,
+    // not just the chop week's own.
+    const laterBids = weeks.filter((later) => later.week >= entry.week).flatMap((later) => later.bids ?? []);
+    const bids = waiverBidsFor(laterBids, pool.playerIds, { teamsByRosterId });
     return bids.length ? { ...pool, bids } : pool;
   });
 
@@ -165,36 +186,31 @@ const round3 = (value) => Math.round(value * 1000) / 1000;
  *
  * normalizeTransactions reports completed moves only — a failed claim is not
  * news on its own — but a failed bid is exactly what shows whether a winner
- * overpaid, so the market reads the raw entries. A bid has a price; a free
- * agent pickup does not and is not a bid.
+ * overpaid, so the market reads WeekData's bids, which keep both. Only a
+ * waiver claim's bids make the market.
  *
- * @param transactions     raw Sleeper transactions (src/store.mjs raw bundle)
- * @param week             the week to read; entries from other weeks are ignored
- * @param players          the player file, keyed by id
+ * @param bids             WeekData bids (a provider's normalizeWeek)
+ * @param week             the week to read; bids from other weeks are ignored
+ * @param players          the player dictionary, keyed by id
  * @param teamsByRosterId  Map<rosterId, team>, for display names only
  */
-export function weekBids({ transactions = [], week, players = {}, teamsByRosterId = new Map() } = {}) {
-  const bids = [];
-  for (const entry of transactions || []) {
-    const outcome = entry.status === 'complete' ? 'won' : entry.status === 'failed' ? 'lost' : null;
-    const amount = entry.settings?.waiver_bid;
-    if (!outcome || entry.type !== 'waiver' || (entry.leg ?? null) !== week) continue;
-    if (amount === undefined || amount === null) continue;
-    for (const [playerId, rosterId] of Object.entries(entry.adds || {})) {
-      const player = playerFor(players, playerId);
-      bids.push({
-        playerId,
+export function weekBids({ bids = [], week, players = {}, teamsByRosterId = new Map() } = {}) {
+  return (bids || [])
+    .filter((bid) => bid.type === 'waiver' && bid.week === week)
+    .map((bid) => {
+      const player = playerFor(players, bid.playerId);
+      return {
+        playerId: bid.playerId,
         player: player.name,
         position: player.position,
-        rosterId,
-        team: teamsByRosterId.get(rosterId)?.name ?? `Roster ${rosterId}`,
-        amount,
-        outcome,
-        transactionId: entry.transaction_id ?? null,
-      });
-    }
-  }
-  return bids.sort((a, b) => b.amount - a.amount);
+        rosterId: bid.rosterId,
+        team: teamsByRosterId.get(bid.rosterId)?.name ?? `Roster ${bid.rosterId}`,
+        amount: bid.amount,
+        outcome: bid.outcome,
+        transactionId: bid.transactionId ?? null,
+      };
+    })
+    .sort((a, b) => b.amount - a.amount);
 }
 
 /**

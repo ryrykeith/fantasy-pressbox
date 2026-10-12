@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { analyzeWeek } from '../src/analysis/week.mjs';
 import { playerFor, unknownPlayer } from '../src/league/players.mjs';
 import { buildContext, describePlayer } from '../src/promptContext.mjs';
-import { normalizePlayer, normalizePlayers, normalizeTransactions } from '../src/sleeper/normalize.mjs';
+import { normalizePlayer, normalizePlayers, normalizeTransactions, normalizeWeekRosters } from '../src/sleeper/normalize.mjs';
 import { MISSING_ID, RAW_PLAYERS, rankingsContext } from './fixtures/player-dictionary-league.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -76,7 +76,10 @@ test('describePlayer reads a normalized player and writes the line it always has
 });
 
 test('the rankings context is unchanged by the player dictionary', () => {
-  const context = rankingsContext({ analyzeWeek, normalizeTransactions, buildContext, describePlayer }, PLAYERS);
+  const context = rankingsContext(
+    { analyzeWeek, normalizeTransactions, normalizeWeekRosters, buildContext, describePlayer },
+    PLAYERS,
+  );
   const pinned = JSON.parse(
     readFileSync(join(ROOT, 'tests/fixtures/player-dictionary-rankings-context.json'), 'utf8'),
   );

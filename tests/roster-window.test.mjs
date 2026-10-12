@@ -19,7 +19,8 @@ const teams = [
     rosterId: 1,
     name: 'Old Guard',
     playerIds: ['qb', 'rb1', 'rb2', 'benchRb', 'te', 'noAge', 'BUF'],
-    starterIds: ['qb', 'rb1', 'rb2', 'te', '0', 'BUF'],
+    // normalizeTeams output: Sleeper's "0" for an empty slot arrives as null.
+    starterIds: ['qb', 'rb1', 'rb2', 'te', null, 'BUF'],
   },
   { rosterId: 2, name: 'Empty', playerIds: [], starterIds: [] },
 ];
@@ -79,7 +80,7 @@ test('ages are summarized per position, with starters apart from the whole posit
 
 test('the starting lineup is summarized on its own and weighted by points', () => {
   const [team] = buildRosterWindow({ teams, players, weeks }).teams;
-  // qb, rb1, rb2, te and the DEF; the empty "0" slot is not a player.
+  // qb, rb1, rb2, te and the DEF; the empty slot is not a player.
   assert.equal(team.starters.count, 5);
   assert.equal(team.starters.unknownAge, 1);
   assert.equal(team.starters.meanAge, 28.3);

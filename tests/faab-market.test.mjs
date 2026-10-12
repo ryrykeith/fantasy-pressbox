@@ -4,8 +4,8 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { faabBalances, releasedPool, buildFaabMarket } from '../src/analysis/faab.mjs';
-import { normalizePlayers, waiverBidsFor } from '../src/sleeper/normalize.mjs';
+import { faabBalances, releasedPool, buildFaabMarket, waiverBidsFor } from '../src/analysis/faab.mjs';
+import { normalizeBids, normalizePlayers, normalizeWeek, normalizeWeekRosters } from '../src/sleeper/normalize.mjs';
 import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { captureWeek, readFaabMarket } from '../src/pipeline.mjs';
 import { createStore } from '../src/store.mjs';
@@ -111,7 +111,7 @@ const WEEK1_MATCHUPS = [
 test('the released pool is the chopped roster\'s full player list for the week it happened, bench included', () => {
   const pool = releasedPool({
     eliminatedEntry: { week: 1, team: 'Late Bloomers', rosterId: 2 },
-    matchups: WEEK1_MATCHUPS,
+    rosters: normalizeWeekRosters(WEEK1_MATCHUPS),
   });
 
   assert.deepEqual(pool.playerIds, ['qb2', 'rb2']);
@@ -122,7 +122,7 @@ test('the released pool is the chopped roster\'s full player list for the week i
 test('a week with no matchup data on disk reports the gap instead of an empty pool that looks the same as "nothing released"', () => {
   const pool = releasedPool({
     eliminatedEntry: { week: 3, team: 'Late Bloomers', rosterId: 2 },
-    matchups: [],
+    rosters: [],
   });
 
   assert.deepEqual(pool.playerIds, []);
@@ -143,7 +143,7 @@ test('a winning FAAB bid on a wanted player is matched by id, team name resolved
       drops: {},
     },
   ];
-  const bids = waiverBidsFor(transactions, ['qb2'], {
+  const bids = waiverBidsFor(normalizeBids(transactions), ['qb2'], {
     teamsByRosterId: new Map([[1, { name: 'Chopping Block' }]]),
   });
 
@@ -152,21 +152,21 @@ test('a winning FAAB bid on a wanted player is matched by id, team name resolved
 
 test('a free-agent add with no waiver_bid is not a bid', () => {
   const transactions = [{ status: 'complete', type: 'free_agent', leg: 2, adds: { qb2: 1 }, settings: {} }];
-  assert.deepEqual(waiverBidsFor(transactions, ['qb2'], { teamsByRosterId: new Map() }), []);
+  assert.deepEqual(waiverBidsFor(normalizeBids(transactions), ['qb2'], { teamsByRosterId: new Map() }), []);
 });
 
 test('a failed transaction is never a winning bid', () => {
   const transactions = [
     { status: 'failed', type: 'waiver', leg: 2, settings: { waiver_bid: 12 }, adds: { qb2: 1 } },
   ];
-  assert.deepEqual(waiverBidsFor(transactions, ['qb2'], { teamsByRosterId: new Map() }), []);
+  assert.deepEqual(waiverBidsFor(normalizeBids(transactions), ['qb2'], { teamsByRosterId: new Map() }), []);
 });
 
 test('a bid on a player nobody asked about is left out', () => {
   const transactions = [
     { status: 'complete', type: 'waiver', leg: 2, settings: { waiver_bid: 12 }, adds: { someoneElse: 1 } },
   ];
-  assert.deepEqual(waiverBidsFor(transactions, ['qb2'], { teamsByRosterId: new Map() }), []);
+  assert.deepEqual(waiverBidsFor(normalizeBids(transactions), ['qb2'], { teamsByRosterId: new Map() }), []);
 });
 
 /* ------------------------------------------------------------ buildFaabMarket */
@@ -183,7 +183,7 @@ test('buildFaabMarket attaches a winning bid to the released player it was place
     teams: [team(1, 'Chopping Block', { waiverBudgetUsed: 10 }), team(2, 'Late Bloomers', { waiverBudgetUsed: 0 })],
     waiverBudget: 100,
     ledger,
-    rawWeeks: [
+    weeks: [
       { week: 1, matchups: WEEK1_MATCHUPS, transactions: [] },
       {
         week: 2,
@@ -198,7 +198,7 @@ test('buildFaabMarket attaches a winning bid to the released player it was place
           },
         ],
       },
-    ],
+    ].map((bundle) => normalizeWeek(bundle)),
     teamsByRosterId: new Map([[1, { name: 'Chopping Block' }], [2, { name: 'Late Bloomers' }]]),
   });
 
@@ -222,7 +222,7 @@ test('a released player nobody has claimed yet carries no bids key', () => {
     teams: [team(1, 'Chopping Block'), team(2, 'Late Bloomers')],
     waiverBudget: 100,
     ledger,
-    rawWeeks: [{ week: 1, matchups: WEEK1_MATCHUPS, transactions: [] }],
+    weeks: [normalizeWeek({ week: 1, matchups: WEEK1_MATCHUPS, transactions: [] })],
     teamsByRosterId: new Map([[1, { name: 'Chopping Block' }], [2, { name: 'Late Bloomers' }]]),
   });
 
@@ -233,7 +233,7 @@ test('with no ledger at all, there are no released pools to report', () => {
   const market = buildFaabMarket({
     teams: [team(1, 'Chopping Block')],
     waiverBudget: 100,
-    rawWeeks: [],
+    weeks: [],
     teamsByRosterId: new Map(),
   });
   assert.deepEqual(market.releasedPools, []);

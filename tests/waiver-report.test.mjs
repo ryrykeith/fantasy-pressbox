@@ -5,6 +5,7 @@ import { weekBids } from '../src/analysis/faab.mjs';
 import { enrichTransactions } from '../src/analysis/transactions.mjs';
 import {
   deriveScoringProfile,
+  normalizeBids,
   normalizePlayers,
   normalizeTransactions,
   normalizeWeekRosters,
@@ -190,7 +191,7 @@ function enriched(l, rawEntries = raw) {
     teams,
     players,
     weeks,
-    market: { bids: weekBids({ transactions: rawEntries, week: 3, players, teamsByRosterId }), releasedPools: [] },
+    market: { bids: weekBids({ bids: normalizeBids(rawEntries), week: 3, players, teamsByRosterId }), releasedPools: [] },
   });
 }
 

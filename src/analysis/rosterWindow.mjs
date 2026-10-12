@@ -31,9 +31,6 @@ export const DEFAULT_AGE_BAND_EDGES = [25, 29];
 /** Positions a roster age summary is not meaningful for: the "player" is a franchise or has no career arc worth aging. */
 const AGELESS_POSITIONS = new Set(['DEF']);
 
-/** Sleeper marks an empty starting slot with the string "0". */
-const EMPTY_SLOT = '0';
-
 const round1 = (value) => Math.round(value * 10) / 10;
 const round2 = (value) => Math.round(value * 100) / 100;
 
@@ -82,8 +79,9 @@ export function ageBandsFor(edges = DEFAULT_AGE_BAND_EDGES) {
 
 /**
  * @param teams        normalizeTeams output; `playerIds` and `starterIds` are today's roster
+ *                     (a null starter id is an empty slot)
  * @param players      the player dictionary (src/league/players.mjs), keyed by player id
- * @param weeks        `[{ week, rosters: normalizeWeekRosters(...) }]` — each stored week's
+ * @param weeks        `[{ week, rosters }]`, WeekData rosters — each stored week's
  *                     fielded starters and their points. Only starters' points count: they are
  *                     the points that went on the team's score.
  * @param ageBandEdges upper-exclusive edges for the production split
@@ -102,7 +100,8 @@ export function buildRosterWindow({ teams = [], players = {}, weeks = [], ageBan
     bands: bands.map((band) => band.label),
     weeksCovered: weeks.map((entry) => entry.week).sort((a, b) => a - b),
     teams: teams.map((team) => {
-      const starterIds = new Set((team.starterIds || []).filter((id) => id !== EMPTY_SLOT));
+      // A null starter id is an empty slot, not a player.
+      const starterIds = new Set((team.starterIds || []).filter((id) => id !== null));
 
       // Production: each stored week's starters, binned by age, for the
       // roster that fielded them that week (a player traded away keeps
@@ -112,7 +111,7 @@ export function buildRosterWindow({ teams = [], players = {}, weeks = [], ageBan
       let totalPoints = 0;
       for (const { rosters = [] } of weeks) {
         const fielded = rosters.find((roster) => roster.rosterId === team.rosterId);
-        for (const id of (fielded?.starterIds || []).filter((slot) => slot !== EMPTY_SLOT)) {
+        for (const id of (fielded?.starterIds || []).filter((slot) => slot !== null)) {
           const points = fielded.playerPoints?.[id] ?? 0;
           const age = ageOf(id);
           const band = age === null ? 'unknown' : bands.find((b) => age >= b.min && age < b.max).label;

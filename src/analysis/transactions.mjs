@@ -20,7 +20,7 @@
  *
  * Everything is "as of the move", not "as of today". Sleeper keeps no roster
  * history, so the roster a move was made with is read from that week's raw
- * matchup entries (normalizeWeekRosters) — today's roster already carries
+ * matchup entries (WeekData rosters) — today's roster already carries
  * every later move, and grading against it would invent context.
  */
 import { playerFor } from '../league/players.mjs';
@@ -242,8 +242,8 @@ export function scoringContext(scoring, positions) {
  * @param league              normalized league: startingSlots, waiverBudget, format.scoring
  * @param teams               normalized teams, for display names only
  * @param players             the player file, keyed by id
- * @param weeks               `[{ week, rosters }]` with rosters from
- *                            normalizeWeekRosters, every week on disk — before
+ * @param weeks               `[{ week, rosters }]` with WeekData rosters
+ *                            (normalizeWeek), every week on disk — before
  *                            the move for its shape, after it for its history
  * @param market              `{ bids, releasedPools }`: the week's bids from
  *                            faab.mjs#weekBids (won and lost) and, in a

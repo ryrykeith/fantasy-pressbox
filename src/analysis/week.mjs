@@ -6,28 +6,28 @@
  * model editorialises on top of this; if a fact is not here, it may not be
  * claimed.
  */
-import { pairMatchups } from '../sleeper/normalize.mjs';
-import { playerFor } from '../league/players.mjs';
+import { pairOnKey } from '../league/pairing.mjs';
+import { emptySlotPlayer, playerFor } from '../league/players.mjs';
 import { hasMatchups } from '../format.mjs';
 import { bestLineup, lineupEfficiency } from './lineup.mjs';
 
 /** How many bench performances to carry forward per team. */
 const BENCH_REPORT_LIMIT = 5;
 
-function entriesFor(side, players) {
-  const raw = side.raw;
-  const playerPoints = raw.players_points || {};
-  const starterIds = raw.starters || [];
-  const starterPoints = raw.starters_points || [];
+/** One WeekData roster's starters, in slot order, and its bench. A null starter id is an empty slot. */
+function entriesFor(roster, players) {
+  const playerPoints = roster.playerPoints || {};
+  const starterIds = roster.starterIds || [];
+  const starterPoints = roster.starterPoints || [];
 
   const starters = starterIds.map((id, index) => ({
     id,
-    points: Number((starterPoints[index] ?? playerPoints[id] ?? 0).toFixed(2)),
-    player: playerFor(players, id),
+    points: Number((starterPoints[index] ?? (id === null ? undefined : playerPoints[id]) ?? 0).toFixed(2)),
+    player: id === null ? emptySlotPlayer() : playerFor(players, id),
   }));
 
-  const starterIdSet = new Set(starterIds.filter((id) => id && id !== '0'));
-  const bench = (raw.players || [])
+  const starterIdSet = new Set(starterIds.filter(Boolean));
+  const bench = (roster.playerIds || [])
     .filter((id) => !starterIdSet.has(id))
     .map((id) => ({
       id,
@@ -38,16 +38,20 @@ function entriesFor(side, players) {
   return { starters, bench };
 }
 
-export function analyzeWeek({ league, teams, matchups, players, week }) {
+/**
+ * @param rosters WeekData rosters (a provider's normalizeWeek), one per team
+ *                that played the week
+ */
+export function analyzeWeek({ league, teams, rosters, players, week }) {
   const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]));
+  // A roster with no reported score scored nothing, as it always has here.
+  const sides = (rosters || []).map((roster) => ({ ...roster, points: roster.points ?? 0 }));
 
-  // Sleeper pairs every league into matchups, including the formats that never
-  // play one. Those pairings are discarded here, at the point they are made,
-  // rather than filtered out of each thing built from them later.
+  // A provider can pair every league into matchups, including the formats
+  // that never play one. Those pairings are discarded here, at the point they
+  // are made, rather than filtered out of each thing built from them later.
   const headToHead = hasMatchups(league.format);
-  const { games, byes } = headToHead
-    ? pairMatchups(matchups, teamsByRosterId)
-    : { games: [], byes: [] };
+  const { games, unpaired } = headToHead ? pairOnKey(sides) : { games: [], unpaired: [] };
   const slots = league.startingSlots;
 
   const teamWeeks = [];
@@ -115,7 +119,7 @@ export function analyzeWeek({ league, teams, matchups, players, week }) {
     const sideB = buildSide(b, a);
     const winner = sideA.points === sideB.points ? null : sideA.points > sideB.points ? sideA : sideB;
     return {
-      matchupId: game.matchupId,
+      matchupId: game.pairingKey,
       teams: [sideA, sideB],
       winner: winner?.team ?? null,
       loser: winner ? (winner === sideA ? sideB.team : sideA.team) : null,
@@ -124,12 +128,10 @@ export function analyzeWeek({ league, teams, matchups, players, week }) {
     };
   });
 
-  // No games to walk, so the rosters are scored straight from the flat matchup
-  // array: every entry is a team's week, and nobody has an opponent.
+  // No games to walk, so the rosters are scored straight from the week's
+  // list: every roster is a team's week, and nobody has an opponent.
   if (!headToHead) {
-    for (const entry of matchups || []) {
-      buildSide({ rosterId: entry.roster_id, points: entry.points ?? 0, raw: entry });
-    }
+    for (const side of sides) buildSide(side);
   }
 
   return {
@@ -137,7 +139,7 @@ export function analyzeWeek({ league, teams, matchups, players, week }) {
     season: league.season,
     games: analyzedGames,
     teamWeeks,
-    unpairedRosterIds: byes.map((entry) => entry.roster_id),
+    unpairedRosterIds: unpaired.map((roster) => roster.rosterId),
     awards: computeAwardFacts(analyzedGames, teamWeeks),
     scoringOrder: [...teamWeeks]
       .sort((a, b) => b.points - a.points)

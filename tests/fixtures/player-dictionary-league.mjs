@@ -140,10 +140,15 @@ export const RAW_TRANSACTIONS = [
  * The weekly rankings context for week 3, with `generatedAt` removed. Every
  * roster line goes through describePlayer, and the week's starters and bench
  * through the player dictionary.
+ *
+ * Given `normalizeWeekRosters`, analyzeWeek is handed the week as WeekData
+ * rosters, as it is since the provider boundary; without it, the raw matchups,
+ * as versions before it took them.
  */
-export function rankingsContext({ analyzeWeek, normalizeTransactions, buildContext, describePlayer }, players) {
+export function rankingsContext({ analyzeWeek, normalizeTransactions, normalizeWeekRosters, buildContext, describePlayer }, players) {
   const teamsByRosterId = new Map(TEAMS.map((team) => [team.rosterId, team]));
-  const weekAnalysis = analyzeWeek({ league: LEAGUE, teams: TEAMS, matchups: RAW_MATCHUPS, players, week: 3 });
+  const week = normalizeWeekRosters ? { rosters: normalizeWeekRosters(RAW_MATCHUPS) } : { matchups: RAW_MATCHUPS };
+  const weekAnalysis = analyzeWeek({ league: LEAGUE, teams: TEAMS, ...week, players, week: 3 });
   const transactions = normalizeTransactions(RAW_TRANSACTIONS, { teamsByRosterId, players, describePlayer, league: LEAGUE });
   const context = buildContext({
     task: 'rankings',

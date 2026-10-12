@@ -132,7 +132,9 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/format.mjs` | The league format taxonomy: valid types, declaration parsing, resolution |
 | `src/rookieDraft.mjs` | The declared rookie draft order rule (`config/rookie-draft.yml`): parsing, group sizes, plain-words description, and the refusal to project an order without one |
 | `src/sleeper/client.mjs` | HTTP only. Retries, friendly errors, player-file cache |
-| `src/sleeper/normalize.mjs` | Sleeper shapes → league concepts |
+| `src/sleeper/normalize.mjs` | Sleeper shapes → league concepts, including a saved week as WeekData (`normalizeWeek`) |
+| `src/league/players.mjs` | The player dictionary lookup and the one-line player description every edition prints |
+| `src/league/pairing.mjs` | Head-to-head pairing on a WeekData roster's `pairingKey` |
 | `src/analysis/lineup.mjs` | Optimal lineup solving |
 | `src/analysis/week.mjs` | Week facts and award candidates |
 | `src/analysis/elimination.mjs` | Who is still alive in a guillotine league, and who was chopped when |
@@ -166,6 +168,20 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 Sleeper-specific fields normalize into these rather than leaking through the
 application. `roster_id` and `fpts_decimal` are not concepts; they are one
 provider's storage details.
+
+A week is read as **WeekData** (`normalizeWeek` in `src/sleeper/normalize.mjs`):
+
+- `rosters`: `{ rosterId, playerIds, starterIds, starterPoints, playerPoints,
+  points, pairingKey }` per roster. `starterIds` lines up with the league's
+  starting slots, and null is an empty slot. Two rosters sharing a
+  `pairingKey` are opponents (`src/league/pairing.mjs`).
+- `transactions`: `normalizeTransactions` output, with `moves` and `sides`.
+- `bids`: `{ playerId, rosterId, week, amount, outcome, type, transactionId }`,
+  won and lost.
+
+The raw bundles under `data/raw/` are saved exactly as fetched and normalized
+on read, so a league folder written before WeekData existed needs no
+migration.
 
 ### Format
 
@@ -603,19 +619,17 @@ ordinary league sees. `src/analysis/faab.mjs` answers two questions:
   reconstructed by diffing today's now-empty roster against anything. What
   *does* survive is that week's own matchup entry — Sleeper scores a week
   against the roster as it stood when the week was played, before a
-  commissioner force-drops it afterward — and its raw `players` array
-  (`src/store.mjs`'s raw bundle, saved the moment the week was fetched) is the
-  full squad, bench included. A week whose raw bundle was never saved reports
+  commissioner force-drops it afterward — and its players (`src/store.mjs`'s
+  raw bundle, saved the moment the week was fetched, read back as a WeekData
+  roster) are the full squad, bench included. A week whose raw bundle was never saved reports
   the gap explicitly (`note`), rather than an empty pool that would look the
   same as "this roster released nothing".
 - **`buildFaabMarket`** combines both, and attaches any winning FAAB bid
-  already placed on a released player: `waiverBidsFor` in
-  `src/sleeper/normalize.mjs` reads the same raw transaction fields
-  `normalizeTransactions` reads (`status`, `adds`, `settings.waiver_bid`)
-  rather than a second parser, matching a bid to one specific player id
-  instead of turning it into a prose line. A released player can be claimed
-  any week from the chop onward, not only the week it happened, so every
-  later raw bundle's transactions are searched, not just the chop week's own.
+  already placed on a released player: `waiverBidsFor` matches WeekData's
+  won bids to one specific player id instead of turning them into prose
+  lines. A released player can be claimed any week from the chop onward, not
+  only the week it happened, so every later week's bids are searched, not
+  just the chop week's own.
 
 `captureWeek` computes the FAAB market from the elimination ledger it just
 built, using `store.loadRawThrough` to pick up every earlier week's raw
@@ -740,7 +754,7 @@ consumed.
 on disk and fetches nothing.
 
 - **Roster shape, as of the move.** Sleeper keeps no roster history, so the
-  roster comes from that week's matchup entry (`normalizeWeekRosters`), not
+  roster comes from that week's WeekData roster (`normalizeWeek`), not
   from today's roster, which already carries later moves. The "before" picture
   removes what the side received and restores what it gave up, so it comes out
   the same whether the entry was saved before the move cleared or after. Each

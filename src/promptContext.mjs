@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { PACKAGE_ROOT, resolveFutureStockWeights, resolveRankingWeights } from './config.mjs';
 import { hasMatchups, hasEliminations, hasFutureDraftCapital } from './format.mjs';
 import { renderFormatBlocks } from './promptTemplate.mjs';
+import { describePlayer } from './league/players.mjs';
 import { currentSeeds } from './analysis/standings.mjs';
 import { prospectBoardView } from './prospectBoard.mjs';
 import { TANK_WATCH_TASK, tankWatchPrize, tankWatchUnavailable, tankWatchView } from './tankWatch.mjs';
@@ -117,25 +118,10 @@ function readPrompt(file, formatType, promptsDir = null) {
   return text;
 }
 
-/**
- * Players are written as one compact line each rather than as objects.
- *
- * A 12-team dynasty league is around 400 players. Spelling each one out as a
- * pretty-printed JSON object turns the prompt into something too large to
- * paste into a chat window and expensive to send to an API, without telling
- * the model anything the line below does not.
- *
- * `player` is a record from the player dictionary (src/league/players.mjs),
- * or undefined for an id the dictionary does not know.
- */
-export function describePlayer(id, player) {
-  if (!player) return `Unknown player ${id}`;
-  const details = [player.position, player.team || 'FA', player.age ? `age ${player.age}` : null]
-    .filter(Boolean)
-    .join(', ');
-  const injury = player.injuryStatus ? ` [${player.injuryStatus}]` : '';
-  return `${player.name || id} (${details})${injury}`;
-}
+// One compact line per player. It lives beside the player dictionary
+// (src/league/players.mjs), so a provider's normalizer can write the same
+// transaction lines every edition prints.
+export { describePlayer };
 
 /** e.g. "QB Josh Allen (BUF) 35.66" */
 function describeStarter(entry) {

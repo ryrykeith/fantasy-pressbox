@@ -41,7 +41,6 @@ import {
   readRosterWindow,
 } from './pipeline.mjs';
 import { FUTURE_STOCK_TASK, refuseFutureStock } from './futureStock.mjs';
-import { normalizeTransactions } from './sleeper/normalize.mjs';
 import { normalizeFutureDraftCapital } from './league/draftCapital.mjs';
 import {
   TASKS,
@@ -652,12 +651,8 @@ async function commandEdition(config, args, task) {
     const captured = await captureWeek({ ...ctx, week });
     eliminationLedger = captured.elimination ?? null;
     faabMarket = captured.faab ?? null;
-    transactions = normalizeTransactions(captured.transactions, {
-      teamsByRosterId,
-      players,
-      describePlayer,
-      league,
-    });
+    // Already normalized by captureWeek, with the same lines describePlayer writes.
+    transactions = captured.transactions;
 
     if (isTransactionEdition) {
       // Everything a transaction edition reads is a raw bundle captureWeek has

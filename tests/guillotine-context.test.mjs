@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { analyzeWeek } from '../src/analysis/week.mjs';
 import { buildContext } from '../src/promptContext.mjs';
-import { deriveScoringProfile, normalizePlayers } from '../src/sleeper/normalize.mjs';
+import { deriveScoringProfile, normalizePlayers, normalizeWeekRosters } from '../src/sleeper/normalize.mjs';
 
 /**
  * Sleeper has no guillotine support, so it reports a guillotine league as an
@@ -142,7 +142,7 @@ function analyze(formatType, week = 3) {
   return analyzeWeek({
     league: testLeague(formatType),
     teams: testTeams(),
-    matchups: testMatchups(),
+    rosters: normalizeWeekRosters(testMatchups()),
     players: PLAYERS,
     week,
   });

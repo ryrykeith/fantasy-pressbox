@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { claimMarket, weekBids } from '../src/analysis/faab.mjs';
 import { enrichTransactions } from '../src/analysis/transactions.mjs';
-import { normalizePlayers, normalizeTransactions } from '../src/sleeper/normalize.mjs';
+import { normalizeBids, normalizePlayers, normalizeTransactions } from '../src/sleeper/normalize.mjs';
 import { describePlayer } from '../src/promptContext.mjs';
 
 /**
@@ -52,7 +52,7 @@ const week3 = [
   { transaction_id: 'h', type: 'free_agent', status: 'complete', leg: 3, adds: { rbE: 1 }, settings: {} },
 ];
 
-const bids = () => weekBids({ transactions: week3, week: 3, players, teamsByRosterId });
+const bids = () => weekBids({ bids: normalizeBids(week3), week: 3, players, teamsByRosterId });
 const winner = (id) => bids().find((entry) => entry.transactionId === id);
 
 test('weekBids reads won and lost bids for that week only, dearest first', () => {
