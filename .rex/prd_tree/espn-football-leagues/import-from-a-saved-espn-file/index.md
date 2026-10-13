@@ -14,4 +14,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Import an ESPN league from files the user saves](./import-an-espn-league-from-files-the.md) | pending |
+| [Import an ESPN league from files the user saves](./import-an-espn-league-from-files-the.md) | completed |
+| [Import route silently uses a stale league page's standings and rosters when only week pages are re-imported](./import-route-silently-uses-a-stale.md) | pending |
