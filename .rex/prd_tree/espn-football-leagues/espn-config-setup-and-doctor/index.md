@@ -18,7 +18,8 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [describeFormat and the not-modelled scoring heading name Sleeper for every provider](./describeformat-and-the-not-modelled.md) | completed |
-| [Doctor for ESPN leagues](./doctor-for-espn-leagues.md) | pending |
+| [Doctor for ESPN leagues](./doctor-for-espn-leagues.md) | completed |
+| [Doctor on the ESPN import route with nothing imported omits the unverified private-league note and the imported-weeks line](./doctor-on-the-espn-import-route-with.md) | pending |
 | [Doctor prints "unknown (null per catch)" for an ESPN league that lists no reception stat](./doctor-prints-unknown-null-per-catch.md) | completed |
 | [ESPN config keys and secrets](./espn-config-keys-and-secrets.md) | completed |
 | [Setup for ESPN leagues](./setup-for-espn-leagues.md) | completed |
