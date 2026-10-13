@@ -78,7 +78,7 @@ export function createClient({
     [s2, swid, cookie]
       .filter(Boolean)
       .reduce((out, secret) => out.split(secret).join('[cookie removed]'), String(text));
-  const refuse = (message) => new EspnError(scrub(message));
+  const refuse = (message, status) => Object.assign(new EspnError(scrub(message)), status ? { status } : {});
 
   /**
    * One GET, parsed as JSON. 401 and 404 are refusals, not retried. 429 and
@@ -110,6 +110,7 @@ export function createClient({
             : `ESPN says ${what} is a private league (HTTP 401). Add ESPN_S2 and ESPN_SWID to .env: copy the ` +
                 'espn_s2 and SWID cookies from a browser signed in to fantasy.espn.com. If they worked before, ' +
                 'refresh them.',
+          401,
         );
       }
       if (response.status === 404) {

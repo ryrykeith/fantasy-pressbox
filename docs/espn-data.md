@@ -118,6 +118,13 @@ The league request also returns, at the top level, `seasonId`,
 printed, logged, put in an error message, saved in a raw bundle or written
 under `data/`. `doctor` and setup show them masked.
 
+`doctor` on an ESPN league prints the provider (experimental), the route
+(`ESPN_ROUTE`) and, on the fetch route only, whether each cookie is present or
+missing. On the import route it makes no request: it reports from the saved
+files, lists the addresses to save and the imported weeks, and omits the cookie
+line. A 401 or an `EspnShapeError` is explained (the view and field, and that
+ESPN may have changed its API) and doctor exits non-zero.
+
 **decision** (plan Appendix A, 3.4): a 401 is explained as a private league
 (add `ESPN_S2` and `ESPN_SWID`, or refresh them if they worked before). A 404
 means no such league or season. The client does **not** copy espn-api's

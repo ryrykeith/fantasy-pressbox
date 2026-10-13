@@ -12,6 +12,7 @@ import { join, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getProvider, providerDisplayName } from './providers.mjs';
+import { ESPN_COOKIE_HELP } from './init.mjs';
 import {
   LEAGUE_ID_KEYS,
   loadConfig,
@@ -458,12 +459,28 @@ async function commandDoctor(config) {
   // in the shell, as every league command does.
   if (!inLeague || !config.leagueId) return 1;
 
-  say(`\n  Contacting ${providerDisplayName(config.league.provider)}...`);
+  // ESPN only: its route and, on the fetch route, which cookies are set.
+  // Sleeper's output has no such lines.
+  const espnRoute = describeEspnRoute(config);
+  for (const line of espnRoute.lines) say(line);
+
+  // The import route never contacts the platform: doctor reads saved files.
+  if (!espnRoute.imported) say(`\n  Contacting ${providerDisplayName(config.league.provider)}...`);
   // A stale saved league page is opened here only to report it: every
   // edition refuses it (reportSavedPages).
-  const ctx = await openLeague(config, { allowStaleLeague: true });
-  const { league, teams, client } = ctx;
-  const { week, source } = await resolveWeek({ client, league, config });
+  let ctx;
+  let week;
+  let source;
+  try {
+    ctx = await openLeague(config, { allowStaleLeague: true });
+    ({ week, source } = await resolveWeek({ client: ctx.client, league: ctx.league, config }));
+  } catch (error) {
+    const explained = explainEspnError(error, config);
+    if (!explained) throw error;
+    say(`\n  ✗ ${explained.join('\n    ')}`);
+    return 1;
+  }
+  const { league, teams } = ctx;
   say(`  League             ${league.name} (${league.season})`);
   say(`  Teams              ${teams.length}`);
   say(`  Format             ${describeFormat(league.format, { provider: providerDisplayName(league.provider) })}`);
@@ -481,6 +498,7 @@ async function commandDoctor(config) {
   for (const line of describeUnmodelledScoring(league.format.scoring, { provider: providerDisplayName(league.provider) })) say(`  ${line}`);
   say(`  Current week       ${week} (from ${source})`);
   const staleLeaguePage = reportSavedPages(ctx);
+  if (espnRoute.imported) for (const line of describeImportToSave(ctx, config)) say(line);
 
   // Who is still in the league, for the formats where that changes. Built from
   // the weeks already fetched, so doctor stays a cheap check — a league with no
@@ -527,6 +545,80 @@ async function commandDoctor(config) {
       (workspaceIsPackage(config.workspaceRoot) ? '' : ` --workspace ${config.workspaceRoot}`),
   );
   return 0;
+}
+
+/**
+ * Doctor's lines about an ESPN league's route, or none for any other provider.
+ * `imported` is true on the import route, where doctor makes no request.
+ * Cookies are reported as present or missing, never by value, and only on the
+ * fetch route: under import they are never read (src/config.mjs).
+ */
+function describeEspnRoute(config) {
+  const { provider, route, secrets = {} } = config.league;
+  if (provider !== 'espn') return { lines: [], imported: false };
+  const lines = [];
+  if (getProvider(provider).experimental) {
+    lines.push(
+      `  Provider           ${providerDisplayName(provider)} — experimental: built from public descriptions of an ` +
+        'unofficial API, not yet checked against a live league (docs/espn-data.md)',
+    );
+  }
+  if (route === 'fetch') {
+    lines.push(
+      "  ESPN route         fetch — automated access you opted into under ESPN's terms of use (Disney Terms of Use §2.B(x))",
+    );
+    const status = (key) => (secrets[key] ? 'present' : 'missing');
+    lines.push(
+      `  ESPN cookies       ESPN_S2 ${status('ESPN_S2')}, ESPN_SWID ${status('ESPN_SWID')}` +
+        (secrets.ESPN_S2 ? '' : ' (needed only for a private league)'),
+    );
+    return { lines, imported: false };
+  }
+  lines.push('  ESPN route         import — doctor never contacts ESPN; it reports from the files you imported');
+  return { lines, imported: true };
+}
+
+/** What to save on the import route, and which weeks are saved already. */
+function describeImportToSave(ctx, config) {
+  const pages = ctx.provider.savedPages?.();
+  const weeks = (pages?.weeks ?? []).map((w) => w.week);
+  const links = ctx.provider.importLinks({ leagueId: config.league.id, season: ctx.league.season, weeks });
+  const lines = [
+    `  Imported weeks     ${weeks.length ? weeks.join(', ') : 'none yet'}`,
+    "  Addresses to save  Open each in a browser signed in to ESPN and save the page in this league's folder,",
+    "                     then import it. This is your own manual, personal use under ESPN's terms.",
+    "                     Whether a private league's page shows on a plain signed-in visit is unverified.",
+    `                     league          ${links.league}`,
+  ];
+  for (const { week, matchups, transactions } of links.weeks) {
+    lines.push(
+      `                     week ${week} matchups      ${matchups}`,
+      `                     week ${week} transactions  ${transactions}`,
+    );
+  }
+  return lines;
+}
+
+/**
+ * The explanation for an ESPN failure doctor can name, as lines, or null for
+ * any other error (which is then rethrown unchanged). Matched by error name and
+ * status so the CLI never imports a provider's own modules.
+ */
+function explainEspnError(error, config) {
+  if (config.league.provider !== 'espn') return null;
+  if (error?.name === 'EspnError' && error.status === 401) {
+    return [
+      'private league: add ESPN_S2 and ESPN_SWID to .env (or refresh them if they worked before)',
+      ...ESPN_COOKIE_HELP,
+    ];
+  }
+  if (error?.name === 'EspnShapeError') {
+    return [
+      `ESPN's ${error.view} response does not match the documented shape: ${error.path}.`,
+      'ESPN may have changed its API. See docs/espn-data.md.',
+    ];
+  }
+  return null;
 }
 
 /**
