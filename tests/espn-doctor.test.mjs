@@ -193,6 +193,23 @@ test('import route: no request is made, the addresses and imported weeks are pri
   }
 });
 
+test('a Sleeper league gets none of the ESPN lines, and its errors pass through unchanged', () => {
+  // The fake Sleeper answers 404 for everything, so doctor fails at its first
+  // request: enough to show the ESPN-only lines are gated on the provider and
+  // that a Sleeper error is not rewritten as an ESPN explanation.
+  const root = folder(['SLEEPER_LEAGUE_ID=111']);
+  try {
+    const result = run(root, "globalThis.fetch = async () => new Response('null', { status: 404 });\n");
+    const out = output(result);
+    assert.equal(result.status, 1, out);
+    assert.match(out, /Contacting Sleeper\.\.\./);
+    assert.ok(!/Provider\s+|ESPN route|ESPN cookies|private league:|ESPN may have changed/.test(out), out);
+    assert.match(result.stderr, /Error: /);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('import route with nothing imported: no request, the addresses to save', () => {
   const root = folder(['LEAGUE_PROVIDER=espn', `ESPN_LEAGUE_ID=${PUBLIC_LEAGUE_ID}`, `LEAGUE_SEASON=${SEASON}`]);
   try {
