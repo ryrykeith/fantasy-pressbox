@@ -820,7 +820,8 @@ async function main() {
   say('');
   say(`Output lands in ${displayPath(join(workspaceRoot, 'output'))}.`);
   if (provider) say(`Your API key is set, so ${bold('--generate')} works on any of those.`);
-  if (formatType === 'dynasty') {
+  // Not for ESPN: the prospect board is unavailable there (no traded future picks).
+  if (formatType === 'dynasty' && !isEspn) {
     // The rookie class that matters is next season's: this season's draft is done.
     const season = Number.parseInt(league.season, 10);
     const draftYear = Number.isInteger(season) ? String(season + 1) : '<draft year>';

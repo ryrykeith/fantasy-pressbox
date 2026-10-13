@@ -259,6 +259,21 @@ test('guillotine is not offered for an ESPN league', async () => {
   assert.equal(existsSync(join(workspace, 'config', 'guillotine.yml')), false);
 });
 
+test('an ESPN dynasty league gets no rookie draft questions and is not pointed at the prospect board', async () => {
+  const workspace = tempDir();
+  const page = join(workspace, 'league-page.json');
+  writeFileSync(page, await savedLeaguePage(PUBLIC_LEAGUE_ID));
+  // route; id; season; file; is this your league; name; format: 1 (dynasty); scoring; provider; tone; length
+  const result = runSetup(['', PUBLIC_LEAGUE_ID, String(SEASON), page, '', '', '1', '', '', '', ''], {
+    workspace,
+    preload: THROWING_FETCH,
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(loadEnvFile(join(workspace, '.env')).LEAGUE_FORMAT, 'dynasty');
+  assert.doesNotMatch(result.stdout, /rookie draft ordered|prospects\.example\.yml/);
+  assert.equal(existsSync(join(workspace, 'config', 'rookie-draft.yml')), false);
+});
+
 test("a second ESPN run offers the first run's answers and backs up .env; a different league is refused without asking", async () => {
   const workspace = tempDir();
   const page = join(workspace, 'league-page.json');
