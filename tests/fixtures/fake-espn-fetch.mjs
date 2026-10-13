@@ -14,7 +14,8 @@
  *   - a private league (PRIVATE_LEAGUE_ID) that answers 401 without both
  *     fixture cookies, and the same payload with them;
  *   - 404 for any other league ID or any season but the fixture's;
- *   - the season endpoint and players_wl, which need no login.
+ *   - the season endpoint and players_wl, which need no login;
+ *   - week 4's transactions, and none for any other week.
  * Any other URL rejects, as a stranded network call would fail loudly, so a
  * request this file doesn't know about can never go anywhere.
  *
@@ -72,11 +73,19 @@ function mergeById(a = [], b = []) {
 
 /** The league response for the views asked for, as one request with several view= parameters returns them. */
 function leagueResponse(league, views, scoringPeriodId) {
+  // Transactions are fixtures for week 4 only; any other week has none.
+  if (scoringPeriodId !== undefined && scoringPeriodId !== league.scoredWeek && views.includes('mTransactions2')) {
+    views = views.filter((view) => view !== 'mTransactions2');
+    const rest = views.length ? leagueResponse(league, views, scoringPeriodId) : {};
+    const { transactions, ...base } = league.views.mTransactions2;
+    return { ...base, ...rest, transactions: [] };
+  }
   let body = {};
   for (const view of views) {
     let part;
     if (MATCHUP_VIEWS.includes(view)) {
-      part = scoringPeriodId === league.scoredWeek ? league.views.mMatchupWeek4 : league.views.mMatchup;
+      // A week the fixture has lineups for (week 4, and week 5 unplayed), else the season schedule.
+      part = (scoringPeriodId !== undefined && league.views[`mMatchupWeek${scoringPeriodId}`]) || league.views.mMatchup;
     } else if (OTHER_VIEWS.includes(view)) {
       part = league.views[view];
     } else {

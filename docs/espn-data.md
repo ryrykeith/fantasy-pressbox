@@ -796,6 +796,19 @@ not supply (age, for example) is absent from the shared Player record, not
 null. On the import route there is no player list: names come from the saved
 rosters and lineups ([Importing saved files](#importing-saved-files)).
 
+**decision** (2026-10-13, task 5.2; open question 9): on the fetch route,
+every rostered player the player list leaves out is added from his
+`playerPoolEntry.player` record in `mRoster` (`withRosteredPlayers` in
+`src/espn/normalize.mjs`). A player in both keeps the list's record. Without
+this, a rostered player missing from the list would have no position, so no
+slot could take him in the optimal lineup. His team's lineup efficiency could
+then come out above 100%, and he would print as his ESPN ID.
+
+Whatever the dictionary holds, a player whose position is not on file leaves
+his team's potential points and lineup efficiency out of the week's analysis
+(`src/analysis/week.mjs`). They are not computed without him. This rule is
+provider-neutral and applies to Sleeper too.
+
 As with Sleeper, **a raw ESPN player ID or numeric code must never reach a
 prompt.**
 

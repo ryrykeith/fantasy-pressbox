@@ -110,6 +110,13 @@ export async function fetchMarketValues(query, { fetchImpl = fetch } = {}) {
 const PICK_NAME = /^(\d{4}) (\d+)(?:st|nd|rd|th)(?: \((Early|Mid|Late)\))?$/;
 
 /**
+ * The player-ID space normalizeMarketValues keys players by: a provider's
+ * `playerIdSpace`. A league whose players use another space cannot be priced
+ * from this list, because its IDs would be looked up among Sleeper's.
+ */
+export const MARKET_PLAYER_ID_SPACE = 'sleeper';
+
+/**
  * FantasyCalc's list → `{ players, picks }`.
  *
  *   players  keyed by Sleeper player id: value, overall and positional rank, age

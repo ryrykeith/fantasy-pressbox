@@ -14,6 +14,7 @@ import {
   normalizePlayers,
   normalizeTeams,
   normalizeWeek,
+  withRosteredPlayers,
 } from '../src/espn/normalize.mjs';
 import { EspnShapeError } from '../src/espn/shape.mjs';
 import { captureWeek } from '../src/pipeline.mjs';
@@ -485,6 +486,44 @@ function irBundle({ withPoints, points }) {
   else if (points !== undefined) player.stats.find((s) => s.statSourceId === 0).appliedTotal = points;
   return raw;
 }
+
+test('a starter of unknown position leaves his team\'s lineup efficiency unavailable, never above 100%', () => {
+  // The fixture's players_wl knows only the first two teams' players.
+  const analysis = analyze(weekOf());
+  const known = new Set([1, 2]);
+  for (const side of analysis.teamWeeks) {
+    if (known.has(side.rosterId)) {
+      assert.ok(side.lineupEfficiency <= 100 && side.potentialPoints >= side.points, side.team);
+    } else {
+      for (const key of ['potentialPoints', 'lineupEfficiency', 'optimalLineup']) assert.ok(!(key in side), `${side.team}: ${key}`);
+    }
+  }
+  assert.ok(known.has(analysis.teamWeeks.find((t) => t.team === analysis.awards.managerOfTheWeek.team).rosterId));
+});
+
+test('the fetch route\'s dictionary adds every rostered player players_wl leaves out, and keeps its own records', () => {
+  const v = views();
+  const fromList = normalizePlayers(PLAYERS_WL);
+  const players = withRosteredPlayers(fromList, v.mRoster);
+  for (const t of v.mRoster.teams) {
+    for (const entry of t.roster.entries) {
+      assert.deepEqual(players[String(entry.playerId)], normalizePlayer(entry.playerPoolEntry.player));
+    }
+  }
+  // A player in both keeps his players_wl record, and the list's own players are all still there.
+  const marked = { ...fromList, [String(playerId(0, 0))]: { ...fromList[String(playerId(0, 0))], name: 'From the list' } };
+  assert.equal(withRosteredPlayers(marked, v.mRoster)[String(playerId(0, 0))].name, 'From the list');
+  for (const id of Object.keys(fromList)) assert.ok(id in players, id);
+  assert.notEqual(players, fromList, 'the dictionary passed in is not changed');
+
+  // With it, every team's lineup efficiency is known, and none is above 100%.
+  const { league, teams } = opened();
+  const analysis = analyzeWeek({ league, teams, players, rosters: weekOf().rosters, week: SCORED_WEEK });
+  for (const side of analysis.teamWeeks) {
+    assert.equal(typeof side.lineupEfficiency, 'number', side.team);
+    assert.ok(side.lineupEfficiency <= 100 && side.potentialPoints >= side.points, side.team);
+  }
+});
 
 test('an IR player with no points entry does not make his team\'s lineup efficiency unavailable', () => {
   const week = weekOf(PUBLIC_LEAGUE_ID, irBundle({ withPoints: false }));

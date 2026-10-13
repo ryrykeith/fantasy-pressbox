@@ -18,6 +18,7 @@ import { buildRosterWindow } from './analysis/rosterWindow.mjs';
 import { buildPickCapital, pickCapitalSeasons } from './analysis/pickCapital.mjs';
 import { byeWeekTableSource, upcomingByeExposure } from './analysis/byeExposure.mjs';
 import {
+  MARKET_PLAYER_ID_SPACE,
   MarketValuesError,
   fetchMarketValues,
   marketValueQuery,
@@ -280,8 +281,17 @@ export function readTransactions({ store, league, teams, players, describePlayer
  * A failed fetch never fails the edition: it returns `{ unavailable }` with the
  * reason, and src/promptContext.mjs turns that into an `unavailable` entry
  * telling the model not to quote any value.
+ *
+ * A league whose players are not in FantasyCalc's ID space (ESPN's, until the
+ * espnId join exists) is never priced: it fetches nothing and reads no saved
+ * market, because its player IDs looked up among Sleeper's could name another
+ * player's value.
  */
 export async function readMarketValues({ store, league, teams, week, refresh = false, fetchImpl = fetch }) {
+  const provider = providerOf(league);
+  if (provider.playerIdSpace !== MARKET_PLAYER_ID_SPACE) {
+    return { unavailable: `FantasyCalc values are not matched to ${provider.displayName} player IDs in this version` };
+  }
   if (!refresh) {
     const saved = store.loadMarketValues(league.season, week);
     if (saved) return saved;

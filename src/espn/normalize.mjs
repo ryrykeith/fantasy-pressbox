@@ -475,6 +475,26 @@ export function normalizePlayers(playersWl) {
   return players;
 }
 
+/**
+ * The fetch route's dictionary: players_wl, plus every rostered player it
+ * leaves out, from his `playerPoolEntry.player` record in mRoster. Whether
+ * players_wl lists every rostered player is not known (doc, open question 9);
+ * a rostered player missing from it would otherwise have no name or position,
+ * and print as his ESPN ID. A player in both keeps his players_wl record.
+ *
+ * Takes rosters that have passed their shape guard (normalizeTeams).
+ */
+export function withRosteredPlayers(players, mRoster) {
+  const all = { ...players };
+  for (const team of mRoster?.teams ?? []) {
+    for (const entry of team.roster?.entries ?? []) {
+      const id = String(entry.playerPoolEntry.player.id);
+      all[id] ??= normalizePlayer(entry.playerPoolEntry.player);
+    }
+  }
+  return all;
+}
+
 // --- Week ----------------------------------------------------------------------
 
 /**

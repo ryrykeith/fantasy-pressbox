@@ -17,6 +17,7 @@
  * What it holds, per league (see buildLeague):
  *   - mSettings, mTeam, mRoster, mDraftDetail      (league views)
  *   - one week's mMatchup (week 4) with each side's lineup, bench included
+ *   - week 5's mMatchup, not yet played: lineups with projections only
  *   - mBoxscore: the same week, under that view's name. Neither client requests
  *     it (doc, "League views"); the shape is the mMatchup one, as a guess.
  *   - mTransactions2 for week 4: a trade, a FAAB claim, a losing bid, a
@@ -234,6 +235,35 @@ function buildSchedule(withLineups) {
   });
 }
 
+/** Which teams meet in week 5, the week about to be played: 1-3, 2-4, 5-7, 6-8, 9-11, 10-12. */
+const UPCOMING_PAIRS = [[0, 2], [1, 3], [4, 6], [5, 7], [8, 10], [9, 11]];
+
+/**
+ * Week 5, not yet played: each side's lineup with a projection and no actual
+ * points (statSourceId 1 only), totalPoints 0 and winner UNDECIDED. That an
+ * unplayed side reports 0 rather than omitting the field is a placeholder: the
+ * doc does not say.
+ */
+function buildUpcomingSchedule() {
+  const week = SCORED_WEEK + 1;
+  return UPCOMING_PAIRS.map(([home, away], n) => {
+    const side = (i) => ({
+      teamId: TEAMS_AFTER_WEEK_4[i].rosterId,
+      totalPoints: 0,
+      rosterForCurrentScoringPeriod: {
+        entries: rosterEntries(i, week).map((e) => ({
+          ...e,
+          playerPoolEntry: {
+            ...e.playerPoolEntry,
+            player: { ...e.playerPoolEntry.player, stats: e.playerPoolEntry.player.stats.filter((s) => s.statSourceId === 1) },
+          },
+        })),
+      },
+    });
+    return { id: 500 + n, matchupPeriodId: week, playoffTierType: 'NONE', winner: 'UNDECIDED', home: side(home), away: side(away) };
+  });
+}
+
 /**
  * Transactions in week 4. IDs are plain invented strings: the doc does not say what ESPN's look like.
  * `status` strings are placeholders: ESPN's values are unknown (doc, open question 6).
@@ -350,6 +380,9 @@ export function buildLeague({ leagueId = PUBLIC_LEAGUE_ID, faab = true, multiWee
       // With scoringPeriodId=4: that week, with each side's lineup and bench.
       mMatchupWeek4: matchupWeek4,
       mBoxscore: matchupWeek4,
+      // With scoringPeriodId=5: the week about to be played. Not in the
+      // multi-week variant, where scoring period 5 is still matchup period 4.
+      ...(multiWeek ? {} : { mMatchupWeek5: { ...base, schedule: buildUpcomingSchedule() } }),
       mTransactions2: { ...base, transactions: buildTransactions({ faab }) },
       // Only draftDetail.drafted is documented (doc, "Draft picks"); no picks are listed.
       mDraftDetail: { ...base, draftDetail: { drafted: true } },

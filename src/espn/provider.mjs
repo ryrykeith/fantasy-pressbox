@@ -38,7 +38,7 @@ import {
   staleLeagueError,
   staleLeagueNotice,
 } from './import.mjs';
-import { normalizeLeague, normalizePlayers, normalizeTeams, normalizeWeek } from './normalize.mjs';
+import { normalizeLeague, normalizePlayers, normalizeTeams, normalizeWeek, withRosteredPlayers } from './normalize.mjs';
 import { guardSeason } from './shape.mjs';
 import { LEAGUE_VIEWS, TRANSACTION_VIEWS, WEEK_VIEWS, espnImportLinks } from './urls.mjs';
 
@@ -74,7 +74,7 @@ function instance(client, { config = null, league = null } = {}) {
         { leagueId: client.leagueId, declaredFormatType: config?.leagueFormat ?? null },
       );
       const teams = normalizeTeams({ mTeam: body, mRoster: body, mSettings: body });
-      const players = normalizePlayers(await client.players({ refresh: refreshPlayers }));
+      const players = withRosteredPlayers(normalizePlayers(await client.players({ refresh: refreshPlayers })), body);
       return { league: current, teams, players, draftCapital: null };
     },
 

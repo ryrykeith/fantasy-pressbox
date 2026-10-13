@@ -74,9 +74,15 @@ const hasPoints = (entry) => typeof entry.points === 'number';
  * known. A player on his bye counts as 0, because a player whose team had no
  * game cannot score. Any other player with no points makes the whole lineup
  * unknowable for the week: it is not computed around the gap.
+ *
+ * So does a player whose position is not on file (one the player dictionary
+ * does not know): no slot can take him, so a lineup solved without him could
+ * fall below the points the team actually scored. An empty starting slot (a
+ * null id) is no player and does not count.
  */
 function optimalLineup(slots, candidates) {
   if (candidates.some((entry) => !hasPoints(entry) && !entry.onBye)) return null;
+  if (candidates.some((entry) => entry.id !== null && !entry.player?.position)) return null;
   return bestLineup({ slots, candidates: candidates.map((entry) => (hasPoints(entry) ? entry : { ...entry, points: 0 })) });
 }
 
