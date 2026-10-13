@@ -927,6 +927,141 @@ nothing would say so.
 - Saving and importing the league page again clears it.
 - The fetch route is unaffected: it reads the league live on every run.
 
+## Coverage matrix
+
+What every edition, command and context fact does on an ESPN league, as the
+code stands (2026-10-13). This is the final form of the draft in
+`docs/plans/espn-football.md` §8, corrected against the code.
+`tests/espn-coverage-matrix.test.mjs` keeps it honest. It fails when an
+edition, a command, a top-level context key or an `unavailable` key exists in
+the code with no row here, or a row names one the code does not have. It also
+fails when a row's status does not match what the code does on the invented
+ESPN fixtures.
+
+Each row has one label:
+
+- **verified** (2026-10-13): what the row says holds whatever ESPN actually
+  sends, because it is a refusal, an omission or an `unavailable` entry this
+  project decided on. The test named in the row checks it on the invented
+  fixtures.
+- **assumed**: the row holds only if ESPN sends what this file assumes (every
+  supported edition reads ESPN's responses), or no test checks it on an ESPN
+  league. The facts it rests on are under [Open questions](#open-questions).
+
+No row is checked against a live league yet (task 2.2).
+
+### Editions and commands
+
+Every command is in `src/cli.mjs`'s `main`. Every edition is a key of
+`TASK_PROMPTS` in `src/promptContext.mjs`. `transactions` is the command that
+builds the `trade-report` edition. `postseason` and `waiver-report` are
+editions that no command builds yet.
+
+| Edition or command | On ESPN | Label |
+|---|---|---|
+| `init` | **Supported.** Setup reads the league ID from a bare ID or a pasted address. It offers dynasty and redraft only, and says a keeper league counts as redraft. Guillotine is not offered. The import route is the default: setup makes no request and asks for no cookie. The fetch route is an opt-in after the terms notice; it confirms the league with ESPN and takes the cookies for a private league, kept only in `.env`. | **assumed**: the fetch route's confirmation reads the league response ([League settings](#league-settings)). `tests/init-espn.test.mjs` checks it on the fixtures. |
+| `migrate` | **Supported.** It copies `.env`, the league's config, and the whole `data/` and `output/` folders, saved ESPN pages included. Nothing in it reads ESPN data. | **assumed**: no test runs it on an ESPN league folder. |
+| `doctor` | **Supported.** On the import route it makes no request. It prints the addresses to save, the imported weeks and the period each saved page is from, and flags a stale league page with a non-zero exit. On the fetch route it reports the route, whether both cookies are set (never their values), explains a 401, and names the view and field of a response that fails its shape guard. | **assumed**: the league facts it prints come from ESPN's responses. `tests/espn-doctor.test.mjs` and `tests/espn-stale-league.test.mjs` check it on the fixtures. |
+| `fetch` | **Supported.** It captures a week. On the fetch route it asks ESPN, with the cookies for a private league; on the import route it reads only saved pages and makes no request. A multi-week matchup period is saved, and is reported as having no single score, not as all zeros. | **assumed**: [Endpoints used](#endpoints-used). `tests/espn-multi-week.test.mjs`, `tests/espn-import.test.mjs`. |
+| `import-espn` | **Supported**, ESPN only. It reads the pages saved per [Importing saved files](#importing-saved-files) and refuses a Sleeper league folder or `ESPN_ROUTE=fetch`. | **assumed**: the saved pages' shapes, and a private league's pages in a browser are **Unverified** (open question 35). `tests/espn-import.test.mjs`. |
+| `preview` | **Supported.** The week's pairings, with last week's results beside them. **Refused** for a week whose matchup period spans more than one NFL week (decision 12). If only last week was multi-week, its results are left out and the CLI says so. | **assumed**: `mMatchupScore`/`mScoreboard` and `scheduleSettings.matchupPeriods` (open questions 14, 20). `tests/espn-editions.test.mjs`, `tests/espn-multi-week.test.mjs`. |
+| `recap` | **Supported.** The week's games, with lineup efficiency and best possible lineups from per-player points, bench included. **Refused** for a multi-week matchup period, as `preview` is. | **assumed**: per-player points include the bench (open question 22), and open question 32. `tests/espn-editions.test.mjs`, `tests/espn-multi-week.test.mjs`. |
+| `rankings` | **Supported** (the weekly ranking). The `futureDraftCapital` entry replaces future draft capital. **Refused** for a multi-week matchup period. | **assumed**: as `recap`. `tests/espn-editions.test.mjs`, `tests/espn-multi-week.test.mjs`. |
+| `postseason` | **Supported** by `buildContext`, as `rankings` is, but no command builds it: the `rankings` command builds the weekly edition. | **assumed**: as `rankings`. Built in process by `tests/espn-capability-gates.test.mjs`. |
+| `preseason-rankings` | **Supported.** It reads no week. It needs rosters before week 1. | **assumed**: whether ESPN reports rosters before week 1 is open question 29. `tests/espn-editions.test.mjs` runs it on a league already in week 5. |
+| `transactions` (`trade-report`) | **Supported.** It builds the trade report. A week with no completed transactions, or with pickups but no trade, builds no edition and says so. A week imported without its transactions page is refused, naming the page to save. Draft picks get the `draftPicks` entry and market values the `marketValues` entry. A trade ESPN sent without its items is carried as `contentsUnknown` (`tradeContents`). | **assumed**: `mTransactions2`, and how an executed trade is told apart (open question 6). `tests/espn-editions.test.mjs`, `tests/espn-import.test.mjs`. |
+| `waiver-report` | **Supported** by `buildContext`, but no command builds it yet: the `transactions` command builds trade reports only. Under rolling waivers, bids get the `waiverBids` entry. | **assumed**: open questions 6 and 24. Built in process by `tests/espn-editions.test.mjs`. |
+| `tank-watch` | **Refused**: "ESPN traded picks are not read in this version, so who holds which future draft pick is not known". Refused before ESPN is contacted, again with the opened league, and again in `buildContext`. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `future-stock` | **Refused**: "ESPN traded picks are not read in this version, so who holds which future draft pick is not known". Refused in the same three places as `tank-watch`. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `survival-preview` | **Refused**: "guillotine leagues are not supported on ESPN in this version (v1)" (decision 9). Refused before ESPN is contacted, whatever the declared format. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `chop-recap` | **Refused**: "guillotine leagues are not supported on ESPN in this version (v1)" (decision 9). | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `survival-rankings` | **Refused**: "guillotine leagues are not supported on ESPN in this version (v1)" (decision 9). | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `record` | **Supported.** It files a pasted preview's predictions or a pasted ranking. It opens the league, so it refuses whatever opening the league refuses (below). | **assumed**: it opens the league from ESPN's responses. `tests/espn-editions.test.mjs`. |
+| `check` | **Supported.** It counts a pasted reply's posts against the post length limit. It needs no league and reads no ESPN data. | **verified**: `tests/espn-editions.test.mjs` runs it on both routes. |
+| `grade` | **Supported.** It scores recorded predictions against the week's results. **Refused** for a multi-week matchup period. | **assumed**: as `recap`. `tests/espn-editions.test.mjs`, `tests/espn-multi-week.test.mjs`. |
+
+Opening the league refuses every command that needs it (all but `init`,
+`migrate` and `check`; `doctor` and `import-espn` report a stale league page
+rather than refusing it):
+
+- a response that fails its shape guard (`EspnShapeError`, naming the view and
+  the field path);
+- a league that starts an IDP slot, naming the slots (open question 31;
+  `tests/espn-normalize.test.mjs`);
+- `LEAGUE_FORMAT=guillotine`, which refuses every edition before ESPN is
+  contacted (decision 9; `tests/espn-capability-gates.test.mjs`);
+- on the import route, a saved league page older than the latest saved week
+  page (`EspnStaleLeagueError`; `tests/espn-stale-league.test.mjs`).
+
+### Context facts
+
+The top-level keys of the JSON context `buildContext` hands the model
+(`src/promptContext.mjs`). A key absent from an edition's context is left out,
+never null.
+
+| Fact | On ESPN | Label |
+|---|---|---|
+| `task`, `generatedAt`, `outputFormat`, `editorial` | **Supported.** The edition, the time it was built, the chat format, and the house style with the format's ranking weights. None of them reads ESPN data. | **verified**: `tests/espn-editions.test.mjs`. |
+| `week` | **Supported.** The week asked for, or else the one worked out from the league's current scoring period. | **assumed**: [Working out the week](#working-out-the-week) (open questions 18, 19). |
+| `league` | **Supported.** Name, season, team count, starting and bench slots, playoff teams and start week, and the format with its scoring profile, read through the stat-ID table. Stats the profile does not model are listed under `notModelled`. Every scored setting is listed under `nonDefault` (see `scoringDefaults`). `status` is always null. `taxiSlots` is always 0. A league that lists no reception stat gets the `receptionRate` entry. | **assumed**: `mSettings` ([League settings](#league-settings), [Scoring](#scoring); open questions 4, 5). |
+| `teams` | **Supported** in the ranking editions: record, points for and against, the roster with injury designations, and `injuredReserve` from the IR slot. No season potential points (`seasonPotentialPoints`), no taxi squad (`taxiSquad`), no manager (`managerNames`). | **assumed**: `mTeam`, `mRoster` (open questions 21, 23, 30). |
+| `standings` | **Supported** outside the ranking editions: record and points for and against, ordered by wins then points for. No manager. | **assumed**: `record.overall` (open question 23). |
+| `upcomingMatchups` | **Supported** in `preview`: each pairing with both teams' records. | **assumed**: open questions 14, 20. |
+| `unpairedTeams` | **Supported** in `preview` when a team has no opponent that week. | **assumed**: a matchup with no `away` side is a bye ([Matchups and weekly scores](#matchups-and-weekly-scores)). |
+| `thisWeek` | **Supported** in `recap` and the ranking editions: each game's points (the side's `totalPoints`), potential points, lineup efficiency, starters, best bench performances and best possible lineup, plus the award facts. A player with no points entry makes his team's efficiency and best lineup unavailable for that week (open question 32). | **assumed**: open questions 22, 32. |
+| `previousWeek` | **Supported** in `preview`: last week's results. Left out when last week was a multi-week matchup period, and then the `previousWeek` entry says so. | **assumed**: as `thisWeek`. |
+| `previousRankings` | **Supported**: the last ranking recorded with `record`, read from the league folder. | **assumed**: teams are matched across renames by their ESPN team ID ([Teams and members](#teams-and-members)). |
+| `previousPredictions` | **Supported** in `recap`: the recorded predictions, graded against the week's results. | **assumed**: graded against ESPN's scores. `tests/espn-editions.test.mjs`. |
+| `transactions` | **Supported** outside the transaction editions: the week's readable moves, with FAAB bids where the league has a budget. A trade sent without its items is `contentsUnknown`, with no `moves` (`tradeContents`). A week imported without its transactions page gets the `transactions` entry instead. | **assumed**: `mTransactions2` (open question 6). |
+| `trades` | **Supported** in `trade-report`: each side's team, what it received and its standing. No picks. | **assumed**: `mTransactions2` (open question 6). |
+| `pickups` | **Supported** in `waiver-report`: each claim or free-agent move, with its bid in a FAAB league. | **assumed**: open questions 6, 24. |
+| `marketValues`, `marketCredit` | **Unavailable**: FantasyCalc values are not matched to ESPN player IDs in this version (task 6.1 adds the `espnId` join), so no market is fetched or read (`marketValues`). The FantasyCalc credit goes only with values, so it is absent too. | **verified**: `tests/espn-editions.test.mjs`. |
+| `futureDraftCapital` | **Unavailable** in the ranking editions (the `futureDraftCapital` entry): ESPN traded picks are not read, and a redraft league has none. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `draftCapital`, `draftProjection`, `prospectBoard`, `rosterWindow`, `tankWatch` | **Refused**: only `tank-watch`, `future-stock` and a trade report's traded picks carry them. The first two are refused, and an ESPN trade carries no picks. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `survivorCount`, `eliminationHistory`, `faabMarket`, `dangerBoard`, `byeExposure` | **Refused**: guillotine facts, and guillotine is refused on ESPN (decision 9). | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `unavailable` | **Supported**: always present, holding the entries below. | **verified**: `tests/espn-coverage-matrix.test.mjs`. |
+
+### Unavailable entries
+
+Every `field` an `unavailable` entry can carry (the `field: '…'` literals under
+`src/`). **Emitted** rows say when an ESPN context gets the entry and summarise
+the instruction the model is given; the exact wording is in
+`src/promptContext.mjs`. **Never** rows say why an ESPN context cannot get it.
+Each emitted entry also has a `why`, which names ESPN where ESPN is the
+reason.
+
+| Key | On ESPN | Label |
+|---|---|---|
+| `seasonPotentialPoints` | **Emitted** in every edition. ESPN is not known to report a team's season potential points. Told: do not state or estimate any team's season potential points, max points-for or season bench points; a week's own `potentialPoints` and `lineupEfficiency` are about that week only. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `taxiSquad` | **Emitted** in every edition: no taxi squad is read. Told: do not mention a taxi squad or call any player stashed on one. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `playerAge` | **Emitted** in every edition: no age or birth date is read. Told: do not state or imply any player's age, or call him young, old, ageing or in his prime, except where a FantasyCalc `market` entry gives his age. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `managerNames` | **Emitted** in every edition: member display names are not confirmed as a source (decision 11, open question 27), so every manager is removed from the context. Told: refer to every team by its team name, and do not name, guess, recall or nickname any manager. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `scoringDefaults` | **Emitted** in every edition: no ESPN defaults table is read, so every scored setting is under `nonDefault`. Told: do not call any setting standard, default, ordinary or unusual, or say the league scores differently from most; state a setting only as its value. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `keeperDesignations` | **Emitted** in a keeper league (`draftSettings.keeperCount` above 0), covered as redraft (decision 8). Told: do not say which players any team kept, will keep or is likely to keep, and do not value a player for his keeper status. | **assumed**: `keeperCount` ([League formats](#league-formats)). `tests/espn-capability-gates.test.mjs`. |
+| `waiverBids` | **Emitted** under rolling waivers. Told: do not mention bids, FAAB, budgets or what a claim cost, or any team's waiver position. | **assumed**: `isUsingAcquisitionBudget` (open question 24). `tests/espn-capability-gates.test.mjs`. |
+| `playoffField` | **Emitted** when the league's seeding rule is not head-to-head record (taken as wins then points for, tiebreak assumed), or ESPN reports no rule. Seeds are then left out. Told: do not state any seed, who is in or out of the playoff places, or who would make the playoffs now; no order in the context is the seeding order. | **assumed**: `playoffSeedingRule` (open question 26). `tests/espn-capability-gates.test.mjs`. |
+| `tradeContents` | **Emitted** when a completed trade arrived without its items (`contentsUnknown`). Told: report it only as a trade by the teams named, with unknown contents; do not say what moved, do not grade it, and never call it a trade of nothing. | **assumed**: when ESPN omits a trade's items (open question 6). `tests/espn-capability-gates.test.mjs`. |
+| `receptionRate` | **Emitted** when the league lists no reception stat (stat 53). Told: do not state the per-catch value or call the league standard, half-PPR or full PPR, and do not rank pass catchers as though a catch were worth nothing or a full point. | **assumed**: `scoringItems` (open questions 4, 5). `tests/espn-normalize.test.mjs`. |
+| `futureDraftCapital` | **Emitted** in the ranking editions. In a redraft (or keeper) league: there is no future draft capital, and the model is told not to discuss picks at all. In a declared dynasty: ESPN traded picks are not read, and the model is told to give the `future_draft_capital` factor no weight, and not to say which picks any team holds or has traded, or that none have been traded. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `draftPicks` | **Emitted** in `trade-report`. Redraft: do not discuss draft picks in any grade. Declared dynasty: ESPN traded picks are not read, so do not say whether any trade included picks, or grade on them. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `marketValues` | **Emitted** in `trade-report`: "FantasyCalc values are not matched to ESPN player IDs in this version". Told: do not quote, estimate or recall any trade value; grade on roster fit, `playerHistory` and the standings, and say once that market values were unavailable. | **verified**: `tests/espn-editions.test.mjs`. |
+| `injuryDetail` | **Emitted** in `trade-report` and `waiver-report`: only ESPN's injury designations are available, not injury news. Told: do not describe an injury beyond the designation shown. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `managerMotives` | **Emitted** in `trade-report` and `waiver-report`. Told: do not state a motive as fact; a read framed as a read is fine. | **verified**: `tests/espn-coverage-matrix.test.mjs`. |
+| `projections` | **Emitted** in `trade-report` and `waiver-report`. Told: do not cite projected points, and treat a game or two in `playerHistory` as a small sample. | **verified**: `tests/espn-coverage-matrix.test.mjs`. |
+| `playerQuality` | **Emitted** in `waiver-report`. Told: judge each pickup on roster shape, cost and `playerHistory`, never on how good a player is in general. | **verified**: `tests/espn-coverage-matrix.test.mjs`. |
+| `previousRankings` | **Emitted** in a ranking edition with no earlier ranking recorded. Told: print no movement arrows or previous ranks, and say this is the first edition. | **verified**: `tests/espn-coverage-matrix.test.mjs`. |
+| `previousWeek` | **Emitted** in `preview` without last week's results (week 1, none on file, or a multi-week matchup period). Told: do not describe last week or cite any score. | **verified**: `tests/espn-coverage-matrix.test.mjs`. |
+| `previousPredictions` | **Emitted** in `recap` when no prediction was recorded for the week. Told: claim no prediction and skip the self-grading section. | **verified**: `tests/espn-coverage-matrix.test.mjs`. |
+| `transactions` | **Emitted** outside the transaction editions, in one of two forms. A week imported without its transactions page: do not mention any move, and do not say the week was quiet. No completed transaction found: do not mention trades, waiver claims or free-agent moves. | **assumed**: "no completed transaction" rests on how a completed move is recognised (open question 6). `tests/espn-import.test.mjs`. |
+| `matchups` | **Never**: only a format without head-to-head games (guillotine) gets it, and guillotine is refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `chopLine` | **Never**: survival editions only, refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `faabMarket` | **Never**: survival editions only, refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `marketValuesAtTradeTime` | **Never**: given only beside market values, which an ESPN league never has. | **verified**: `tests/espn-editions.test.mjs`. |
+| `previousTankWatch` | **Never**: `tank-watch` only, refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `pickTradeHistory` | **Never**: `tank-watch` and `future-stock` only, both refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `finalDraftOrder`, `laterRoundPickNumbers`, `projectedDraftSlot`, `projectedSlotAtTradeTime`, `boardRankIsNotAvailability`, `prospectBoard`, `prospectsNotOnBoard` | **Never**: they describe future picks, which only `tank-watch`, `future-stock` and a trade report's traded picks carry. The first two are refused, and an ESPN trade carries no picks because ESPN traded picks are not read. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `previousFutureStock`, `playerProjections`, `productionByAge`, `pickValues` | **Never**: `future-stock` only, refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+
 ## Open questions
 
 Each must be answered by task 2.1 (public endpoints) or task 2.2 (a test
