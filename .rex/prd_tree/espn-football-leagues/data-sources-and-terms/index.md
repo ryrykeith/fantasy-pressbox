@@ -17,5 +17,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Build the bye-week table from nflverse's CC-BY-4.0 schedule instead of ESPN](./build-the-bye-week-table-from-nflverse.md) | pending |
+| [Build the bye-week table from nflverse's CC-BY-4.0 schedule instead of ESPN](./build-the-bye-week-table-from-nflverse.md) | completed |
 | [Credit FantasyCalc wherever a post quotes its values](./credit-fantasycalc-wherever-a-post.md) | pending |
