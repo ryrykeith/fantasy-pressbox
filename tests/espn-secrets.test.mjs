@@ -41,6 +41,9 @@ function workspace(lines) {
   return root;
 }
 
+/** The cookie keys as process.env held them just after the last load, before the real values were put back. */
+let cookiesInEnvAfterLoad = {};
+
 /** loadConfig over an .env, with the real environment held empty of league keys. */
 function load(lines) {
   const root = workspace(lines);
@@ -52,6 +55,8 @@ function load(lines) {
   try {
     return loadConfig({ workspaceRoot: root });
   } finally {
+    cookiesInEnvAfterLoad = { ESPN_S2: process.env.ESPN_S2, ESPN_SWID: process.env.ESPN_SWID };
+    for (const key of ENV_KEYS) delete process.env[key];
     for (const [key, value] of Object.entries(saved)) if (value !== undefined) process.env[key] = value;
     rmSync(root, { recursive: true, force: true });
   }
@@ -95,8 +100,8 @@ test('under the import route one cookie alone is not an error, because it is not
 test('on the fetch route both cookies land in config.league.secrets, and not in process.env', () => {
   const config = load([...base(), 'ESPN_ROUTE=fetch', ...cookies]);
   assert.deepEqual(config.league.secrets, { ESPN_S2: FIXTURE_COOKIES.espn_s2, ESPN_SWID: FIXTURE_COOKIES.SWID });
-  assert.equal(process.env.ESPN_S2, undefined);
-  assert.equal(process.env.ESPN_SWID, undefined);
+  // Checked as loadConfig left process.env, so a developer's own exported cookies can't fail or pass this.
+  assert.deepEqual(cookiesInEnvAfterLoad, { ESPN_S2: undefined, ESPN_SWID: undefined });
 });
 
 test('on the fetch route one cookie alone is refused, naming the missing key and no value', () => {
