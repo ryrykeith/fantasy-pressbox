@@ -28,6 +28,71 @@ export function extractLeagueId(input) {
 }
 
 /**
+ * Reads what an ESPN league's address or ID gives: `{ leagueId, season }`,
+ * each empty when absent. Accepts a bare ID or a pasted address.
+ *
+ * Sleeper's extractLeagueId (\d{6,}) is not reused: an ESPN address carries
+ * other numbers (teamId=, seasonId=, a week), so only the number named by
+ * `leagueId=` counts. A bare number is taken as the ID only when it is the
+ * whole answer. `season` is the four-digit `seasonId=` value, when present.
+ */
+export function extractEspnLeague(input) {
+  const text = String(input ?? '').trim();
+  const bare = /^\d+$/.exec(text);
+  if (bare) return { leagueId: bare[0], season: '' };
+  const leagueId = /[?&#;]leagueId=(\d+)/i.exec(text)?.[1] ?? '';
+  const season = /[?&#;]seasonId=(\d{4})(?!\d)/i.exec(text)?.[1] ?? '';
+  return { leagueId, season: leagueId ? season : '' };
+}
+
+/** The platforms setup offers, in the order asked. Sleeper is first and the default. */
+export const PLATFORM_CHOICES = [
+  { value: 'sleeper', label: 'Sleeper' },
+  {
+    value: 'espn',
+    label: 'ESPN (experimental — built from public descriptions of an unofficial API, not yet checked against a live league)',
+  },
+];
+
+/** The ESPN routes, import first: it is the default. */
+export const ESPN_ROUTE_CHOICES = [
+  {
+    value: 'import',
+    label:
+      "Import (recommended) — you save your league's pages from ESPN in your own browser; " +
+      'Fantasy Pressbox never contacts ESPN and needs no cookies',
+  },
+  {
+    value: 'fetch',
+    label: 'Fetch (opt-in) — Fantasy Pressbox asks ESPN itself, using your ESPN cookies (which are passwords)',
+  },
+];
+
+/** What the person must read, and agree to, before the fetch route is set up. */
+export const ESPN_FETCH_NOTICE = [
+  'Before you choose Fetch, please read this.',
+  '',
+  "  - Fetch is automated access to ESPN. Disney's Terms of Use (section 2.B(x))",
+  '    bar automated access.',
+  '  - Choosing it is your decision, for your own league, at your own risk.',
+  '  - The two cookies it needs (espn_s2 and SWID) are passwords. They go in your',
+  "    league folder's .env and nowhere else.",
+  '',
+  'Import needs none of this: you save the pages yourself.',
+];
+
+/** How to find the two ESPN cookies, in plain words, for a private league on the fetch route. */
+export const ESPN_COOKIE_HELP = [
+  'A private league needs two cookies from your browser, while you are signed in to ESPN:',
+  '  1. Open fantasy.espn.com and sign in.',
+  "  2. Open your browser's developer tools (usually F12), then the Application tab",
+  '     (Storage in Firefox), then Cookies, then https://fantasy.espn.com.',
+  '  3. Copy the Value of the cookie called espn_s2, and of the cookie called SWID',
+  '     (SWID looks like {XXXXXXXX-XXXX-...}, braces included).',
+  'They are passwords: typing is hidden, and they are saved only in your .env.',
+];
+
+/**
  * The folder a league's workspace is offered at when init is run from the
  * package itself: ~/leagues/<league name>, in lower case with dashes.
  */
@@ -72,13 +137,38 @@ const FORMAT_CHOICE_LABELS = {
  * marked. Sleeper never reports guillotine (src/sleeper/normalize.mjs), so that
  * option is never marked as detected: choosing it is always a declaration.
  */
-export function formatChoices({ detectedType, currentType = null, providerName = 'Sleeper' }) {
-  return FORMAT_TYPES.map((type) => {
+export function formatChoices({
+  detectedType,
+  currentType = null,
+  providerName = 'Sleeper',
+  formats = FORMAT_TYPES,
+  labels = FORMAT_CHOICE_LABELS,
+}) {
+  return formats.map((type) => {
     const marks = [];
     if (type === detectedType) marks.push(`what ${providerName} reports`);
     if (type === currentType) marks.push('current');
     const suffix = marks.length ? ` (${marks.join(', ')})` : '';
-    return { value: type, label: `${FORMAT_CHOICE_LABELS[type]}${suffix}` };
+    return { value: type, label: `${labels[type]}${suffix}` };
+  });
+}
+
+/** The formats an ESPN league is offered: guillotine is refused on ESPN in v1, so it is not offered. */
+export const ESPN_FORMAT_TYPES = ['dynasty', 'redraft'];
+
+const ESPN_FORMAT_LABELS = {
+  ...FORMAT_CHOICE_LABELS,
+  redraft: `${FORMAT_CHOICE_LABELS.redraft}. A keeper league counts as redraft`,
+};
+
+/** The format choices for an ESPN league: dynasty or redraft only. */
+export function espnFormatChoices({ detectedType, currentType = null }) {
+  return formatChoices({
+    detectedType,
+    currentType,
+    providerName: 'ESPN',
+    formats: ESPN_FORMAT_TYPES,
+    labels: ESPN_FORMAT_LABELS,
   });
 }
 
@@ -87,9 +177,9 @@ export function formatChoices({ detectedType, currentType = null, providerName =
  * when it is a real format, otherwise Sleeper's reading. A declaration that no
  * longer parses is not offered, so the question replaces it with a valid one.
  */
-export function defaultFormatType({ detectedType, existing }) {
+export function defaultFormatType({ detectedType, existing, formats = FORMAT_TYPES }) {
   const declared = String(existing ?? '').trim().toLowerCase();
-  return FORMAT_TYPES.includes(declared) ? parseDeclaredFormatType(declared) : detectedType;
+  return formats.includes(declared) ? parseDeclaredFormatType(declared) : detectedType;
 }
 
 /* ------------------------------------------------------- rookie draft order */

@@ -28,8 +28,10 @@ import {
   MAX_IMPORT_BYTES,
   importInstructions,
   importedPlayers,
+  classifySaved,
   importedWeekBundle,
   latestScoringPeriod,
+  parseSavedFile,
   leagueAsOf,
   readSavedFiles,
 } from './import.mjs';
@@ -361,6 +363,23 @@ export const espnProvider = Object.freeze({
     const client = createClient({ leagueId: id, season, dataDir: null, secrets });
     const body = await client.league(['mSettings', 'mDraftDetail']);
     return normalizeLeague({ mSettings: body, mDraftDetail: body }, { leagueId: id, declaredFormatType });
+  },
+
+  /**
+   * The League a saved league page shows, for setup to show back. Reads the
+   * text it is given and nothing else: no request, no cookie, nothing saved.
+   * The page must be the league address's, for this league and season.
+   */
+  readImportedLeague({ file, text, leagueId, season, declaredFormatType = null }) {
+    const body = parseSavedFile(text, { file });
+    if (classifySaved(body, { file }) !== 'league') {
+      throw new EspnImportError(
+        `${file} is not the league page. Save the league address (the first one listed) and give that file.`,
+        { file },
+      );
+    }
+    readSavedFiles([{ file, text }], { leagueId, season, declaredFormatType });
+    return normalizeLeague({ mSettings: body, mDraftDetail: body }, { leagueId, declaredFormatType });
   },
 
   /** A saved bundle as WeekData. Reads nothing but the bye table, and that only when a player has no points. */
