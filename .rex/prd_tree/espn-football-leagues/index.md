@@ -17,7 +17,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Data sources and terms](./data-sources-and-terms/index.md) | pending |
+| [Data sources and terms](./data-sources-and-terms/index.md) | completed |
 | [ESPN API facts](./espn-api-facts/index.md) | pending |
 | [ESPN client and normalizer](./espn-client-and-normalizer/index.md) | completed |
 | [ESPN config, setup and doctor](./espn-config-setup-and-doctor/index.md) | pending |
