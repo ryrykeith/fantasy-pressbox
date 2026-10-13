@@ -23,7 +23,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [ESPN config, setup and doctor](./espn-config-setup-and-doctor/index.md) | completed |
 | [ESPN docs and README](./espn-docs-and-readme/index.md) | pending |
 | [ESPN editions and coverage matrix](./espn-editions-and-coverage-matrix/index.md) | completed |
-| [FantasyCalc market values for ESPN](./fantasycalc-market-values-for-espn/index.md) | pending |
+| [FantasyCalc market values for ESPN](./fantasycalc-market-values-for-espn/index.md) | completed |
 | [Import from a saved ESPN file](./import-from-a-saved-espn-file/index.md) | completed |
 | [Lineup solver: players who can't start](./lineup-solver-players-who-can-t-start/index.md) | completed |
 | [Provider boundary (Sleeper only)](./provider-boundary-sleeper-only/index.md) | completed |
