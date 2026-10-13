@@ -17,6 +17,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
+| [A multi-week ESPN matchup week is analyzed as every team scoring 0 by rankings, record and transactions](./a-multi-week-espn-matchup-week-is.md) | pending |
 | [Coverage matrix in docs/espn-data.md](./coverage-matrix-in-docs-espn-data-md.md) | pending |
 | [Provider capability gates for editions and context](./provider-capability-gates-for-editions.md) | pending |
 | [Weekly editions end to end on ESPN fixtures](./weekly-editions-end-to-end-on-espn.md) | pending |
