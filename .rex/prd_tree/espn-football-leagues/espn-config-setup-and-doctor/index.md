@@ -21,4 +21,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Doctor for ESPN leagues](./doctor-for-espn-leagues.md) | pending |
 | [Doctor prints "unknown (null per catch)" for an ESPN league that lists no reception stat](./doctor-prints-unknown-null-per-catch.md) | pending |
 | [ESPN config keys and secrets](./espn-config-keys-and-secrets.md) | completed |
-| [Setup for ESPN leagues](./setup-for-espn-leagues.md) | pending |
+| [Setup for ESPN leagues](./setup-for-espn-leagues.md) | completed |
