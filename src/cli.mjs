@@ -841,23 +841,45 @@ async function commandImportEspn(config, args) {
  * have something in them. Today only trades have an edition; `pickups` is
  * counted anyway so a quiet week and a trade-less week are told apart.
  *
+ * `trades` counts only the trades that can be graded. A trade the provider
+ * sent without its contents (ESPN, `contentsUnknown`) is counted apart, in
+ * `tradesWithoutContents`: it was made, but there is nothing in it to grade.
+ *
  * `enriched` is src/pipeline.mjs#readTransactions output.
  */
 export function summarizeTransactionWeek(enriched) {
   const list = enriched ?? [];
-  const trades = list.filter((transaction) => transaction.type === 'trade').length;
-  return { trades, pickups: list.length - trades, total: list.length };
+  const allTrades = list.filter((transaction) => transaction.type === 'trade');
+  const tradesWithoutContents = allTrades.filter((trade) => trade.contentsUnknown).length;
+  return {
+    trades: allTrades.length - tradesWithoutContents,
+    tradesWithoutContents,
+    pickups: list.length - allTrades.length,
+    total: list.length,
+  };
 }
 
 /**
  * The line printed when a transaction edition has nothing to be about, or null
  * when it does. A quiet week is a result, not an error: the command exits zero
  * and writes nothing, because a model handed an edition about nothing grades
- * something it made up.
+ * something it made up. A week whose only trades arrived without their
+ * contents is one of these too: the trades were made, but nothing in them can
+ * be graded. `providerName` names who sent them that way.
  */
-export function describeQuietTransactionWeek(summary, week) {
+export function describeQuietTransactionWeek(summary, week, { providerName = 'The provider' } = {}) {
   if (summary.total === 0) {
     return `Week ${week} has no completed transactions, so there is nothing to write about. No edition was built.`;
+  }
+  const withoutContents = summary.tradesWithoutContents ?? 0;
+  if (summary.trades === 0 && withoutContents > 0) {
+    const one = withoutContents === 1;
+    return (
+      `Week ${week} has ${one ? 'one completed trade' : `${withoutContents} completed trades`}, but ` +
+      `${providerName} sent ${one ? 'the trade without its' : 'the trades without their'} contents ` +
+      "(it often sends a trade's items only to the account that made it), so there is nothing to grade. " +
+      'No edition was built.'
+    );
   }
   if (summary.trades === 0) {
     return (
@@ -997,7 +1019,9 @@ async function commandEdition(config, args, task) {
       // just saved. A quiet week is settled before the market is fetched, so
       // a week with nothing in it costs no network call and writes no file.
       enrichedTransactions = readTransactions({ store, league, teams, players, describePlayer, week });
-      const quiet = describeQuietTransactionWeek(summarizeTransactionWeek(enrichedTransactions), week);
+      const quiet = describeQuietTransactionWeek(summarizeTransactionWeek(enrichedTransactions), week, {
+        providerName: getProvider(league.provider).displayName,
+      });
       if (quiet) {
         say(quiet);
         return 0;

@@ -1818,6 +1818,19 @@ export function buildPrompt({ task, context, promptsDir = null }) {
     );
   }
 
+  // The same when every trade arrived without its contents (ESPN often sends
+  // a trade's items only to the account that made it): the trades were made,
+  // but there is nothing in any of them to grade, and an edition of trades the
+  // model is told both to grade and not to grade invites a made-up grade.
+  if (task === 'trade-report' && context.trades.every((trade) => trade.contentsUnknown)) {
+    throw new Error(
+      'Cannot build a trade-report: ' +
+        `${context.trades.length === 1 ? 'the only trade' : 'every trade'} in the context arrived without its ` +
+        'contents (`contentsUnknown`), so there is nothing to grade. ' +
+        'Choose a week with a trade whose contents are known, or skip the edition.',
+    );
+  }
+
   // The same for a waiver report: a week with no pickup gives a model nothing
   // to comment on, and it will comment on one it made up.
   if (task === 'waiver-report' && !context.pickups?.length) {

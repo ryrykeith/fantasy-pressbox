@@ -563,3 +563,66 @@ for (const command of ['preview', 'recap', 'rankings', 'grade']) {
     assert.deepEqual(requested(root), []);
   });
 }
+
+// --- A trade ESPN sent without its contents is never graded --------------------------------
+// ESPN often sends a trade's items only to the account that made it
+// (docs/espn-data.md, open question 6). Both cases go through the CLI on pages
+// saved from the fake ESPN API, with a trade's items removed.
+
+/** Rewrites the saved transactions page's trade; every other page is left as served. */
+function withTrades(rewrite) {
+  return (text, kind) => {
+    if (kind !== 'transactions') return text;
+    const body = JSON.parse(text);
+    const trade = body.transactions.find((txn) => txn.type === 'TRADE_ACCEPT');
+    body.transactions = [...body.transactions.filter((txn) => txn !== trade), ...rewrite(trade)];
+    return JSON.stringify(body);
+  };
+}
+
+test("import route: transactions builds no trade report when the week's only trade arrived without its contents", async () => {
+  const root = leagueFolder('import');
+  await importWeek(root, SCORED_WEEK, { transform: withTrades((trade) => [{ ...trade, items: [] }]) });
+  const result = runCli('import', root, ['transactions', '--week', String(SCORED_WEEK)]);
+  assert.equal(result.status, 0, result.said);
+  assert.match(result.stdout, /ESPN sent the trade without its contents/);
+  assert.match(result.stdout, /nothing to grade/);
+  assert.match(result.stdout, /No edition was built/);
+  const output = join(root, 'output');
+  assert.deepEqual(existsSync(output) ? readdirSync(output) : [], []);
+  assert.deepEqual(requested(root), []);
+});
+
+test('import route: transactions still grades a known trade, and carries one without its contents as made, not graded', async () => {
+  const root = leagueFolder('import');
+  const unknownTeamId = 3;
+  await importWeek(root, SCORED_WEEK, {
+    transform: withTrades((trade) => [
+      trade,
+      { ...trade, id: 'invented-trade-without-items', teamId: unknownTeamId, processDate: trade.processDate + 1000, items: [] },
+    ]),
+  });
+  const result = runCli('import', root, ['transactions', '--week', String(SCORED_WEEK)]);
+  assert.equal(result.status, 0, result.said);
+  const path = join(root, 'output', EDITIONS.transactions.prompt);
+  assert.ok(existsSync(path), `no prompt at ${path}:\n${result.said}`);
+
+  const context = contextOf(path);
+  assert.equal(context.trades.length, 2);
+  const known = context.trades.find((trade) => !trade.contentsUnknown);
+  const unknown = context.trades.find((trade) => trade.contentsUnknown);
+  assert.equal(known.sides.length, 2);
+  // Made by its team, contents unknown: no sides, so nothing in it reads as gradeable.
+  assert.deepEqual(Object.keys(unknown).sort(), ['completedAt', 'contentsUnknown', 'teams', 'week']);
+  assert.equal(unknown.teams.length, 1);
+  assert.ok(!known.sides.some((side) => unknown.teams.includes(side.team)), 'the fixture trade does not involve team 3');
+
+  const entry = context.unavailable.find((item) => item.field === 'tradeContents');
+  assert.ok(entry, 'expected a tradeContents unavailable entry');
+  assert.ok(entry.why.includes(`made by ${unknown.teams[0]}`), entry.why);
+  assert.match(entry.instruction, /do not grade it/);
+  // And the edition's own instructions say the same.
+  const prompt = readFileSync(path, 'utf8');
+  assert.match(prompt, /A trade marked `contentsUnknown` has no sides[^]*Do\s+not grade it/);
+  assert.deepEqual(requested(root), []);
+});

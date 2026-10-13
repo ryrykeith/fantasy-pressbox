@@ -378,8 +378,12 @@ test('tradeContents: a trade ESPN sent with no items is a trade by the teams nam
     { week: SCORED_WEEK, completedAt: trade.completedAt, teams: [trade.teams[0]], contentsUnknown: true },
   ]);
   assertEntry(report, 'tradeContents', /ESPN sent a completed trade without its contents/);
-  const prompt = buildPrompt({ task: 'trade-report', context: report });
-  assert.ok(prompt.includes('"contentsUnknown": true'));
+  // Its only trade has nothing to grade, so no trade report is built from it.
+  assert.throws(
+    () => buildPrompt({ task: 'trade-report', context: report }),
+    /Cannot build a trade-report: the only trade in the context arrived without its contents/,
+  );
+  // (A week with a known trade beside it still builds: tests/espn-editions.test.mjs, through the CLI.)
 
   // A trade whose items arrived has no such entry.
   assert.equal(entry(espnContext('trade-report', week), 'tradeContents'), undefined);

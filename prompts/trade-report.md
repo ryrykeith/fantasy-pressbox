@@ -1,7 +1,12 @@
 # Trade Report
 
-Grade every trade in `trades`. Each one is graded side by side: what each team
-gave up, what it got, and whether it was a good move *for that team*.
+Grade every trade in `trades` that lists its `sides`. Each one is graded side
+by side: what each team gave up, what it got, and whether it was a good move
+*for that team*.
+
+A trade marked `contentsUnknown` has no sides: what moved was never sent. Do
+not grade it. Give it one post, numbered with the rest, saying only that the
+teams named made a trade and its contents are unknown.
 
 `league.positionalValue` names the ways this league's scoring changes what a
 position is worth. Apply every entry when you judge what a player is worth to
