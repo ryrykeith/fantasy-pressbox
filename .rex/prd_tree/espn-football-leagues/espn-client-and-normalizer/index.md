@@ -16,7 +16,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [An ESPN IR player with no points entry makes his team's lineup efficiency unavailable every week](./an-espn-ir-player-with-no-points-entry.md) | pending |
+| [An ESPN IR player with no points entry makes his team's lineup efficiency unavailable every week](./an-espn-ir-player-with-no-points-entry.md) | completed |
 | [ESPN client and shape guards](./espn-client-and-shape-guards.md) | completed |
 | [ESPN code tables](./espn-code-tables.md) | completed |
 | [ESPN fetchWeek sends no matchup-period filter, so a full-season schedule response fails guardSchedule](./espn-fetchweek-sends-no-matchup-period.md) | pending |
