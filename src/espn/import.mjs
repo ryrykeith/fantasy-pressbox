@@ -314,6 +314,86 @@ export function latestScoringPeriod({ league = null, bundles = [], seen = null }
   return known.length === 0 ? null : Math.max(...known);
 }
 
+/**
+ * Is the saved league page behind the other saved pages? The league page
+ * holds the standings, records, points-for, rosters, settings and draft; the
+ * week pages hold only their week. A league page saved at period 3 next to a
+ * week page saved at period 6 would put week 5's scores beside week-2
+ * standings, so every edition on the import route refuses a stale one
+ * (owner decision, 2026-10-13) rather than compute around it.
+ *
+ * `seen` is the furthest period any earlier league page showed: replacing the
+ * league page with an older save makes it stale too.
+ *
+ * → { leaguePeriod, latestPeriod, stale, latestFrom } where `latestFrom` says
+ *   which saved page showed `latestPeriod`: `{ kind: 'week', week }`, or
+ *   `{ kind: 'league' }` when only an earlier league page did.
+ */
+export function leaguePageFreshness({ league = null, bundles = [], seen = null } = {}) {
+  const leaguePeriod = Number.isInteger(league?.scoringPeriodId) ? league.scoringPeriodId : null;
+  const latestPeriod = latestScoringPeriod({ league, bundles, seen });
+  let latestFrom = null;
+  for (const bundle of bundles) {
+    const periods = [bundle?.matchups?.scoringPeriodId, bundle?.transactions?.scoringPeriodId];
+    if (periods.includes(latestPeriod) && (latestFrom === null || bundle.week > latestFrom.week)) {
+      latestFrom = { kind: 'week', week: bundle.week };
+    }
+  }
+  if (latestFrom === null && latestPeriod !== null && latestPeriod !== leaguePeriod) latestFrom = { kind: 'league' };
+  const stale = leaguePeriod !== null && latestPeriod !== null && leaguePeriod < latestPeriod;
+  return { leaguePeriod, latestPeriod, stale, latestFrom: stale ? latestFrom : null };
+}
+
+/** The sentence that says how far behind the league page is. */
+function stalenessSentence({ leaguePeriod, latestPeriod, latestFrom }) {
+  const newer =
+    latestFrom?.kind === 'week'
+      ? `the latest week page (week ${latestFrom.week}) at scoring period ${latestPeriod}`
+      : `an earlier save of the league page showed scoring period ${latestPeriod}`;
+  return (
+    `The league page (standings and rosters) was saved at scoring period ${leaguePeriod}, ` +
+    `${latestFrom?.kind === 'week' ? 'and ' : 'but '}${newer}. ` +
+    "Its standings, records, points-for and rosters are older than the weeks you imported, and they are never " +
+    "mixed with a newer week's scores."
+  );
+}
+
+/** A stale league page, refused by every edition on the import route. */
+export class EspnStaleLeagueError extends EspnImportError {
+  constructor(message, { leaguePeriod, latestPeriod }) {
+    super(message);
+    this.name = 'EspnStaleLeagueError';
+    this.leaguePeriod = leaguePeriod;
+    this.latestPeriod = latestPeriod;
+  }
+}
+
+/**
+ * The refusal an edition gives for a stale league page (leaguePageFreshness):
+ * both periods, the league address to save again and the command to import it.
+ */
+export function staleLeagueError({ leagueId, season, freshness }) {
+  return new EspnStaleLeagueError(
+    `${stalenessSentence(freshness)} Save the league page again, then import it.\n\n` +
+      importInstructions({ leagueId, season }),
+    freshness,
+  );
+}
+
+/**
+ * What import-espn prints when the league page is behind after an import:
+ * the same explanation, then every address for the week's routine together
+ * (the league page and `week`'s two pages), so the next save is one sitting.
+ */
+export function staleLeagueNotice({ leagueId, season, freshness, week = null }) {
+  return (
+    `${stalenessSentence(freshness)}\n` +
+    'Every edition refuses until the league page is saved again and imported. ' +
+    `This week's routine is all of these pages together:\n\n` +
+    importInstructions({ leagueId, season, week })
+  );
+}
+
 /** The saved league page as of `period`: what openLeague reads under the import route. */
 export function leagueAsOf(body, period) {
   return Number.isInteger(period) && period > body.scoringPeriodId ? { ...body, scoringPeriodId: period } : body;

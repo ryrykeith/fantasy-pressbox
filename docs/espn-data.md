@@ -887,6 +887,26 @@ requests the fetch route makes, built by the same code:
   has moved on. The furthest period seen is kept, so importing an older page
   never moves the season backwards.
 
+**decision** (owner, 2026-10-13; task 3cc90608): **a stale league page is
+refused, never computed around.** The league page holds the standings,
+records, points-for, rosters, settings and draft; a week's pages hold only
+that week. When the saved league page's own `scoringPeriodId` is behind the
+latest period any saved page shows (a week page, or an earlier save of the
+league page), every edition on the import route refuses
+(`EspnStaleLeagueError`, `src/espn/import.mjs`, `leaguePageFreshness`). The
+refusal names both periods, the league address to save again and the import
+command. Without it, a league page saved at period 3 beside a week-5 page
+saved at period 6 would put week 5's scores next to week-2 standings, and
+nothing would say so.
+
+- `import-espn` says so after an import that leaves the league page behind.
+  It prints the week's whole routine together, the league page plus that
+  week's two pages, and captures nothing from the stale page.
+- `doctor` shows the period each saved page is from, flags a stale league
+  page, and exits non-zero.
+- Saving and importing the league page again clears it.
+- The fetch route is unaffected: it reads the league live on every run.
+
 ## Open questions
 
 Each must be answered by task 2.1 (public endpoints) or task 2.2 (a test

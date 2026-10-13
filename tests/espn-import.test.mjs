@@ -537,9 +537,12 @@ test('a week saved while still being played stays unsettled until a later save s
     assert.equal(result.kept, false);
     assert.equal(ctx.store.loadSnapshot(String(SEASON), SCORED_WEEK).settled, true);
 
-    // Re-importing an older page never un-settles it.
+    // Re-importing an older page never un-settles it. That page is now behind
+    // what an earlier save showed, so editions refuse it; opened to report on
+    // it, the season has still not moved backwards.
     importSavedFiles(config, { files: [{ file: 'league.json', text: during(pages.league) }] });
-    ctx = await openLeague(config);
+    await assert.rejects(openLeague(config), /an earlier save of the league page showed scoring period 5/);
+    ctx = await openLeague(config, { allowStaleLeague: true });
     assert.equal(ctx.league.lastScoredWeek, SCORED_WEEK);
   } finally {
     rmSync(root, { recursive: true, force: true });

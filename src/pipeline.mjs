@@ -33,12 +33,19 @@ const eliminates = (league) => hasEliminations(league.format, providerOf(league)
 /** Does this league hold future draft capital, by its format and its provider's capabilities? */
 const holdsFutureDraftCapital = (league) => hasFutureDraftCapital(league.format, providerOf(league).capabilities);
 
-export async function openLeague(config, { refreshPlayers = false } = {}) {
+/**
+ * The league, opened through its provider. A provider with an import route
+ * refuses a saved league page older than its saved week pages (ESPN under
+ * ESPN_ROUTE=import), so no edition is built from stale standings and rosters.
+ * `allowStaleLeague` opens it anyway, for the commands that only report on it
+ * (doctor, import-espn); no edition passes it.
+ */
+export async function openLeague(config, { refreshPlayers = false, allowStaleLeague = false } = {}) {
   // The league's provider (src/providers.mjs), bound to this league. Nothing
   // past it reads a provider's own field names.
   const provider = openProvider(config);
   const store = createStore({ dataDir: config.dataDir });
-  const { league, teams, players, draftCapital } = await provider.openLeague({ refreshPlayers });
+  const { league, teams, players, draftCapital } = await provider.openLeague({ refreshPlayers, allowStaleLeague });
 
   return {
     provider,

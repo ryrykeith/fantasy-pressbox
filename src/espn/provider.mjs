@@ -31,9 +31,12 @@ import {
   classifySaved,
   importedWeekBundle,
   latestScoringPeriod,
+  leaguePageFreshness,
   parseSavedFile,
   leagueAsOf,
   readSavedFiles,
+  staleLeagueError,
+  staleLeagueNotice,
 } from './import.mjs';
 import { normalizeLeague, normalizePlayers, normalizeTeams, normalizeWeek } from './normalize.mjs';
 import { guardSeason } from './shape.mjs';
@@ -158,12 +161,22 @@ function importInstance(source, { config = null, league = null } = {}) {
      * scoring period any saved page shows (latestScoringPeriod). Players come
      * from the saved rosters and lineups (importedPlayers). `refreshPlayers`
      * means nothing here: there is no player list to download.
+     *
+     * A league page saved at an earlier period than the latest saved page is
+     * refused (EspnStaleLeagueError): its standings and rosters would sit
+     * beside newer weeks' scores. Only `allowStaleLeague` (doctor, and
+     * import-espn's own report) opens it anyway, to say so.
      */
-    async openLeague() {
+    async openLeague({ allowStaleLeague = false } = {}) {
       const saved = source.store.loadImportedLeague(source.season);
       if (!saved?.body) throw notImported(source, `The ESPN league (${source.leagueId}, ${source.season})`);
       const bundles = savedEspnBundles(source);
-      const latest = latestScoringPeriod({ league: saved.body, bundles, seen: saved.seenScoringPeriod ?? null });
+      const seen = saved.seenScoringPeriod ?? null;
+      const freshness = leaguePageFreshness({ league: saved.body, bundles, seen });
+      if (freshness.stale && !allowStaleLeague) {
+        throw staleLeagueError({ leagueId: source.leagueId, season: source.season, freshness });
+      }
+      const latest = latestScoringPeriod({ league: saved.body, bundles, seen });
       const body = leagueAsOf(saved.body, latest);
       current = normalizeLeague(
         { mSettings: body, mDraftDetail: body },
@@ -183,6 +196,47 @@ function importInstance(source, { config = null, league = null } = {}) {
       if (bundle?.provider !== NAME || !bundle.matchups) throw notImported(source, `Week ${week}`, { week });
       const { provider, ...rest } = bundle;
       return rest;
+    },
+
+    /**
+     * The scoring period each saved page is from, for doctor:
+     * → { league: { period, importedAt } | null, weeks: [{ week, matchupsPeriod,
+     *   transactionsPeriod }], latestPeriod, stale, latestFrom }.
+     * `transactionsPeriod` is null when that week's transactions page was not imported.
+     */
+    savedPages() {
+      const saved = source.store.loadImportedLeague(source.season);
+      const bundles = savedEspnBundles(source);
+      const periodOf = (body) => (Number.isInteger(body?.scoringPeriodId) ? body.scoringPeriodId : null);
+      const freshness = saved?.body
+        ? leaguePageFreshness({ league: saved.body, bundles, seen: saved.seenScoringPeriod ?? null })
+        : { leaguePeriod: null, latestPeriod: latestScoringPeriod({ bundles }), stale: false, latestFrom: null };
+      return {
+        league: saved?.body ? { period: periodOf(saved.body), importedAt: saved.importedAt ?? null } : null,
+        weeks: bundles.map((bundle) => ({
+          week: bundle.week,
+          matchupsPeriod: periodOf(bundle.matchups),
+          transactionsPeriod: periodOf(bundle.transactions),
+        })),
+        latestPeriod: freshness.latestPeriod,
+        stale: freshness.stale,
+        latestFrom: freshness.latestFrom,
+      };
+    },
+
+    /**
+     * When the saved league page is behind (leaguePageFreshness), what
+     * import-espn prints: both periods, then every address for `week`'s
+     * routine with the import command. Null when the league page is current.
+     */
+    staleLeagueNotice({ week = null } = {}) {
+      const saved = source.store.loadImportedLeague(source.season);
+      if (!saved?.body) return null;
+      const bundles = savedEspnBundles(source);
+      const freshness = leaguePageFreshness({ league: saved.body, bundles, seen: saved.seenScoringPeriod ?? null });
+      if (!freshness.stale) return null;
+      const routineWeek = week ?? (bundles.length ? Math.max(...bundles.map((b) => b.week)) : null);
+      return staleLeagueNotice({ leagueId: source.leagueId, season: source.season, freshness, week: routineWeek });
     },
 
     /** The League's current week, else the latest scoring period any saved page shows. */

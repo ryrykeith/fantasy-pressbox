@@ -459,7 +459,9 @@ async function commandDoctor(config) {
   if (!inLeague || !config.leagueId) return 1;
 
   say(`\n  Contacting ${providerDisplayName(config.league.provider)}...`);
-  const ctx = await openLeague(config);
+  // A stale saved league page is opened here only to report it: every
+  // edition refuses it (reportSavedPages).
+  const ctx = await openLeague(config, { allowStaleLeague: true });
   const { league, teams, client } = ctx;
   const { week, source } = await resolveWeek({ client, league, config });
   say(`  League             ${league.name} (${league.season})`);
@@ -478,6 +480,7 @@ async function commandDoctor(config) {
   for (const line of describeScoringSummary(league.format.scoring)) say(`  ${line}`);
   for (const line of describeUnmodelledScoring(league.format.scoring, { provider: providerDisplayName(league.provider) })) say(`  ${line}`);
   say(`  Current week       ${week} (from ${source})`);
+  const staleLeaguePage = reportSavedPages(ctx);
 
   // Who is still in the league, for the formats where that changes. Built from
   // the weeks already fetched, so doctor stays a cheap check — a league with no
@@ -514,11 +517,39 @@ async function commandDoctor(config) {
 
   reportRankEmoji(config, teams.length);
 
+  if (staleLeaguePage) {
+    say(`\nThe league page is out of date.\n${staleLeaguePage}`);
+    return 1;
+  }
+
   say(
     `\nEverything looks good. Try: ${CLI_COMMAND} preview` +
       (workspaceIsPackage(config.workspaceRoot) ? '' : ` --workspace ${config.workspaceRoot}`),
   );
   return 0;
+}
+
+/**
+ * Doctor's report on saved pages, for a provider with an import route (ESPN
+ * under ESPN_ROUTE=import): the scoring period each saved page is from, and a
+ * flag on a league page older than the latest one. A provider that fetches
+ * has nothing to report.
+ *
+ * → the stale-league notice to print (the addresses and the command), or null.
+ */
+function reportSavedPages(ctx) {
+  const pages = ctx.provider.savedPages?.();
+  if (!pages) return null;
+  const period = (p) => (p === null ? 'unknown' : `scoring period ${p}`);
+  const flag = pages.stale ? ` ✗ behind the latest saved page (${period(pages.latestPeriod)})` : ' ✓';
+  say(`  Saved pages        league page: ${pages.league ? `${period(pages.league.period)}${flag}` : 'not imported'}`);
+  for (const { week, matchupsPeriod, transactionsPeriod } of pages.weeks) {
+    say(
+      `                     week ${week}: matchups ${period(matchupsPeriod)}, transactions ` +
+        (transactionsPeriod === null ? 'not imported' : period(transactionsPeriod)),
+    );
+  }
+  return pages.stale ? ctx.provider.staleLeagueNotice() : null;
 }
 
 /**
@@ -671,8 +702,19 @@ async function commandImportEspn(config, args) {
   for (const [kind, file] of Object.entries(imported.files)) say(`  ${kind.padEnd(13)}${file}`);
   if (imported.leaguePath) say(`  league saved ${imported.leaguePath}`);
 
-  const ctx = await openLeague(config);
+  // Opened even when the league page is now behind the week pages, only to
+  // say so: nothing is captured from it then (a settled snapshot is kept as
+  // it is, so stale standings must never reach one).
+  const ctx = await openLeague(config, { allowStaleLeague: true });
   say(`\n${ctx.league.name}: ${ctx.teams.length} teams, current week ${ctx.league.currentWeek ?? 'unknown'} (the latest saved page).`);
+  const stale = ctx.provider.staleLeagueNotice?.({ week: imported.week }) ?? null;
+  if (stale) {
+    say(`\nThe league page is out of date.\n${stale}`);
+    if (imported.week !== null) {
+      say(`\nWeek ${imported.week}'s pages are saved, and the week is read once the league page is imported again.`);
+    }
+    return 0;
+  }
   if (imported.week === null) return 0;
 
   say('');
