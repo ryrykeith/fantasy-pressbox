@@ -2,13 +2,16 @@
 id: "b35ba60a-c1c7-4821-b52f-4248b0b249af"
 level: "feature"
 title: "ESPN client and normalizer"
-status: "pending"
+status: "completed"
 priority: "high"
 tags:
   - "espn"
+startedAt: "2026-10-13T02:55:10.181Z"
+completedAt: "2026-10-13T02:55:10.181Z"
+endedAt: "2026-10-13T02:55:10.181Z"
 acceptanceCriteria: []
 description: "src/espn/: an HTTP client, shape guards, code tables, and normalizers into the shared League, Team, Player and WeekData shapes; plus the ESPN provider registered in src/providers.mjs.\n\nBuilt against hand-made fixtures with the invented cast. ESPN field names stop at src/espn/. Part of PR 2 on feat/espn-football."
-lastModified: "2026-10-12T17:55:45.284Z"
+lastModified: "2026-10-13T02:55:10.396Z"
 lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 ---
 
@@ -19,7 +22,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [An ESPN IR player with no points entry makes his team's lineup efficiency unavailable every week](./an-espn-ir-player-with-no-points-entry.md) | completed |
 | [ESPN client and shape guards](./espn-client-and-shape-guards.md) | completed |
 | [ESPN code tables](./espn-code-tables.md) | completed |
-| [ESPN fetchWeek sends no matchup-period filter, so a full-season schedule response fails guardSchedule](./espn-fetchweek-sends-no-matchup-period.md) | pending |
+| [ESPN fetchWeek sends no matchup-period filter, so a full-season schedule response fails guardSchedule](./espn-fetchweek-sends-no-matchup-period.md) | completed |
 | [ESPN fixtures and fake fetch](./espn-fixtures-and-fake-fetch.md) | completed |
 | [ESPN league, team and player normalizer](./espn-league-team-and-player-normalizer.md) | completed |
 | [ESPN week normalizer and provider](./espn-week-normalizer-and-provider.md) | completed |
