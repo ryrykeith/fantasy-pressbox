@@ -3,10 +3,10 @@
 ## The pipeline
 
 ```
-League provider (Sleeper today)   src/providers.mjs picks it from LEAGUE_PROVIDER
-    ↓  provider client, in its own directory (src/sleeper/client.mjs)
+League provider (Sleeper or ESPN)  src/providers.mjs picks it from LEAGUE_PROVIDER
+    ↓  provider client, in its own directory (src/sleeper/client.mjs, src/espn/client.mjs)
 Fetch
-    ↓  provider normalizer (src/sleeper/normalize.mjs), through provider.mjs
+    ↓  provider normalizer (src/sleeper/normalize.mjs, src/espn/normalize.mjs), through provider.mjs
 Normalize
     ↓  src/store.mjs
 Snapshot / persist
@@ -135,6 +135,13 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/sleeper/provider.mjs` | Sleeper behind the provider interface: its descriptor (name, `capabilities`, `playerIdSpace`) and an instance bound to a client (`openLeague`, `fetchWeek`, `currentWeek`, `lookupLeague`, `normalizeWeek`) |
 | `src/sleeper/client.mjs` | HTTP only. Retries, friendly errors, player-file cache |
 | `src/sleeper/normalize.mjs` | Sleeper shapes → league concepts, including a saved week as WeekData (`normalizeWeek`) |
+| `src/espn/provider.mjs` | ESPN behind the same interface, **experimental**. Two routes by `ESPN_ROUTE`: `import` (the default; reads pages the operator saved, contacts nothing) and `fetch` (opt-in; asks ESPN with the cookies). `docs/espn-data.md` is its contract |
+| `src/espn/client.mjs` | HTTP only, the fetch route's. Sends `espn_s2` and `SWID` as a `Cookie` header to the ESPN host and nowhere else; scrubs them from every error |
+| `src/espn/urls.mjs` | Every ESPN address, node-free. The client requests them and `import-espn` lists them for the operator to save, so the two cannot drift |
+| `src/espn/import.mjs` | The import route: validates saved pages (size, JSON, league, season, shape) and refuses a stale league page |
+| `src/espn/shape.mjs` | Shape guards: a response that does not match the documented shape throws `EspnShapeError`, naming the view and field |
+| `src/espn/codes.mjs` | ESPN's numeric code tables (slots, stats, pro teams); an unknown ID throws |
+| `src/espn/normalize.mjs` | ESPN shapes → league concepts, including a saved week as WeekData (`normalizeWeek`). ESPN field names stop here |
 | `src/league/players.mjs` | The player dictionary lookup and the one-line player description every edition prints |
 | `src/league/draftCapital.mjs` | Draft capital from normalized traded picks and the league's draft status: who holds each pick, and whether it is still a future asset |
 | `src/league/pairing.mjs` | Head-to-head pairing on a WeekData roster's `pairingKey` |
@@ -1087,7 +1094,7 @@ further in this direction makes rankings more testable and more explainable.
 
 ## Adding another platform
 
-A platform is a directory next to `src/sleeper/` (ESPN's would be `src/espn/`)
+A platform is a directory next to `src/sleeper/` (ESPN's is `src/espn/`, the second platform)
 holding a client, a normalizer and a `provider.mjs`. The provider is an object
 with the shape of `sleeperProvider` in `src/sleeper/provider.mjs`:
 

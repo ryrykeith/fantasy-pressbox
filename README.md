@@ -20,6 +20,7 @@ comes from your league's real data.
 - [Requirements](#requirements)
 - [Install](#install-step-by-step)
 - [Set up your league](#set-up-your-league)
+- [ESPN leagues (experimental)](#espn-leagues-experimental)
 - [What your league format changes](#what-your-league-format-changes)
 - [Your first edition](#your-first-edition)
 - [Your weekly routine](#your-weekly-routine)
@@ -327,6 +328,109 @@ Setup's closing screen prints these same commands, then the weekly routine,
 written the way you run Fantasy Pressbox: `fantasy-pressbox` after a global
 install, `npx fantasy-pressbox` through npx, or `node <path>/src/cli.mjs`
 from a clone of the repository.
+
+---
+
+## ESPN leagues (experimental)
+
+Fantasy Pressbox was built for Sleeper. It can also work from an ESPN fantasy
+football league. **ESPN support is experimental.** ESPN's API is unofficial and
+undocumented, no one has yet checked this support against a live league, and
+ESPN can change what it sends at any time. It is built from public
+descriptions of that API, and it stops with an error naming the page and field
+(`EspnShapeError`) when a response is not what those descriptions say, rather
+than guess. `docs/espn-data.md` labels every fact it relies on as verified,
+operator-checked or assumed.
+
+### Choosing a provider
+
+The platform is the `LEAGUE_PROVIDER` setting in `.env`: `sleeper` or `espn`.
+Left empty it means `sleeper`, so a Sleeper league needs no change. `init`
+asks which platform your league is on and writes the setting for you.
+
+### Two routes for ESPN's data
+
+`ESPN_ROUTE` decides how ESPN's data reaches Fantasy Pressbox:
+
+| `ESPN_ROUTE` | What happens | Cookies |
+|---|---|---|
+| `import` (the default) | You save your league's JSON pages from ESPN in your own browser, then import them. Fantasy Pressbox never contacts ESPN. | None |
+| `fetch` (opt-in) | Fantasy Pressbox asks ESPN's servers itself. | A private league needs two, which are passwords |
+
+### Set up on the import route (the default)
+
+1. Run `fantasy-pressbox init --workspace ~/leagues/my-league`, choose ESPN,
+   then Import. Paste your league's ID or its web address: the number after
+   `leagueId=` in the address (for example `leagueId=1234567`).
+2. Run `fantasy-pressbox import-espn --week <n>` with no files. It prints the
+   addresses to open: the league page, plus two pages for the week (matchups
+   and transactions).
+3. Open each address in your browser, signed in to ESPN if your league is
+   private, and save the page into your league folder. Never save it into the
+   Fantasy Pressbox folder.
+4. Run `fantasy-pressbox import-espn --week <n> <the saved files>`.
+5. Run `fantasy-pressbox doctor`. It makes no request on this route. It lists
+   the addresses, the weeks imported and the period each saved page is from.
+
+Repeat steps 2 to 4 each week. Save the league page again every week along
+with that week's two pages: a league page older than the newest week page is
+refused, because its standings and rosters would be out of date.
+
+This is your own manual, personal use of your own league's pages. It is not
+something ESPN permits: saving a page is still copying under the Disney Terms
+of Use (§2.B(ii)). Whether a private league's page shows in a browser on a
+plain signed-in visit has not been checked yet.
+
+### The cookie fetch (opt-in)
+
+**Read this before choosing it.**
+
+- **It is automated access to ESPN**, which Disney's Terms of Use bar
+  (§2.B(x); [disneytermsofuse.com/english/](https://disneytermsofuse.com/english/),
+  last updated May 24, 2024). It is against ESPN's terms.
+- **You choose it for your own league, at your own risk.** Nothing here says
+  ESPN allows it.
+- **The cookies are passwords.** Anyone holding them can read your ESPN
+  account's leagues.
+
+If you still want it, set `ESPN_ROUTE=fetch` (or choose Fetch in `init`).
+A public league needs no cookies. A private league needs two, copied while you
+are signed in to ESPN:
+
+1. Open fantasy.espn.com and sign in.
+2. Open your browser's developer tools (usually F12), then the Application tab
+   (Storage in Firefox), then Cookies, then `https://fantasy.espn.com`.
+3. Copy the value of the cookie called `espn_s2`, and of the cookie called
+   `SWID` (it looks like `{XXXXXXXX-XXXX-...}`, braces included).
+4. Put them in the league folder's `.env` as `ESPN_S2` and `ESPN_SWID`.
+   `init` does this for you and hides what you type.
+
+Both are needed, or neither. They live only in the league folder's `.env`:
+never paste them into a chat, an issue, a post or a file you share, and keep
+the file out of git. Fantasy Pressbox sends them only to ESPN, and never
+prints them, logs them or saves them under `data/`. They are not read at all
+when `ESPN_ROUTE` is `import`. If they stop working, copy fresh values:
+`doctor` explains the 401 ESPN returns.
+
+### What an ESPN league gets, and what it doesn't
+
+| | On ESPN |
+|---|---|
+| **Gets** | `preview`, `recap`, `rankings`, `preseason-rankings` and the trade report, plus `record`, `check` and `grade` |
+| **Refused** | `tank-watch` and `future-stock`: ESPN's traded picks are not read in this version, so who holds which future pick is not known |
+| **Refused** | The guillotine editions (`survival-preview`, `chop-recap`, `survival-rankings`): guillotine is not supported on ESPN in this version |
+| **Refused** | A matchup period that spans more than one NFL week |
+| **Redraft** | A keeper league is treated as redraft. A declared dynasty is accepted, but the editions that need traded future picks refuse |
+| **Names** | Managers are named by their ESPN display name |
+| **Season** | The current season only |
+
+[`docs/espn-data.md`](docs/espn-data.md#coverage-matrix) has the full coverage
+matrix: what every edition, command and context fact does on an ESPN league.
+
+Trade values come from FantasyCalc, matched by ESPN player ID, with the credit
+described under [Trade values](#trade-values--fetched-for-you). Bye weeks come
+from the nflverse schedule, as described under
+[Bye weeks](#bye-weeks--shipped-with-the-package).
 
 ---
 
