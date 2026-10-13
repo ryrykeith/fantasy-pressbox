@@ -39,7 +39,9 @@ function positionalBonusLines(reception) {
 export function describeScoringSummary(scoring) {
   const { reception, passing, superflex } = scoring;
   return [
-    `Reception          ${reception.tier} (${reception.base} per catch)`,
+    reception.base === null || reception.base === undefined
+      ? `Reception          ${reception.tier} (not reported by the league's provider)`
+      : `Reception          ${reception.tier} (${reception.base} per catch)`,
     `Positional bonuses ${positionalBonusLines(reception)}`,
     `Passing TD         ${passing.touchdown ?? 'not set'}`,
     `Superflex          ${superflex ? 'yes' : 'no'}`,

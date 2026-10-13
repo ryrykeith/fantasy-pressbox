@@ -1215,6 +1215,19 @@ function describeMissingContext({
     });
   }
 
+  // `base: null` means the provider listed no reception stat, which is not the
+  // same as a league that pays nothing per catch. The rate stays absent from
+  // the facts and the model is told not to supply one.
+  if (context.league.format?.scoring?.reception?.base === null) {
+    missing.push({
+      field: 'receptionRate',
+      why: "This league's provider did not report how much a reception is worth, so the rate is unknown.",
+      instruction:
+        "Do not state this league's per-catch value, and do not call it standard, half-PPR or full PPR. " +
+        'Do not rank pass catchers as though receptions were worth nothing, or as though they were worth a full point.',
+    });
+  }
+
   if (isRanking && !context.previousRankings) {
     missing.push({
       field: 'previousRankings',

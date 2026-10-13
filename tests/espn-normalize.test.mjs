@@ -441,3 +441,30 @@ test('with displayName present, it is the manager and still no first or last nam
     assert.equal(text.includes(forbidden), false, `${forbidden} reached a team, snapshot or prompt`);
   }
 });
+
+// --- A league that lists no reception stat -------------------------------------
+
+test('an unknown reception rate is never printed, priced or ranked as zero', async () => {
+  const { describeScoringSummary } = await import('../src/scoringReport.mjs');
+  const { marketValueQuery } = await import('../src/fantasycalc/client.mjs');
+  const v = views();
+  const settings = v.mSettings.settings.scoringSettings;
+  settings.scoringItems = settings.scoringItems.filter((item) => item.statId !== 53);
+  const normalizedLeague = league(v);
+  assert.equal(normalizedLeague.format.scoring.reception.base, null);
+
+  const text = describeScoringSummary(normalizedLeague.format.scoring).join('\n');
+  assert.doesNotMatch(text, /null/);
+  assert.match(text, /not reported/);
+
+  const { caveats } = marketValueQuery({ format: normalizedLeague.format, teamCount: 12 });
+  const caveat = caveats.find((c) => c.factor === 'receptionScoring');
+  assert.match(caveat.why, /unknown/);
+  assert.match(caveat.why, /assume/);
+
+  const teams = normalizeTeams(v);
+  const context = buildContext({ task: 'rankings', config: CONFIG, league: normalizedLeague, teams, players: {}, week: 4 });
+  assert.equal(context.league.format.scoring.reception.base, null);
+  assert.ok(context.unavailable.some((entry) => entry.field === 'receptionRate'));
+  assert.ok(!context.league.positionalValue.some((entry) => entry.factor === 'receptionTier'));
+});

@@ -34,6 +34,7 @@ class MarketValuesError extends Error {}
 export function marketValueQuery({ format, teamCount }) {
   const scoring = format?.scoring ?? null;
   const superflex = Boolean(scoring?.superflex);
+  const receptionKnown = scoring?.reception?.base !== null;
   const reception = scoring?.reception?.base ?? 0;
   const ppr = PRICED_PPR.reduce((best, option) =>
     Math.abs(option - reception) < Math.abs(best - reception) ? option : best,
@@ -43,7 +44,17 @@ export function marketValueQuery({ format, teamCount }) {
   const params = { isDynasty, numQbs: superflex ? 2 : 1, numTeams: teamCount, ppr };
   const caveats = [];
 
-  if (ppr !== reception) {
+  if (!receptionKnown) {
+    const assumed = ppr === 0 ? 'standard' : ppr === 0.5 ? 'half-PPR' : 'full PPR';
+    caveats.push({
+      factor: 'receptionScoring',
+      why:
+        "This league's provider did not report a per-reception rate, so it is unknown. " +
+        `These values assume ${ppr} per reception (${assumed}), which is a default, not a fact about the league.`,
+      instruction:
+        "Treat the values as approximate for pass catchers, and do not state the league's per-catch value.",
+    });
+  } else if (ppr !== reception) {
     caveats.push({
       factor: 'receptionScoring',
       why:
