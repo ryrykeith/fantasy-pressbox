@@ -811,12 +811,13 @@ export function normalizeWeek(
   const week = bundle.week;
   if (!Number.isInteger(week)) throw new TypeError('An ESPN week bundle needs its week');
   guardSettings(bundle.matchups);
-  guardSchedule(bundle.matchups, { week });
+  const settings = bundle.matchups.settings;
+  const period = matchupPeriodFor(settings.scheduleSettings, week);
+  // Only the week's own matchup period must carry lineups; a whole-season schedule's other entries don't.
+  guardSchedule(bundle.matchups, { week, matchupPeriodId: period ? period.id : null });
   guardTransactions(bundle.transactions);
 
-  const settings = bundle.matchups.settings;
   const layout = startingSlotLayout(settings.rosterSettings.lineupSlotCounts);
-  const period = matchupPeriodFor(settings.scheduleSettings, week);
   const byeTable = byeTableResolver(byeWeeks);
 
   return {

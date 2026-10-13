@@ -110,6 +110,29 @@ test('a bundle that does not match its documented shape is refused, not guessed'
   assert.throws(() => weekOf(PUBLIC_LEAGUE_ID, raw), EspnShapeError);
 });
 
+test('a whole-season schedule needs lineups only in the requested matchup period', () => {
+  const other = (periodId) =>
+    structuredClone(views().mMatchup.schedule).map((m) => ({ ...m, matchupPeriodId: periodId }));
+  const expected = weekOf();
+
+  const season = bundle();
+  assert.ok(season.matchups.schedule.every((m) => m.matchupPeriodId === SCORED_WEEK));
+  season.matchups.schedule = [...other(SCORED_WEEK - 1), ...season.matchups.schedule, ...other(SCORED_WEEK + 1)];
+  for (const m of season.matchups.schedule.filter((e) => e.matchupPeriodId !== SCORED_WEEK)) {
+    for (const side of [m.home, m.away]) if (side) delete side.rosterForCurrentScoringPeriod;
+  }
+  assert.deepEqual(weekOf(PUBLIC_LEAGUE_ID, season), expected);
+
+  // An entry in the requested period with no lineup is still refused, naming the path.
+  const broken = bundle();
+  delete broken.matchups.schedule[1].away.rosterForCurrentScoringPeriod;
+  broken.matchups.schedule.push(...other(SCORED_WEEK + 1));
+  assert.throws(
+    () => weekOf(PUBLIC_LEAGUE_ID, broken),
+    (e) => e instanceof EspnShapeError && /schedule\[1\]\.away\.rosterForCurrentScoringPeriod/.test(e.message),
+  );
+});
+
 // --- analyzeWeek on ESPN ------------------------------------------------------
 
 test('analyzeWeek on the ESPN fixture: games, winners, lineup efficiency and awards', () => {

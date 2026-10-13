@@ -300,10 +300,14 @@ export function guardRosters(body) {
  * The matchup views (`mMatchup`, `mMatchupScore`, `mScoreboard`), for the whole
  * season or, with `week`, one scoring period with each side's lineup.
  */
-export function guardSchedule(body, { week } = {}) {
+export function guardSchedule(body, { week, matchupPeriodId } = {}) {
   const view = 'mMatchup/mMatchupScore/mScoreboard';
   envelope(view, body);
   if (week !== undefined) integer(view, 'week (argument)', week);
+  // With a week, every entry's lineup is required, unless `matchupPeriodId` names the week's period (null: the
+  // week is in no period, so no entry is needed). Then only that period's entries must carry one: a response may
+  // hold the whole season's schedule, and other periods' entries have no lineup for this scoring period.
+  const needsLineup = (m) => week !== undefined && (matchupPeriodId === undefined || m.matchupPeriodId === matchupPeriodId);
   each(view, 'schedule', body.schedule, (path, m) => {
     object(view, path, m);
     integer(view, `${path}.matchupPeriodId`, m.matchupPeriodId);
@@ -313,7 +317,7 @@ export function guardSchedule(body, { week } = {}) {
       object(view, `${path}.${name}`, s);
       integer(view, `${path}.${name}.teamId`, s.teamId);
       number(view, `${path}.${name}.totalPoints`, s.totalPoints);
-      if (week !== undefined) {
+      if (needsLineup(m)) {
         const lineup = object(view, `${path}.${name}.rosterForCurrentScoringPeriod`, s.rosterForCurrentScoringPeriod);
         each(view, `${path}.${name}.rosterForCurrentScoringPeriod.entries`, lineup.entries, (at, entry) => teamEntry(view, at, entry, { week }));
       }
