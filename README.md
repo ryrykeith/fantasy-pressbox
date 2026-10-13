@@ -390,8 +390,8 @@ plain signed-in visit has not been checked yet.
   last updated May 24, 2024). It is against ESPN's terms.
 - **You choose it for your own league, at your own risk.** Nothing here says
   ESPN allows it.
-- **The cookies are passwords.** Anyone holding them can read your ESPN
-  account's leagues.
+- **The cookies are passwords.** Anyone holding them can act as you on
+  ESPN.
 
 If you still want it, set `ESPN_ROUTE=fetch` (or choose Fetch in `init`).
 A public league needs no cookies. A private league needs two, copied while you
@@ -421,7 +421,7 @@ when `ESPN_ROUTE` is `import`. If they stop working, copy fresh values:
 | **Refused** | The guillotine editions (`survival-preview`, `chop-recap`, `survival-rankings`): guillotine is not supported on ESPN in this version |
 | **Refused** | A matchup period that spans more than one NFL week |
 | **Redraft** | A keeper league is treated as redraft. A declared dynasty is accepted, but the editions that need traded future picks refuse |
-| **Names** | Managers are named by their ESPN display name |
+| **Names** | Teams are named by their team name. Manager names are not available until ESPN's member display names are confirmed |
 | **Season** | The current season only |
 
 [`docs/espn-data.md`](docs/espn-data.md#coverage-matrix) has the full coverage
