@@ -244,6 +244,16 @@ and may be one. Season potential points are null: no source shows them.
 | ESPN has no taxi squad. | **assumed**: plan §4. No taxi slot appears in either client's slot table. |
 | `rosterSettings.lineupSlotCounts` gives the starting slots. | **assumed**: see [League settings](#league-settings) |
 
+**decision** (operator, 2026-10-13): a player in the IR slot (21) is not a
+lineup candidate, because a manager cannot start him. The week's rosters carry
+`reserveIds`, and `src/analysis/week.mjs` leaves those players out of the
+optimal lineup, so an IR player with no points entry (open question 32) does
+not make his team's lineup efficiency unavailable, and one with points is
+never put in the optimal lineup. ESPN only: Sleeper's WeekData carries no
+`reserveIds` and its output is unchanged. Whether Sleeper should do the same
+is a separate question, because its solver was validated against Sleeper's
+published potential points (`ppts`), a check that would have to be re-run.
+
 **decision** (plan Appendix A, 3.2): lineup slots map into the shared slot
 vocabulary in `src/analysis/lineup.mjs`. A slot with no mapping is refused,
 naming the table and the ID. A league that starts one refuses with that
@@ -886,6 +896,9 @@ confirms them against a real league.
     for the optimal lineup. Any other player without an entry, starter or
     bench, makes his team's lineup efficiency and optimal lineup unavailable
     for the week (`src/espn/normalize.mjs`, `src/analysis/week.mjs`).
+    **Exception, decision** (operator, 2026-10-13): a player in the IR slot
+    (21) is not a lineup candidate, so he is left out of the optimal lineup
+    whether or not he has an entry; see [Rosters and lineups](#rosters-and-lineups).
 33. Whether ESPN sends `waiverRank` or `wavierRank` on `teams[]` (espn-api and
     the JS client disagree; one is a typo). **Unknown.** `guardTeams` requires
     `waiverRank` only in a rolling-waiver league (`{ faab: false }`); a FAAB

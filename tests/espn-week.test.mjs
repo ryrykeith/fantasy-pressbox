@@ -446,3 +446,37 @@ test('fromConfig refuses a missing league ID, naming the key', () => {
   });
   assert.equal(made.client.leagueId, PUBLIC_LEAGUE_ID);
 });
+
+// --- IR players (operator decision, 2026-10-13) ------------------------------
+
+/** Moves team 0's bench running back (role 8) into the IR slot, optionally with no points entry. */
+function irBundle({ withPoints, points }) {
+  const raw = bundle();
+  const entry = raw.matchups.schedule[0].home.rosterForCurrentScoringPeriod.entries.find(
+    (e) => e.playerPoolEntry.player.id === playerId(0, 8),
+  );
+  entry.lineupSlotId = 21;
+  const player = entry.playerPoolEntry.player;
+  if (!withPoints) player.stats = player.stats.filter((s) => s.statSourceId !== 0);
+  else if (points !== undefined) player.stats.find((s) => s.statSourceId === 0).appliedTotal = points;
+  return raw;
+}
+
+test('an IR player with no points entry does not make his team\'s lineup efficiency unavailable', () => {
+  const week = weekOf(PUBLIC_LEAGUE_ID, irBundle({ withPoints: false }));
+  const ir = String(playerId(0, 8));
+  assert.deepEqual(week.rosters[0].reserveIds, [ir]);
+  assert.deepEqual(week.rosters[0].noPointsIds, [ir]);
+
+  const blues = analyze(week).teamWeeks.find((t) => t.rosterId === 1);
+  assert.equal(typeof blues.lineupEfficiency, 'number');
+  assert.equal(typeof blues.potentialPoints, 'number');
+  assert.ok(Array.isArray(blues.optimalLineup));
+});
+
+test('an IR player who has points is still left out of the optimal lineup', () => {
+  const week = weekOf(PUBLIC_LEAGUE_ID, irBundle({ withPoints: true, points: 99 })); // would win the flex if eligible
+  const blues = analyze(week).teamWeeks.find((t) => t.rosterId === 1);
+  assert.ok(blues.potentialPoints < 99);
+  assert.ok(blues.optimalLineup.every((s) => s.points !== 99));
+});

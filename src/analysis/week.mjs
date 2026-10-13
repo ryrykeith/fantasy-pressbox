@@ -90,7 +90,14 @@ export function analyzeWeek({ league, teams, rosters, players, week }) {
   const buildSide = (side, opponentSide = null) => {
     const team = teamsByRosterId.get(side.rosterId);
     const { starters, bench } = entriesFor(side, players);
-    const optimal = optimalLineup(slots, [...starters, ...bench]);
+    // A roster that lists `reserveIds` (ESPN's IR slot) cannot start those
+    // players, so they are not lineup candidates. A roster without the list
+    // (Sleeper's) is read exactly as it always was.
+    const reserve = new Set(side.reserveIds || []);
+    const optimal = optimalLineup(
+      slots,
+      [...starters, ...bench].filter((entry) => !(side.reserveIds && reserve.has(entry.id))),
+    );
     const unreported = [...starters, ...bench].filter((entry) => entry.id !== null && !hasPoints(entry));
     const scored = Number((side.points ?? 0).toFixed(2));
 

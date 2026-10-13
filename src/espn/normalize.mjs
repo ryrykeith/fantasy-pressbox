@@ -528,10 +528,14 @@ function byeTableResolver(byeWeeks) {
  * `noPointsIds`. When the bye table says his current NFL team had no game
  * that week, he is also in `byeIds`, a sourced fact. src/analysis/week.mjs
  * reads both lists; a roster without them (Sleeper's) is read as it always was.
+ *
+ * `reserveIds` lists the players in the IR slot (21). A manager cannot start
+ * one, so analysis leaves them out of the optimal lineup (operator decision,
+ * 2026-10-13; doc open question 32).
  */
 function weekRoster(side, { week, layout, pairingKey, points, byeTable, path }) {
   const entries = side.rosterForCurrentScoringPeriod.entries;
-  const { playerIds, starterIds } = arrangeLineup(entries, layout, {
+  const { playerIds, starterIds, reserveIds } = arrangeLineup(entries, layout, {
     view: 'mMatchupScore/mScoreboard',
     path: `${path}.rosterForCurrentScoringPeriod.entries`,
   });
@@ -558,6 +562,7 @@ function weekRoster(side, { week, layout, pairingKey, points, byeTable, path }) 
     rosterId: side.teamId,
     playerIds,
     starterIds,
+    reserveIds,
     starterPoints: starterIds.map((id) => (id === null ? null : (playerPoints[id] ?? null))),
     playerPoints,
     points,
