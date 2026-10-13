@@ -55,11 +55,11 @@ export function describeScoringSummary(scoring) {
  * Empty when there is nothing to report, so an ordinary league's doctor
  * output stays as short as it already was.
  */
-export function describeUnmodelledScoring(scoring) {
+export function describeUnmodelledScoring(scoring, { provider = 'Sleeper' } = {}) {
   if (!scoring.notModelled || scoring.notModelled.length === 0) return [];
 
   return [
-    'Not modelled       Sleeper settings this tool does not use:',
+    `Not modelled       ${provider} settings this tool does not use:`,
     ...scoring.notModelled.map(({ key, value, default: fallback }) => {
       const comparison = fallback !== null ? ` (default ${fallback})` : '';
       return `                     ${key}: ${value}${comparison}`;

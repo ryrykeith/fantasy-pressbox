@@ -114,7 +114,7 @@ export const FORMAT_SOURCES = ['declared', 'detected'];
  * An empty or absent value is not a typo — it means "work it out", and returns
  * null so detection can take over.
  */
-export function parseDeclaredFormatType(value, { source = 'LEAGUE_FORMAT in .env' } = {}) {
+export function parseDeclaredFormatType(value, { source = 'LEAGUE_FORMAT in .env', provider = 'Sleeper' } = {}) {
   if (value === undefined || value === null) return null;
   const text = String(value).trim().toLowerCase();
   if (text === '') return null;
@@ -124,7 +124,7 @@ export function parseDeclaredFormatType(value, { source = 'LEAGUE_FORMAT in .env
   throw new Error(
     `${source} is "${String(value).trim()}", which is not a league format.\n\n` +
       `Use one of:\n${valid}\n\n` +
-      'Or leave it empty and Fantasy Pressbox will work it out from Sleeper. It can ' +
+      `Or leave it empty and Fantasy Pressbox will work it out from ${provider}. It can ` +
       `recognise ${FORMAT_TYPES.filter((type) => !UNDETECTABLE_FORMAT_TYPES.includes(type)).join(' and ')}, ` +
       `but never ${UNDETECTABLE_FORMAT_TYPES.join(' or ')} — declare that one yourself.`,
   );
@@ -148,10 +148,13 @@ export function resolveFormatType({ declared = null, detected = null } = {}) {
   );
 }
 
-/** "Dynasty (detected from Sleeper)" — one phrase, used wherever format is shown. */
-export function describeFormat(format) {
+/**
+ * "Dynasty (detected from Sleeper)" — one phrase, used wherever format is shown.
+ * `provider` is the platform's display name (providerDisplayName), Sleeper by default.
+ */
+export function describeFormat(format, { provider = 'Sleeper' } = {}) {
   if (!format?.type) return 'unknown';
   const label = FORMAT_LABELS[format.type] ?? format.type;
   if (format.source === 'declared') return `${label} (declared)`;
-  return `${label} (detected from Sleeper)`;
+  return `${label} (detected from ${provider})`;
 }

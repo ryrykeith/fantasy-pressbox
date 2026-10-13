@@ -464,7 +464,7 @@ async function commandDoctor(config) {
   const { week, source } = await resolveWeek({ client, league, config });
   say(`  League             ${league.name} (${league.season})`);
   say(`  Teams              ${teams.length}`);
-  say(`  Format             ${describeFormat(league.format)}`);
+  say(`  Format             ${describeFormat(league.format, { provider: providerDisplayName(league.provider) })}`);
   if (league.format.source === 'detected') {
     say(`                     Set LEAGUE_FORMAT in .env if that is wrong ` +
         `(${UNDETECTABLE_FORMAT_TYPES.join(', ')} can only be declared)`);
@@ -476,7 +476,7 @@ async function commandDoctor(config) {
     say(`  Weights for league ✗ ${error.message}`);
   }
   for (const line of describeScoringSummary(league.format.scoring)) say(`  ${line}`);
-  for (const line of describeUnmodelledScoring(league.format.scoring)) say(`  ${line}`);
+  for (const line of describeUnmodelledScoring(league.format.scoring, { provider: providerDisplayName(league.provider) })) say(`  ${line}`);
   say(`  Current week       ${week} (from ${source})`);
 
   // Who is still in the league, for the formats where that changes. Built from

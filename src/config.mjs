@@ -593,7 +593,7 @@ export function loadConfig({
     leagueDisplayName: env.LEAGUE_DISPLAY_NAME || null,
     // What kind of league this is, if the operator said. Null means "work it
     // out from Sleeper"; a misspelling throws here, before any command runs.
-    leagueFormat: parseDeclaredFormatType(env.LEAGUE_FORMAT),
+    leagueFormat: parseDeclaredFormatType(env.LEAGUE_FORMAT, { provider: providerDisplayName(league.provider) }),
     ai: {
       provider: (env.AI_PROVIDER || '').trim().toLowerCase() || null,
       anthropicKey: (env.ANTHROPIC_API_KEY || '').trim(),

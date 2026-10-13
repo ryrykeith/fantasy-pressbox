@@ -153,7 +153,7 @@ export function isKeeperLeague(settings) {
  * declared type.
  */
 export function resolveEspnFormat(settings, { declaredFormatType = null, startingSlots = [] } = {}) {
-  const declared = parseDeclaredFormatType(declaredFormatType);
+  const declared = parseDeclaredFormatType(declaredFormatType, { provider: 'ESPN' });
   if (declared === 'guillotine') {
     throw new EspnUnsupportedError(
       'LEAGUE_FORMAT is guillotine, and guillotine leagues are not supported on ESPN in this version (v1). ' +
