@@ -57,7 +57,7 @@ function configWith(lines) {
 
 test('a folder with only SLEEPER_LEAGUE_ID is a Sleeper league, as it always was', () => {
   const config = configWith(['SLEEPER_LEAGUE_ID=1111111111']);
-  assert.deepEqual(config.league, { provider: 'sleeper', id: '1111111111', season: null, secrets: {} });
+  assert.deepEqual(config.league, { provider: 'sleeper', id: '1111111111', season: null, route: null, secrets: {} });
   assert.equal(config.leagueId, '1111111111');
   assert.equal(config.season, null);
   assert.equal(config.editorial.output.sleeper_max_chars, 900);
