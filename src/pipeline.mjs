@@ -59,6 +59,23 @@ export async function openLeague(config, { refreshPlayers = false } = {}) {
 }
 
 /**
+ * Saves pages the operator downloaded from the platform themselves, for a
+ * provider with a manual import route (ESPN under ESPN_ROUTE=import):
+ * `files` is `[{ file, text }]`, already read from disk by the caller. The
+ * provider checks every file before it saves any, under the league folder's
+ * data/. Nothing is fetched.
+ *
+ * → the provider's summary: `{ leaguePath, rawPath, week, transactionsUnavailable, files }`
+ */
+export function importSavedFiles(config, { files, week = null }) {
+  const provider = openProvider(config);
+  if (typeof provider.importFiles !== 'function') {
+    throw new Error(`${provider.displayName} has no import route: its league data is fetched.`);
+  }
+  return provider.importFiles({ files, week });
+}
+
+/**
  * Which week are we talking about?
  *
  * Explicit flag wins, then .env, then the provider's own idea of the current
@@ -441,13 +458,14 @@ async function readSettledWeek({ provider, store, league, teams, players, week, 
   // A settled week whose raw bundle is gone is fetched again for its
   // transactions; nothing is saved, so the settled record stays as it is.
   const bundle = raw ?? { ...(await provider.fetchWeek(week)), provider: provider.name };
-  const { transactions } = readBundle(bundle, { store, league, teams, players });
+  const { transactions, transactionsUnavailable = false } = readBundle(bundle, { store, league, teams, players });
   const draftOrder = snapshot.draftOrder ?? readDraftOrder({ league, teams, config, tradedPicks });
   return {
     // A multi-week week's snapshot has no analysis, only the marker.
     analysis: snapshot.analysis ?? null,
     ...(snapshot.multiWeekMatchup ? { multiWeekMatchup: snapshot.multiWeekMatchup } : {}),
     transactions,
+    ...(transactionsUnavailable ? { transactionsUnavailable } : {}),
     played: snapshot.played,
     ...(snapshot.elimination ? { elimination: snapshot.elimination } : {}),
     ...(snapshot.danger ? { danger: snapshot.danger } : {}),
@@ -607,6 +625,9 @@ export async function captureWeek({
     analysis,
     ...(multiWeekMatchup ? { multiWeekMatchup } : {}),
     transactions: weekData.transactions,
+    // The week's moves are unknown (an ESPN week imported without its
+    // transactions file), not none: editions must not call the week quiet.
+    ...(weekData.transactionsUnavailable ? { transactionsUnavailable: true } : {}),
     played,
     ...(elimination ? { elimination } : {}),
     ...(danger ? { danger } : {}),

@@ -518,6 +518,7 @@ terminal). Only `init` and `check` work without one.
 | `fantasy-pressbox init` | Set up a league folder. Run this first. With `--workspace <folder>` it creates that folder. |
 | `fantasy-pressbox doctor` | Check your settings, league config and connection. Run this when something is wrong. |
 | `fantasy-pressbox fetch` | Just download and save a week of league data. |
+| `fantasy-pressbox import-espn --week <n> <files>` | ESPN leagues (experimental): import pages you saved from ESPN yourself. Fantasy Pressbox never contacts ESPN on this route. Run it with no files to see the addresses to open in your signed-in browser; save each page into your league folder, never into the Fantasy Pressbox folder. This is your own manual, personal use of your league's pages. |
 | `fantasy-pressbox preview` | Build this week's matchup previews. |
 | `fantasy-pressbox survival-preview` | Build this week's survival preview. Guillotine leagues only — it replaces `preview`. |
 | `fantasy-pressbox recap` | Build last week's recap and awards. |

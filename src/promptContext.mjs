@@ -805,6 +805,9 @@ function marketValuesView(market) {
 /**
  * @param {object} input
  * @param {string} input.task one of TASKS
+ * @param {boolean} input.transactionsUnavailable true when the week's
+ *        transactions are unknown (captureWeek's flag), so an empty list is
+ *        not reported as a quiet week.
  * @param {Array|null} input.enrichedTransactions the week's transactions from
  *        src/pipeline.mjs#readTransactions; only read by TRANSACTION_TASKS.
  * @param {object|null} input.marketValues from src/pipeline.mjs#readMarketValues:
@@ -844,6 +847,7 @@ export function buildContext({
   previousRankings = null,
   gradedPredictions = null,
   transactions = null,
+  transactionsUnavailable = false,
   futureDraftCapital = null,
   eliminationLedger = null,
   faabMarket = null,
@@ -1162,6 +1166,7 @@ export function buildContext({
     tradedPicks,
     futureStock,
     pickMarketUnavailable: pickCapital?.marketUnavailable ?? null,
+    transactionsUnavailable,
   });
 
   return context;
@@ -1185,6 +1190,7 @@ function describeMissingContext({
   tradedPicks = [],
   futureStock = null,
   pickMarketUnavailable = null,
+  transactionsUnavailable = false,
 }) {
   const missing = [];
   const isRanking = RANKING_TASKS.includes(task);
@@ -1338,6 +1344,16 @@ function describeMissingContext({
         }),
       );
     }
+  } else if (transactionsUnavailable) {
+    // Unknown, not none: the week's transactions were never on file (an ESPN
+    // week imported without its transactions page).
+    missing.push({
+      field: 'transactions',
+      why: "This week's transactions are not in the league data on file, so whether any move was made is unknown.",
+      instruction:
+        'Do not mention trades, waiver claims or free-agent moves, and do not say the week was quiet ' +
+        'or that nobody made a move.',
+    });
   } else if (!context.transactions) {
     missing.push({
       field: 'transactions',

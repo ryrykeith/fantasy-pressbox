@@ -20,6 +20,7 @@ Every fact about ESPN carries one label and a source.
 | **verified** | Checked by this project, with the date and how. |
 | **assumed** | Not checked against ESPN. The source is named: a file and line in one of the two clients below, or the plan where no client says. Each assumed fact the code depends on is also listed under [Open questions](#open-questions). |
 | **Unknown** | Not a fact: a question no source read so far answers. Each one is listed under [Open questions](#open-questions). |
+| **Unverified** | A claim the code's design relies on that only a test league can check (task 2.2). Treated as Unknown until then, and listed under [Open questions](#open-questions). |
 
 Statements about what *this project* will do (cache paths, refusals,
 slot mappings) are not ESPN facts. They are marked **decision**, with the plan
@@ -785,7 +786,8 @@ refreshPlayers })`): the player list is cached daily at
 `data/cache/players-espn-<season>.json`, as Sleeper's is, and can be
 refreshed on demand. No request is made per player. A player field ESPN does
 not supply (age, for example) is absent from the shared Player record, not
-null.
+null. On the import route there is no player list: names come from the saved
+rosters and lineups ([Importing saved files](#importing-saved-files)).
 
 As with Sleeper, **a raw ESPN player ID or numeric code must never reach a
 prompt.**
@@ -819,6 +821,71 @@ player with no `espnId` is unpriced, never matched by name.
 are `unavailable` (8); guillotine is refused on ESPN (9); manager names come
 from `displayName` only, and are `unavailable` until that field is confirmed
 (11, open question 27); seasons before 2018 are not covered (1).
+
+## Importing saved files
+
+**decision** (owner, 2026-10-12; ESPN_ROUTE in plan §7): an ESPN league's data
+arrives one of two ways. `ESPN_ROUTE=import`, the default (also when the line
+is absent), is a manual route: the operator opens ESPN's own JSON addresses in
+their own signed-in browser, saves each page into the league folder, and runs
+`import-espn`. Fantasy Pressbox then never contacts ESPN and never reads the
+cookies. `ESPN_ROUTE=fetch` is an opt-in: the client asks ESPN's servers
+itself, with the cookies for a private league.
+
+Why: the Disney Terms of Use, which cover ESPN (disneytermsofuse.com/english/,
+last updated May 24, 2024), bar accessing or extracting the products "using a
+robot, spider, script, or other automated means" (§2.B(x)) and limit use to
+personal, noncommercial use (§2.A). The cookie fetch is automated access. On
+the import route a person opens and saves each page. Copying is still a grey
+area (§2.B(ii) bars copying unless expressly permitted): **this is the
+operator's own manual, personal use, and nothing here says ESPN permits it.**
+
+What to save (`src/espn/urls.mjs`, `espnImportLinks`). These are exactly the
+requests the fetch route makes, built by the same code:
+
+| Page | Address | What the import reads from it |
+|---|---|---|
+| The league | `seasons/<year>/segments/0/leagues/<id>?view=mSettings&view=mTeam&view=mRoster&view=mDraftDetail` | settings, teams, members, rosters, draft status |
+| A week's matchups | `…?view=mMatchupScore&view=mScoreboard&view=mSettings&scoringPeriodId=<week>` | that week's lineups and scores |
+| A week's transactions | `…?view=mTransactions2&scoringPeriodId=<week>` | that week's moves |
+
+| Fact | Label and source |
+|---|---|
+| A public league's pages open in a browser with no sign-in. | **assumed**: follows from "a public league works without cookies" ([Authentication](#authentication)), which is operator-checked for requests, not for a browser visit. |
+| A browser signed in to fantasy.espn.com shows a private league's JSON on a plain visit to these addresses. | **Unverified.** It depends on the browser sending ESPN's cookies to `lm-api-reads.fantasy.espn.com`, which no source shows. Until a test league exists (task 2.2) the import route for a private league is untested. |
+| The player list (`players_wl`) can be saved the same way. | **No.** Its request needs an `x-fantasy-filter` header ([Players](#players)), and a browser visit cannot send one, so the saved page would not be the same request. |
+| A saved page's top-level `scoringPeriodId` is the league's current period, not the week asked for. | **assumed**: [Working out the week](#working-out-the-week). |
+| The league response carries the league ID as a top-level `id`. | **Unknown.** Neither client reads it. Open question 34. |
+
+**decision** (task 3ab1ae1e): how the import reads saved pages
+(`src/espn/import.mjs`, node-free so the browser core can reuse it):
+
+- **Untrusted input.** A page is refused, naming the file, when it is over
+  20 MB, is not JSON, does not hold a JSON object, holds a key named
+  `__proto__`, `constructor` or `prototype`, names no league ID or another
+  league than `ESPN_LEAGUE_ID` (open question 34), is for another season than
+  `LEAGUE_SEASON`, or fails its shape guard. No value from a page is echoed
+  in a refusal. A path inside the installed package is refused before it is
+  read: a saved page is the league's own data and belongs in its league
+  folder. Its contents are kept only in the league folder's `data/`
+  (`import/<season>/league.json` and the week's raw bundle).
+- **The week comes from the operator** (`import-espn --week <n>`), because the
+  page does not say which week was asked for. The page must agree: the week
+  is in `scheduleSettings.matchupPeriods`, and the lineups carry stats for that
+  scoring period.
+- **Two pages per week.** A week imported without its transactions page has
+  its transactions marked unavailable for that week, never empty, and the
+  transactions edition refuses it. Importing the page later fills them in.
+- **Player names** come from the `playerPoolEntry.player` records in the
+  league page's rosters and every saved week's lineups, the newest save
+  winning. A player who appears only in a transaction is in no roster, so his
+  name is unavailable: he is printed as "Name unavailable", never as his ESPN
+  ID.
+- **Settling.** A week is settled only once the latest scoring period any
+  saved page shows is past it (plan §9, R6, as above). A week saved while it
+  is still being played stays unsettled until a later save shows the period
+  has moved on. The furthest period seen is kept, so importing an older page
+  never moves the season backwards.
 
 ## Open questions
 
@@ -908,3 +975,12 @@ confirms them against a real league.
     `waiverRank` only in a rolling-waiver league (`{ faab: false }`); a FAAB
     league does not read it. If ESPN sends `wavierRank`, rolling-waiver leagues
     refuse until this is answered.
+34. Whether a league response carries the league ID as a top-level `id`.
+    **Unknown.** Neither client reads one. The import route needs it to check
+    a saved page against `ESPN_LEAGUE_ID`, so a page without it is refused
+    rather than accepted unchecked ([Importing saved files](#importing-saved-files)).
+    If ESPN does not send it, the import refuses every page until this is
+    answered. The fixture's `id` is a placeholder.
+35. Whether a browser signed in to ESPN shows a private league's JSON on a
+    plain visit to the league address. **Unverified** until a test league
+    exists.

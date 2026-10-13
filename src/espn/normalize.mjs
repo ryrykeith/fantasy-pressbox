@@ -791,7 +791,11 @@ export function normalizeBids(transactions, { league = null } = {}) {
  *   transactions  completed moves in the shared shape (normalizeTransactions)
  *   bids          FAAB bids only (normalizeBids)
  *
- * and, only when the week's matchup period covers more than one scoring
+ * and `transactionsUnavailable: true` when the bundle was imported without
+ * its transactions file (`transactions: null`): the two lists are then empty
+ * because the moves are unknown, not because there were none.
+ *
+ * And, only when the week's matchup period covers more than one scoring
  * period, `multiWeekMatchup: { matchupPeriod, weeks }`, so captureWeek leaves
  * it unanalyzed and every edition that reads its analysis refuses it. Such a week is never split or summed (decision 12).
  *
@@ -815,7 +819,12 @@ export function normalizeWeek(
   const period = matchupPeriodFor(settings.scheduleSettings, week);
   // Only the week's own matchup period must carry lineups; a whole-season schedule's other entries don't.
   guardSchedule(bundle.matchups, { week, matchupPeriodId: period ? period.id : null });
-  guardTransactions(bundle.transactions);
+  // A week imported without its transactions file (ESPN_ROUTE=import) saves
+  // `transactions: null`. Its moves are unknown, not none: the lists are empty
+  // and `transactionsUnavailable` says why, so no edition calls the week quiet.
+  const transactionsUnavailable = bundle.transactions === null;
+  if (!transactionsUnavailable) guardTransactions(bundle.transactions);
+  const moves = transactionsUnavailable ? [] : bundle.transactions.transactions;
 
   const layout = startingSlotLayout(settings.rosterSettings.lineupSlotCounts);
   const byeTable = byeTableResolver(byeWeeks);
@@ -823,8 +832,9 @@ export function normalizeWeek(
   return {
     week,
     rosters: weekRosters(bundle.matchups, { week, period, layout, byeTable }),
-    transactions: normalizeTransactions(bundle.transactions.transactions, { league, teams, players, describePlayer }),
-    bids: normalizeBids(bundle.transactions.transactions, { league }),
+    transactions: normalizeTransactions(moves, { league, teams, players, describePlayer }),
+    bids: normalizeBids(moves, { league }),
+    ...(transactionsUnavailable ? { transactionsUnavailable: true } : {}),
     ...(period && period.weeks.length > 1 ? { multiWeekMatchup: { matchupPeriod: period.id, weeks: period.weeks } } : {}),
   };
 }

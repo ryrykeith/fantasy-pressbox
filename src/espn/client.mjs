@@ -21,9 +21,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { join } from 'node:path';
 
 import { EspnShapeError, guardPlayers } from './shape.mjs';
-
-const HOST = 'lm-api-reads.fantasy.espn.com';
-const BASE = `https://${HOST}/apis/v3/games/ffl`;
+import { HOST, leagueViewsUrl, playersUrl, seasonUrl as seasonAddress } from './urls.mjs';
 
 // Doc, "Players": the player list is cached daily, as Sleeper's is.
 const PLAYER_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -73,7 +71,7 @@ export function createClient({
   }
   const cookie = s2 === undefined ? undefined : `espn_s2=${s2}; SWID=${swid}`;
   const hasCookies = cookie !== undefined;
-  const seasonUrl = `${BASE}/seasons/${season}`;
+  const seasonUrl = seasonAddress(season);
 
   /** Backstop: no message leaves this module carrying a cookie value, however it was built. */
   const scrub = (text) =>
@@ -135,8 +133,6 @@ export function createClient({
     throw refuse(`${lastError?.message ?? 'The request failed.'} Gave up on ${what} after ${retries + 1} tries.`);
   }
 
-  const leagueUrl = `${seasonUrl}/segments/0/leagues/${leagueId}`;
-
   return {
     leagueId,
     seasonId: Number(season),
@@ -151,10 +147,9 @@ export function createClient({
      */
     async league(views, { week } = {}) {
       if (!Array.isArray(views) || views.length === 0) throw new TypeError('league() needs a list of views');
-      const query = views.map((v) => `view=${encodeURIComponent(v)}`);
-      if (week !== undefined) query.push(`scoringPeriodId=${encodeURIComponent(week)}`);
       const what = `league ${leagueId} (${views.join(' + ')})`;
-      const body = await getJson(`${leagueUrl}?${query.join('&')}`, { withCookies: true, what });
+      // Built by src/espn/urls.mjs, as espnImportLinks's are, so the two cannot drift.
+      const body = await getJson(leagueViewsUrl({ leagueId, season, views, week }), { withCookies: true, what });
       if (body === null || typeof body !== 'object' || Array.isArray(body)) {
         throw new EspnShapeError(views.join(' + '), '(response)', 'must be an object');
       }
@@ -180,7 +175,7 @@ export function createClient({
         }
       }
       const players = guardPlayers(
-        await getJson(`${seasonUrl}/players?view=players_wl`, {
+        await getJson(playersUrl(season), {
           headers: { 'x-fantasy-filter': ACTIVE_PLAYERS_FILTER },
           what: `the player list for ${season}`,
         }),

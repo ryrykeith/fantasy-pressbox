@@ -6,12 +6,12 @@
  * snapshot that week, build a prompt, and either write it out for you to paste
  * into a chat or send it to a model for you.
  */
-import { writeFileSync, mkdirSync, readFileSync, existsSync, realpathSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { providerDisplayName } from './providers.mjs';
+import { getProvider, providerDisplayName } from './providers.mjs';
 import {
   LEAGUE_ID_KEYS,
   loadConfig,
@@ -35,6 +35,7 @@ import {
   openLeague,
   resolveWeek,
   captureWeek,
+  importSavedFiles,
   readEliminationLedger,
   readByeExposure,
   readTransactions,
@@ -126,6 +127,9 @@ Commands
   grade                         Score last week's predictions against what happened
   check <file>                  Check a file of finished posts against the length limit
   fetch                         Download and save a week of league data
+  import-espn [--week <n>] <files>
+                                ESPN leagues: import pages you saved from ESPN in your browser
+                                (run it with no files to see the addresses to save)
 
 Options
   --week <n>                    Which week to work on (default: worked out from Sleeper)
@@ -559,9 +563,16 @@ async function commandFetch(config, args) {
   const ctx = await openLeague(config, { refreshPlayers: args.refreshPlayers });
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week });
   const result = await captureWeek({ ...ctx, week });
+  reportCapture(result, week, ctx);
+  return 0;
+}
+
+/** What fetch and import-espn print about a captured week. */
+function reportCapture(result, week, ctx) {
   say(
     result.kept
-      ? `Week ${week} is settled: its snapshot was saved after Sleeper scored it, and is kept as it is.`
+      ? `Week ${week} is settled: its snapshot was saved after ${providerDisplayName(ctx.league.provider ?? 'sleeper')} ` +
+        'scored it, and is kept as it is.'
       : `Week ${week} saved.`,
   );
   say(`  raw data   ${result.rawPath}`);
@@ -577,6 +588,96 @@ async function commandFetch(config, args) {
     }`,
   );
   if (multiWeek) say(`  ${multiWeek}`);
+  if (result.transactionsUnavailable) {
+    say(`  moves      unavailable: week ${week}'s transactions page was not imported`);
+    const provider = getProvider(ctx.league.provider);
+    if (provider.importInstructions) {
+      say(`\nTo add them, save and import week ${week}'s transactions page:`);
+      say(provider.importInstructions({ leagueId: ctx.config.league.id, season: ctx.config.league.season, week }));
+    }
+  }
+}
+
+/** Is `path` the folder `root` or inside it? Both are real paths. */
+const isInsideFolder = (root, path) => path === root || path.startsWith(root.endsWith(sep) ? root : root + sep);
+
+/**
+ * One saved file, read for import-espn. Refused, naming the file, when it
+ * does not exist, is not a file, is larger than the import reads, or lies
+ * inside the package folder: saved pages are a league's own data and belong
+ * in its league folder, never in the installed package.
+ */
+function readSavedFile(path, { maxBytes, workspaceRoot }) {
+  const full = resolve(path);
+  if (!existsSync(full)) throw new Error(`${path} does not exist.`);
+  const real = realpathSync(full);
+  if (isInsideFolder(realpathSync(PACKAGE_ROOT), real)) {
+    throw new Error(
+      `${path} is inside the Fantasy Pressbox package folder (${PACKAGE_ROOT}), so it was not read. ` +
+        `A saved ESPN page is your league's data: keep it in the league folder (${workspaceRoot}).`,
+    );
+  }
+  const stats = statSync(real);
+  if (!stats.isFile()) throw new Error(`${path} is not a file.`);
+  if (stats.size > maxBytes) {
+    throw new Error(
+      `${path} is larger than ${maxBytes / (1024 * 1024)} MB, so it was not read. ` +
+        'A saved ESPN league or week is far smaller: check that this is the right file.',
+    );
+  }
+  return { file: path, text: readFileSync(real, 'utf8') };
+}
+
+/**
+ * Imports pages the operator saved from ESPN in their own browser (the
+ * default ESPN route): the league page, and for `--week <n>` that week's
+ * matchups and transactions pages. Nothing is requested from ESPN, and no
+ * cookie is read. Every file is checked before any is saved, then the week
+ * is captured exactly as fetch captures one.
+ */
+async function commandImportEspn(config, args) {
+  requireLeague(config);
+  const { provider, id, season, route } = config.league;
+  if (provider !== 'espn') {
+    throw new Error(
+      `import-espn reads pages saved from ESPN, and this league folder is a ${providerDisplayName(provider)} league ` +
+        '(LEAGUE_PROVIDER in .env).',
+    );
+  }
+  if (route !== 'import') {
+    throw new Error(
+      'ESPN_ROUTE is fetch in .env, so this league is read from ESPN, not imported. ' +
+        'To import saved pages instead, set ESPN_ROUTE=import, or remove the line (import is the default).',
+    );
+  }
+  if (!season) throw new Error('No ESPN season configured. Set LEAGUE_SEASON in .env (a four-digit year).');
+  const week = args.week === undefined ? null : args.week;
+  if (week !== null && !(Number.isInteger(week) && week > 0)) {
+    throw new Error('--week must be a week number (1, 2, 3, ...).');
+  }
+
+  const espn = getProvider('espn');
+  const paths = args._.slice(1);
+  if (paths.length === 0) {
+    throw new Error(
+      `Usage: ${CLI_COMMAND} import-espn [--week <n>] <saved files>\n\n` +
+        espn.importInstructions({ leagueId: id, season, week }),
+    );
+  }
+
+  const files = paths.map((path) => readSavedFile(path, { maxBytes: espn.importMaxBytes, workspaceRoot: config.workspaceRoot }));
+  const imported = importSavedFiles(config, { files, week });
+  say('Imported from pages you saved (nothing was requested from ESPN):');
+  for (const [kind, file] of Object.entries(imported.files)) say(`  ${kind.padEnd(13)}${file}`);
+  if (imported.leaguePath) say(`  league saved ${imported.leaguePath}`);
+
+  const ctx = await openLeague(config);
+  say(`\n${ctx.league.name}: ${ctx.teams.length} teams, current week ${ctx.league.currentWeek ?? 'unknown'} (the latest saved page).`);
+  if (imported.week === null) return 0;
+
+  say('');
+  const captured = await captureWeek({ ...ctx, week: imported.week });
+  reportCapture(captured, imported.week, ctx);
   return 0;
 }
 
@@ -678,6 +779,7 @@ async function commandEdition(config, args, task) {
   let upcomingAnalysis = null;
   let priorWeekAnalysis = null;
   let transactions = null;
+  let transactionsUnavailable = false;
   let gradedPredictions = null;
   // Who is still alive, for the formats where that changes. Not built for
   // preseason-rankings — the season has not started, so nobody has been
@@ -702,6 +804,19 @@ async function commandEdition(config, args, task) {
     faabMarket = captured.faab ?? null;
     // Already normalized by captureWeek, with the same lines describePlayer writes.
     transactions = captured.transactions;
+    transactionsUnavailable = Boolean(captured.transactionsUnavailable);
+
+    if (isTransactionEdition && transactionsUnavailable) {
+      // Unknown is not quiet: grading an empty list would call the week quiet.
+      const provider = getProvider(league.provider);
+      throw new Error(
+        `Week ${week}'s transactions are not on file: the week was imported without its transactions page, ` +
+          'so there is nothing to grade.' +
+          (provider.importInstructions
+            ? `\n\n${provider.importInstructions({ leagueId: config.league.id, season: config.league.season, week })}`
+            : ''),
+      );
+    }
 
     if (isTransactionEdition) {
       // Everything a transaction edition reads is a raw bundle captureWeek has
@@ -865,6 +980,7 @@ async function commandEdition(config, args, task) {
     previousRankings,
     gradedPredictions,
     transactions,
+    transactionsUnavailable,
     enrichedTransactions,
     marketValues,
     futureDraftCapital,
@@ -1248,6 +1364,8 @@ async function main() {
       return commandDoctor(config);
     case 'fetch':
       return commandFetch(config, args);
+    case 'import-espn':
+      return commandImportEspn(config, args);
     case 'preview':
       return commandEdition(config, args, 'preview');
     case 'survival-preview':

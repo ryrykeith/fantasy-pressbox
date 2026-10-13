@@ -96,12 +96,12 @@ test('a single-week ESPN week is analyzed as before and carries no multi-week ma
 
 /* ------------------------------------------------- editions, through the CLI */
 
-/** An ESPN league folder for the multi-week fixture. */
+/** An ESPN league folder for the multi-week fixture, on the fetch route (the fake API answers it). */
 function espnWorkspace() {
   const root = tempDir('pressbox-espn-multiweek-cli-');
   writeFileSync(
     join(root, '.env'),
-    `LEAGUE_PROVIDER=espn\nESPN_LEAGUE_ID=${MULTI_WEEK_LEAGUE_ID}\nLEAGUE_SEASON=${SEASON}\nLEAGUE_FORMAT=redraft\n`,
+    `LEAGUE_PROVIDER=espn\nESPN_ROUTE=fetch\nESPN_LEAGUE_ID=${MULTI_WEEK_LEAGUE_ID}\nLEAGUE_SEASON=${SEASON}\nLEAGUE_FORMAT=redraft\n`,
   );
   return root;
 }
@@ -115,6 +115,7 @@ function runCli(args, root) {
     'ESPN_LEAGUE_ID',
     'ESPN_S2',
     'ESPN_SWID',
+    'ESPN_ROUTE',
     'LEAGUE_PROVIDER',
     'LEAGUE_SEASON',
     'LEAGUE_FORMAT',

@@ -316,11 +316,16 @@ function freeAgents() {
  * One league's responses, keyed by what the fake fetch serves. Teams and
  * players are shared by every variant; only settings and transactions differ.
  *
- * @param {{ faab?: boolean, multiWeek?: boolean }} options
+ * Every view carries the league's ID as a top-level `id` (a number), which
+ * the import route checks against ESPN_LEAGUE_ID. That ESPN sends it is not
+ * in either client: a placeholder (doc, open question 34).
+ *
+ * @param {{ leagueId?: string, faab?: boolean, multiWeek?: boolean }} options
  */
-export function buildLeague({ faab = true, multiWeek = false } = {}) {
+export function buildLeague({ leagueId = PUBLIC_LEAGUE_ID, faab = true, multiWeek = false } = {}) {
   const settings = buildSettings({ faab, multiWeek });
   const base = {
+    id: Number(leagueId),
     seasonId: SEASON,
     // Week 4 is complete: the league has moved on to scoring period 5. In the
     // multi-week variant, matchup period 4 is still running at scoring period 5.
@@ -337,7 +342,7 @@ export function buildLeague({ faab = true, multiWeek = false } = {}) {
   const matchupWeek4 = { ...base, schedule: buildSchedule(true) };
   return {
     views: {
-      mSettings: { ...base, id: 0, settings },
+      mSettings: { ...base, settings },
       mTeam: { ...base, teams, members: buildMembers() },
       mRoster: { ...base, teams: teams.map((t, i) => ({ ...t, roster: { entries: rosterEntries(i, null) } })) },
       // Without scoringPeriodId: the schedule with scores and no lineups.
@@ -378,10 +383,10 @@ export const PLAYERS_WL = (() => {
 })();
 
 export const LEAGUE_BY_ID = {
-  [PUBLIC_LEAGUE_ID]: { league: buildLeague(), private: false },
-  [PRIVATE_LEAGUE_ID]: { league: buildLeague(), private: true },
-  [ROLLING_LEAGUE_ID]: { league: buildLeague({ faab: false }), private: false },
-  [MULTI_WEEK_LEAGUE_ID]: { league: buildLeague({ multiWeek: true }), private: false },
+  [PUBLIC_LEAGUE_ID]: { league: buildLeague({ leagueId: PUBLIC_LEAGUE_ID }), private: false },
+  [PRIVATE_LEAGUE_ID]: { league: buildLeague({ leagueId: PRIVATE_LEAGUE_ID }), private: true },
+  [ROLLING_LEAGUE_ID]: { league: buildLeague({ leagueId: ROLLING_LEAGUE_ID, faab: false }), private: false },
+  [MULTI_WEEK_LEAGUE_ID]: { league: buildLeague({ leagueId: MULTI_WEEK_LEAGUE_ID, multiWeek: true }), private: false },
 };
 
 /** The week-4 points the fixture gives one team's players, for tests that check a normalizer's arithmetic. */
