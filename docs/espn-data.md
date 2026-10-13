@@ -251,8 +251,12 @@ optimal lineup, so an IR player with no points entry (open question 32) does
 not make his team's lineup efficiency unavailable, and one with points is
 never put in the optimal lineup. ESPN only: Sleeper's WeekData carries no
 `reserveIds` and its output is unchanged. Whether Sleeper should do the same
-is a separate question, because its solver was validated against Sleeper's
-published potential points (`ppts`), a check that would have to be re-run.
+is answered in `docs/sleeper-data.md`: it should not.
+
+The providers differ on purpose. ESPN IR players are left out because ESPN
+publishes no potential-points figure to match. Sleeper keeps its reserve and
+taxi players, because Sleeper's own `ppts` counts them and the solver matches
+that figure (checked 2026-10-13).
 
 **decision** (plan Appendix A, 3.2): lineup slots map into the shared slot
 vocabulary in `src/analysis/lineup.mjs`. A slot with no mapping is refused,
