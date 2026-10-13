@@ -1174,14 +1174,14 @@ async function commandEdition(config, args, task) {
   // A transaction edition and a tank watch end with no machine-readable block:
   // there is no prediction to grade and no ranking to carry movement from.
   if (isTransactionEdition || isTankWatch || isFutureStock) {
-    reportLengths(body, config, format);
+    reportLengths(body, config, format, context);
     return 0;
   }
 
   const block = extractJsonBlock(result.text);
   recordBlock({ store, league, week, task, block, previousRankings, say, teams });
 
-  reportLengths(body, config, format);
+  reportLengths(body, config, format, context);
   return 0;
 }
 
@@ -1268,20 +1268,28 @@ export function recordBlock({ store, league, week, task, block, previousRankings
   return false;
 }
 
-function reportLengths(body, config, format) {
+function reportLengths(body, config, format, context = null) {
   if (format !== 'sleeper') return;
   const max = config.editorial.output.sleeper_max_chars;
-  const report = checkPosts(body, { maxChars: max });
+  const report = checkPosts(body, { maxChars: max, context });
   say(`\n${report.count} post(s), limit ${max} characters.`);
   if (report.allOk) {
     say('All posts are within the limit.');
     return;
   }
-  warn('Some posts are too long for Sleeper and were NOT shortened:');
-  for (const post of report.violations) {
-    warn(`  post ${post.index}: ${post.length} chars (${post.overBy} over) — ${post.firstLine}`);
+  const tooLong = report.violations.filter((post) => post.overBy > 0);
+  if (tooLong.length) {
+    warn('Some posts are too long for Sleeper and were NOT shortened:');
+    for (const post of tooLong) {
+      warn(`  post ${post.index}: ${post.length} chars (${post.overBy} over) — ${post.firstLine}`);
+    }
+    warn('Edit those posts down before sending, or raise SLEEPER_POST_MAX_LENGTH in .env.');
   }
-  warn('Edit those posts down before sending, or raise SLEEPER_POST_MAX_LENGTH in .env.');
+  if (report.creditMissing.length) {
+    warn("FantasyCalc's terms require its credit beside its values. These posts quote values without it:");
+    for (const post of report.creditMissing) warn(`  post ${post.index} — ${post.firstLine}`);
+    warn(`Add "${report.creditLine}" to the end of each.`);
+  }
 }
 
 /**

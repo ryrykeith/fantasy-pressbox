@@ -789,6 +789,24 @@ function tradesView(transactions, { teams, players, headToHead, withPicks, marke
     }));
 }
 
+/**
+ * FantasyCalc's terms of use require its name and a link to FantasyCalc.com
+ * beside its values, for non-commercial use only. The context carries the exact
+ * line so the model does not paraphrase it, and src/validate.mjs checks for it.
+ * The line is part of the post, so it counts toward the post-length limit.
+ */
+export const MARKET_CREDIT_LINE = 'Values: FantasyCalc (fantasycalc.com)';
+
+function marketCreditView() {
+  return {
+    line: MARKET_CREDIT_LINE,
+    instruction:
+      'Any post that quotes a market value (a number from `market`, `receivedMarketTotal`, `value` or `netValue`) ' +
+      `must end with this exact line on its own line: ${MARKET_CREDIT_LINE}. Leave room for it: it counts toward ` +
+      'the post-length limit. A post that quotes no value needs no credit line.',
+  };
+}
+
 /** What the market is, for the edition that quotes it. */
 function marketValuesView(market) {
   return {
@@ -1156,6 +1174,9 @@ export function buildContext({
       moves,
     }));
   }
+
+  // Only an edition that actually received FantasyCalc values owes the credit.
+  if (context.marketValues || context.draftCapital?.valueSource) context.marketCredit = marketCreditView();
 
   context.unavailable = describeMissingContext({
     task,

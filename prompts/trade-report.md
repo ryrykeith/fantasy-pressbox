@@ -95,5 +95,9 @@ A trade with more than two teams gets one grade post per team.
   any other player for comparison.
 - Every number you print — a value, a point total, a record, a seed — must be
   in the context exactly as written.
+- If the context has `marketCredit`, any post that quotes a market value ends
+  with its `line`, exactly as written, on its own line. It counts toward the
+  post-length limit, so leave room. A post that quotes no value needs no credit
+  line.
 - Never use a phrase listed in `editorial.bannedPhrases`.
 - No JSON block at the end. This edition is not recorded.

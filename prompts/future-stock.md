@@ -133,5 +133,9 @@ intro, a compact block per team, then the tiers.
   value, must be in the context exactly as written.
 - Every pick is a projection until the context says otherwise. Follow the
   `finalDraftOrder` entry in `unavailable` whenever it appears.
+- If the context has `marketCredit`, any post that quotes a market value ends
+  with its `line`, exactly as written, on its own line. It counts toward the
+  post-length limit, so leave room. A post that quotes no value needs no credit
+  line.
 - Never use a phrase listed in `editorial.bannedPhrases`.
 - No JSON block at the end. This edition is not recorded.

@@ -849,6 +849,14 @@ whatever the market says that afternoon. `--refresh-market` fetches them
 again. If FantasyCalc can't be reached the edition still runs, and the model
 is told not to quote any value.
 
+FantasyCalc's data is for **non-commercial use only**, and its
+[terms of use](https://fantasycalc.com/terms-of-usage) require its name and a
+link to FantasyCalc.com beside its values. Fantasy Pressbox adds that credit: an
+edition that carries market values tells the model to end any post quoting one
+with `Values: FantasyCalc (fantasycalc.com)`, and the length check reports a post
+that quotes a value without it. The line counts toward the post-length limit.
+This applies to Sleeper and ESPN leagues alike.
+
 ### Bye weeks — shipped with the package
 
 Guillotine editions weigh how many of a team's starters are on bye in the
