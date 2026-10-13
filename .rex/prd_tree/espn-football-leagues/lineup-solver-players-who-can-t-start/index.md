@@ -17,5 +17,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Leave Sleeper IR and taxi players out of the optimal lineup, if the check says so](./leave-sleeper-ir-and-taxi-players-out.md) | blocked |
+| [Record that Sleeper's potential points count IR and taxi players (no code change)](./record-that-sleeper-s-potential-points.md) | pending |
 | [Sleeper reserve and taxi check script (operator runs it)](./sleeper-reserve-and-taxi-check-script.md) | completed |
