@@ -20,7 +20,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Data sources and terms](./data-sources-and-terms/index.md) | completed |
 | [ESPN API facts](./espn-api-facts/index.md) | pending |
 | [ESPN client and normalizer](./espn-client-and-normalizer/index.md) | completed |
-| [ESPN config, setup and doctor](./espn-config-setup-and-doctor/index.md) | pending |
+| [ESPN config, setup and doctor](./espn-config-setup-and-doctor/index.md) | completed |
 | [ESPN docs and README](./espn-docs-and-readme/index.md) | pending |
 | [ESPN editions and coverage matrix](./espn-editions-and-coverage-matrix/index.md) | pending |
 | [FantasyCalc market values for ESPN](./fantasycalc-market-values-for-espn/index.md) | pending |
