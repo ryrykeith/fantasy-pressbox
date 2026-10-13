@@ -716,16 +716,22 @@ directly rather than assumed — and Sleeper has no schedule or bye-week
 endpoint either. A bye is the *absence* of a game, so the only honest source
 is the real NFL schedule.
 
-`scripts/fetch-bye-weeks.mjs` walks ESPN's public scoreboard endpoint once per
-season (all 18 regular-season weeks) and writes a reviewable, committed
+`scripts/fetch-bye-weeks.mjs` reads nflverse's schedule (`games.csv` from the
+nflverse-data `schedules` release, published under CC BY 4.0) once per season,
+either downloaded or from a local copy passed as an argument. It keeps the
+regular-season (`REG`) games of weeks 1-18 and writes a reviewable, committed
 `config/bye-weeks.<season>.yml`: 32 teams, each with exactly one bye week. It
 refuses to write a table that does not come out to exactly that shape, and it
 resolves the mapping gotchas that would otherwise silently corrupt the count —
-ESPN reports Washington as `WSH` where Sleeper (and this table) says `WAS`,
-and Sleeper still carries the retired `OAK` code on old players, aliased here
-to `LV`. Nothing at runtime calls ESPN: the table is 32 static rows that do
-not change once the schedule is published, so putting a third-party API on
-the critical path of every edition would buy nothing and risk everything.
+nflverse spells the Rams `LA` where Sleeper (and this table) says `LAR`
+(mapped in `src/nflTeams.mjs`; an unknown code is refused), and Sleeper still
+carries the retired `OAK` code on old players, aliased here to `LV`. The
+generated header credits nflverse, links the licence and notes the changes
+(reduced to each team's bye week, codes mapped), as CC BY 4.0 requires. Nothing
+at runtime calls out: the table is 32 static rows that do not change once the
+schedule is published, so putting a third-party feed on the critical path of
+every edition would buy nothing and risk everything. ESPN's scoreboard is not
+used: the Terms of Use bar reading it with a script.
 
 `src/analysis/byeExposure.mjs` reads that committed table, never the network:
 

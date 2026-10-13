@@ -720,7 +720,7 @@ decision is revisited.
 |---|---|
 | Players carry a numeric `proTeamId`. | **operator-checked** (plan §4) |
 | `proTeamSchedules_wl` returns `settings.proTeams[]`, each with `id` and `proGamesByScoringPeriod`: a map from scoring period to a list of games with `homeProTeamId`, `awayProTeamId` and `date`. A team with no entry for a period has no game that week. | **assumed**: espn-api `base_league.py:149-178` |
-| ESPN's NFL **scoreboard** (`site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`, a different API from the fantasy host) spells Washington `WSH`. | **assumed**: `scripts/fetch-bye-weeks.mjs:29-35` and `docs/architecture.md:690`. Not verified: that script maps `WSH` to `WAS` and leaves `WAS` alone, so the table it generated reads the same whichever spelling ESPN sent. |
+| ESPN's NFL **scoreboard** (`site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`, a different API from the fantasy host) spells Washington `WSH`. | **assumed**: this is what the bye-week generator used to map, before it moved to nflverse's schedule (no longer read from ESPN's scoreboard). Not verified. `src/nflTeams.mjs` keeps the `WSH` alias for the fantasy API (next row). |
 | The fantasy API's pro team ID 28 is spelled `WSH` too. | **assumed**: espn-api `football/constant.py:75`; JS `constants.js:109`. Both clients agree. |
 
 **decision** (plan Appendix A, 3.1-3.2): pro teams map through

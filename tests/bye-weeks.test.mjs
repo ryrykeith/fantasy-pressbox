@@ -43,8 +43,8 @@ for (const file of tables) {
     }
   });
 
-  // Sleeper says WAS where ESPN says WSH. If the generator's mapping ever
-  // regresses, the table still has 32 entries and still passes every check
+  // Sleeper says WAS where ESPN's fantasy API says WSH (and nflverse says LA
+  // where Sleeper says LAR). If a mapping ever regresses, the table still has 32 entries and still passes every check
   // above — it just silently describes a team this project never asks about.
   test(`${file} uses Sleeper team codes, not ESPN's`, () => {
     const teams = Object.keys(parsed.bye_weeks ?? {});

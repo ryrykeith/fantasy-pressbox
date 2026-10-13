@@ -854,7 +854,9 @@ is told not to quote any value.
 Guillotine editions weigh how many of a team's starters are on bye in the
 coming weeks. Sleeper has no bye-week data, so the package ships a table of
 the season's bye weeks (`config/bye-weeks.<season>.yml`), taken from the real
-NFL schedule. The maintainer regenerates it each season once the schedule is
+NFL schedule published by [nflverse](https://github.com/nflverse/nflverse-data/releases/tag/schedules)
+under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (reduced to each
+team's bye week). The maintainer regenerates it each season once the schedule is
 out. If your season's table is missing, the guillotine editions stop and say
 so rather than pretend nobody has a bye — update the package
 (`npm install -g fantasy-pressbox`) to get it.

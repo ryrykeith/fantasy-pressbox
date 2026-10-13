@@ -1,8 +1,8 @@
 /**
  * NFL team abbreviations: the one place the spellings are reconciled.
  *
- * Shared by the bye-week generator (scripts/fetch-bye-weeks.mjs) and the ESPN
- * normalizer (src/espn/). Canonical codes are the bye-week table's codes,
+ * Shared by the bye-week generator (scripts/fetch-bye-weeks.mjs, which reads
+ * nflverse's schedule) and the ESPN normalizer (src/espn/). Canonical codes are the bye-week table's codes,
  * which today are Sleeper's spelling (config/bye-weeks.2026.yml). Every alias
  * below is backed by that committed table or by a comment citing where it
  * comes from; nothing here is guessed. An unknown code is refused, never
@@ -21,11 +21,20 @@ export const NFL_TEAM_CODES = Object.freeze([
 /**
  * ESPN spellings that differ from the canonical code.
  *
- * Washington: Sleeper says WAS, ESPN's scoreboard says WSH (the mapping
- * scripts/fetch-bye-weeks.mjs has always applied; the committed table's WAS
- * row is derived through it). Add another only when a cited source shows it.
+ * Washington: Sleeper says WAS, ESPN's fantasy API says WSH. Add another only
+ * when a cited source shows it.
  */
 export const ESPN_TO_CANONICAL = Object.freeze({ WSH: 'WAS' });
+
+/**
+ * nflverse spellings that differ from the canonical code.
+ *
+ * The Rams: nflverse's schedule (games.csv, nflverse-data 'schedules' release)
+ * says LA; Sleeper and the committed table say LAR. Checked 2026-10-13: with
+ * LA mapped to LAR, nflverse's 2026 byes match config/bye-weeks.2026.yml
+ * exactly, and the other 31 codes (including WAS) already match.
+ */
+export const NFLVERSE_TO_CANONICAL = Object.freeze({ LA: 'LAR' });
 
 /**
  * Codes still seen on old player records that no longer field a team.
@@ -45,6 +54,22 @@ export function canonicalTeamCode(code) {
   }
   throw new Error(
     `Unknown NFL team code ${JSON.stringify(code)}. It is not a canonical code, a known ESPN spelling or a stale code; ` +
+      'add it to src/nflTeams.mjs only with a cited source.',
+  );
+}
+
+/**
+ * Resolve a team code read from nflverse's schedule to the canonical code:
+ * a canonical code or an nflverse spelling. Throws on anything else,
+ * including ESPN and stale spellings, which nflverse's schedule does not use.
+ */
+export function nflverseTeamCode(code) {
+  if (typeof code === 'string') {
+    if (NFL_TEAM_CODES.includes(code)) return code;
+    if (Object.hasOwn(NFLVERSE_TO_CANONICAL, code)) return NFLVERSE_TO_CANONICAL[code];
+  }
+  throw new Error(
+    `Unknown NFL team code ${JSON.stringify(code)} in the nflverse schedule. It is not a canonical code or a known nflverse spelling; ` +
       'add it to src/nflTeams.mjs only with a cited source.',
   );
 }
