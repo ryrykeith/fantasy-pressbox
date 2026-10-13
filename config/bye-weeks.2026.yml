@@ -8,8 +8,12 @@
 # has no bye or schedule endpoint at all, so this table is derived from the
 # NFL schedule: for each week, the teams with no game are on bye.
 #
-# Team codes are SLEEPER's, so they match what normalizePlayer returns. The
-# generator maps ESPN's spellings across (notably WSH -> WAS).
+# Source: nflverse schedule data (games.csv, nflverse-data 'schedules'
+#   release), CC BY 4.0, https://creativecommons.org/licenses/by/4.0/
+# Changes: reduced to each team's bye week, team codes mapped to this
+#   project's (LA to LAR).
+#
+# Team codes are SLEEPER's, so they match what normalizePlayer returns.
 #
 # Static once the schedule is released. Regenerate when the 2027
 # schedule is published, and commit the result.

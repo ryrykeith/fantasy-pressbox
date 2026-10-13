@@ -70,6 +70,9 @@ function windowView(row) {
         share === null ? `${points} points` : `${points} points, ${Math.round(share * 100)}% of starter points`,
       ]),
     ),
+    ...(row.production.startsWithoutPoints
+      ? { startsWithNoPointsReported: `${row.production.startsWithoutPoints}, left out of these totals` }
+      : {}),
   };
 }
 

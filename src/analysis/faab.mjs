@@ -31,6 +31,7 @@
  * is why this module reads that week's rosters rather than today's teams.
  */
 import { playerFor } from '../league/players.mjs';
+import { reportedPoints } from './week.mjs';
 
 /**
  * Remaining FAAB per surviving team, and what each has spent so far.
@@ -98,11 +99,11 @@ export function releasedPool({ eliminatedEntry, rosters = [] } = {}) {
   }
 
   const playerIds = roster.playerIds || [];
-  const playerPoints = roster.playerPoints ?? {};
+  // Null for a player the provider reported no points for (never 0).
   return {
     ...base,
     playerIds,
-    playerPoints: Object.fromEntries(playerIds.map((id) => [id, playerPoints[id] ?? 0])),
+    playerPoints: Object.fromEntries(playerIds.map((id) => [id, reportedPoints(roster, id)])),
   };
 }
 

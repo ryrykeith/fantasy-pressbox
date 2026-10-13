@@ -7,7 +7,8 @@
  * before the next one happens, which is what this module is for.
  *
  * Layout under data/:
- *   raw/<season>/week-<n>.json          exactly what Sleeper returned
+ *   raw/<season>/week-<n>.json          exactly what the provider returned (or the saved files it was imported from)
+ *   import/<season>/league.json         an imported league (ESPN's manual route)
  *   snapshots/<season>/week-<n>.json    normalized league + analysis
  *   rankings/<season>/<label>.json      a published ranking and its movement
  *   predictions/<season>/week-<n>.json  what we said would happen
@@ -66,6 +67,23 @@ export function createStore({ dataDir }) {
         .sort((a, b) => a - b)
         .map((week) => store.loadRaw(season, week))
         .filter(Boolean);
+    },
+
+    /**
+     * A league as the operator saved it from the platform themselves (ESPN's
+     * manual import route): `{ provider, importedAt, leagueId, body }`, at
+     * import/<season>/league.json. Always under the league folder's data/,
+     * never under the package; the provider reads it instead of asking the
+     * platform. The newest import replaces the last.
+     */
+    importedLeaguePath(season) {
+      return pathFor('import', season, 'league.json');
+    },
+    saveImportedLeague(season, record) {
+      return writeJson(pathFor('import', season, 'league.json'), record);
+    },
+    loadImportedLeague(season) {
+      return readJson(pathFor('import', season, 'league.json'));
     },
 
     saveSnapshot(season, week, snapshot) {

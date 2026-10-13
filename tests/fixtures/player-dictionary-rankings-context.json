@@ -126,20 +126,13 @@
             "manager": "manager3",
             "points": 100.3,
             "record": "1-2",
-            "potentialPoints": 68.85,
-            "lineupEfficiency": 145.7,
             "starters": [
               "QB Quinn Arms (BUF) 18.7",
               "RB rb2 (GB) 22.95",
               "WR Wes Lane 27.2",
               "FLEX Unknown player 9999 31.45"
             ],
-            "bestBenchPerformances": [],
-            "bestPossibleLineup": [
-              "QB Quinn Arms 18.7",
-              "RB rb2 22.95",
-              "WR Wes Lane 27.2"
-            ]
+            "bestBenchPerformances": []
           },
           {
             "team": "Sunday Scaries",
@@ -222,8 +215,8 @@
         "margin": 12.4
       },
       "managerOfTheWeek": {
-        "team": "Lowered Expectations",
-        "lineupEfficiency": 145.7
+        "team": "Punt Intended",
+        "lineupEfficiency": 100
       },
       "lineupMalpractice": {
         "team": "Bye Week Blues",

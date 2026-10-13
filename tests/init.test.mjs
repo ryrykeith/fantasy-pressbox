@@ -205,16 +205,21 @@ const LEAGUES = {
  * No league, workspace or key is taken from this shell, and HOME is a temp
  * folder so the offered ~/leagues folder lands somewhere disposable.
  */
-function runSetup(answers, { workspace, home = tempDir('pressbox-home-'), log } = {}) {
+function runSetup(answers, { workspace, home = tempDir('pressbox-home-'), log, platform = '', preload = FAKE_FETCH, extraEnv = {} } = {}) {
   const env = { ...process.env };
-  for (const key of ['SLEEPER_LEAGUE_ID', 'LEAGUE_FORMAT', 'DATA_DIR', 'OUTPUT_DIR', 'AI_PROVIDER', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', WORKSPACE_ENV_VAR]) {
+  for (const key of ['SLEEPER_LEAGUE_ID', 'LEAGUE_PROVIDER', 'LEAGUE_SEASON', 'ESPN_LEAGUE_ID', 'ESPN_ROUTE', 'ESPN_S2', 'ESPN_SWID', 'LEAGUE_FORMAT', 'DATA_DIR', 'OUTPUT_DIR', 'AI_PROVIDER', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', WORKSPACE_ENV_VAR]) {
     delete env[key];
   }
+  // The first question is the platform ('' is Sleeper). A checkout that still
+  // holds its operator's league is asked about migrate before it.
+  const leading = workspace === PACKAGE_ROOT && existsSync(join(PACKAGE_ROOT, '.env')) ? 1 : 0;
+  answers = [...answers.slice(0, leading), platform, ...answers.slice(leading)];
+  Object.assign(env, extraEnv);
   if (workspace) env[WORKSPACE_ENV_VAR] = workspace;
   env.HOME = home;
   env.FAKE_SLEEPER_LEAGUES = JSON.stringify(LEAGUES);
   if (log) env.FAKE_SLEEPER_LOG = log;
-  const result = spawnSync(process.execPath, ['--import', FAKE_FETCH, SETUP], {
+  const result = spawnSync(process.execPath, ['--import', preload, SETUP], {
     cwd: workspace ?? PACKAGE_ROOT,
     env,
     encoding: 'utf8',
@@ -396,7 +401,7 @@ test('a folder holding a different league is not taken over without asking', () 
   writeFileSync(join(workspace, '.env'), `SLEEPER_LEAGUE_ID=${REDRAFT_ID}\n`);
   const result = runSetup([DYNASTY_ID, '', 'n'], { workspace });
   assert.equal(result.status, 1);
-  assert.match(result.stdout, /already holds a different league \(ID 222222222222\)/);
+  assert.match(result.stdout, /already holds a different league \(sleeper ID 222222222222\)/);
   assert.equal(readFileSync(join(workspace, '.env'), 'utf8'), `SLEEPER_LEAGUE_ID=${REDRAFT_ID}\n`);
 });
 

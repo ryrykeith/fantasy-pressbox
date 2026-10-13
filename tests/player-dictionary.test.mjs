@@ -5,6 +5,11 @@
  *
  * The pinned context below was produced from the raw dictionary before the
  * change and is reproduced from the normalized one after it, byte for byte.
+ *
+ * Re-pinned once since (2026-10-13): the team that starts a player the
+ * dictionary does not know no longer gets a potential-points total, a lineup
+ * efficiency (it was 145.7%) or a best possible lineup, because no slot could
+ * take a player of unknown position. That moved manager of the week too.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

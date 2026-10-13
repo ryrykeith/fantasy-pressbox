@@ -13,10 +13,17 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { PACKAGE_ROOT, resolveFutureStockWeights, resolveRankingWeights } from './config.mjs';
-import { hasMatchups, hasEliminations, hasFutureDraftCapital } from './format.mjs';
+import {
+  capabilityGap,
+  hasMatchups,
+  hasEliminations,
+  hasFutureDraftCapital,
+  refuseEditionWithoutCapability,
+} from './format.mjs';
+import { providerOf } from './providers.mjs';
 import { renderFormatBlocks } from './promptTemplate.mjs';
 import { describePlayer } from './league/players.mjs';
-import { currentSeeds } from './analysis/standings.mjs';
+import { currentSeeds, seedsByWinsThenPointsFor } from './analysis/standings.mjs';
 import { prospectBoardView } from './prospectBoard.mjs';
 import { TANK_WATCH_TASK, tankWatchPrize, tankWatchUnavailable, tankWatchView } from './tankWatch.mjs';
 import { draftProjectionView, pickProjection, tradePicksUnavailable, tradeProspectBoard } from './tradePicks.mjs';
@@ -123,11 +130,16 @@ function readPrompt(file, formatType, promptsDir = null) {
 // transaction lines every edition prints.
 export { describePlayer };
 
-/** e.g. "QB Josh Allen (BUF) 35.66" */
+/**
+ * e.g. "QB Josh Allen (BUF) 35.66". A starter the provider reported no points
+ * for (null) is never printed as a number: he was on his bye, or his points
+ * are not known.
+ */
 function describeStarter(entry) {
   const where = entry.nflTeam ? ` (${entry.nflTeam})` : '';
   const injury = entry.injuryStatus ? ` [${entry.injuryStatus}]` : '';
-  return `${entry.slot} ${entry.name}${where}${injury} ${entry.points}`;
+  const points = entry.points === null ? (entry.onBye ? 'on bye, no points' : 'no points reported') : entry.points;
+  return `${entry.slot} ${entry.name}${where}${injury} ${points}`;
 }
 
 function describeBench(entry) {
@@ -160,7 +172,9 @@ function rosterView(team, players, { headToHead = true, taxiSlots = 0 } = {}) {
         }
       : {}),
     pointsFor: team.seasonPointsFor,
-    potentialPoints: team.seasonPotentialPoints,
+    // Absent, not null, where the provider reports none (ESPN): the
+    // `seasonPotentialPoints` unavailable entry says why.
+    ...(team.seasonPotentialPoints === null ? {} : { potentialPoints: team.seasonPotentialPoints }),
     roster: team.playerIds.filter((id) => !taxi.has(id) && !reserve.has(id)).map(describe),
     // A league with no taxi slots has no taxi squad to report, only an empty
     // array the model might read as a squad that happens to be empty.
@@ -187,9 +201,14 @@ function teamWeekView(side, { includeRecord = true } = {}) {
     lineupEfficiency: side.lineupEfficiency,
     starters: side.starters.map(describeStarter),
     bestBenchPerformances: side.benchHighlights.map(describeBench),
-    bestPossibleLineup: side.optimalLineup
-      .filter((slot) => slot.name)
-      .map((slot) => `${slot.slot} ${slot.name} ${slot.points}`),
+    // Absent when a player's points are unknown (src/analysis/week.mjs): never built around the gap.
+    ...(side.optimalLineup
+      ? {
+          bestPossibleLineup: side.optimalLineup
+            .filter((slot) => slot.name)
+            .map((slot) => `${slot.slot} ${slot.name} ${slot.points}`),
+        }
+      : {}),
   };
 }
 
@@ -437,7 +456,10 @@ function faabMarketView(faabMarket, players) {
       releasedBy: pool.team,
       ...(pool.note ? { note: pool.note } : {}),
       players: pool.playerIds.map(
-        (id) => `${describe(id)} — ${pool.playerPoints?.[id] ?? 0} pts that week`,
+        (id) =>
+          pool.playerPoints?.[id] === null
+            ? `${describe(id)} — no points reported that week`
+            : `${describe(id)} — ${pool.playerPoints?.[id] ?? 0} pts that week`,
       ),
       ...(pool.bids?.length
         ? {
@@ -549,7 +571,14 @@ function byeExposureView(byeExposure, players) {
   }));
 }
 
-/** A team's season so far, as the facts a contender-or-rebuilder read is made of. */
+/**
+ * A team's season so far, as the facts a contender-or-rebuilder read is made of.
+ *
+ * `seeds` is null where the league does not seed by wins then points for
+ * (seedsByWinsThenPointsFor): the seed is then absent, and the `playoffField`
+ * unavailable entry says why. `maxPointsFor` is absent where the provider
+ * reports no season potential points.
+ */
 function teamStandingView(team, seeds, headToHead) {
   if (!team) return null;
   return {
@@ -557,13 +586,16 @@ function teamStandingView(team, seeds, headToHead) {
     ...(headToHead
       ? {
           record: `${team.record.wins}-${team.record.losses}${team.record.ties ? `-${team.record.ties}` : ''}`,
-          currentSeed: seeds.get(team.rosterId) ?? null,
+          ...(seeds ? { currentSeed: seeds.get(team.rosterId) ?? null } : {}),
         }
       : {}),
     pointsFor: team.seasonPointsFor,
-    maxPointsFor: team.seasonPotentialPoints,
+    ...(team.seasonPotentialPoints === null ? {} : { maxPointsFor: team.seasonPotentialPoints }),
   };
 }
+
+/** Current seeds where the league seeds by wins then points for, else null (the seed is not known). */
+const seedsFor = (league, teams) => (seedsByWinsThenPointsFor(league) ? currentSeeds(teams) : null);
 
 /** A projected lineup as lines: "WR DJ Moore 14.1", or "WR EMPTY" for a hole. */
 const starterLines = (shape) =>
@@ -655,11 +687,22 @@ function sideRosterView(side) {
   };
 }
 
+/**
+ * A history week's points: the number, or what is known when the provider
+ * reported none (never 0, which would be a made-up score).
+ */
+const weekPointsLine = (w) => {
+  if (w.points !== null) return w.points;
+  return w.onBye ? 'on bye, no points' : 'no points reported';
+};
+
 /** Each moved player's week-by-week points and the roster that banked them. */
 const playerHistoryView = (history, describe) =>
   history.map((item) => ({
     player: describe(item.id),
-    weeks: item.weeks.map((w) => `week ${w.week}: ${w.team}, ${w.points}${w.started ? ', started' : ', benched'}`),
+    weeks: item.weeks.map(
+      (w) => `week ${w.week}: ${w.team}, ${weekPointsLine(w)}${w.started ? ', started' : ', benched'}`,
+    ),
   }));
 
 /**
@@ -672,9 +715,9 @@ const playerHistoryView = (history, describe) =>
  * what each player scored afterwards. Trades are not pickups and are left to
  * tradesView.
  */
-function pickupsView(transactions, { teams, players, headToHead }) {
+function pickupsView(transactions, { league = null, teams, players, headToHead }) {
   const teamsById = new Map(teams.map((team) => [team.rosterId, team]));
-  const seeds = currentSeeds(teams);
+  const seeds = seedsFor(league, teams);
   const describe = (id) => describePlayer(id, players[id]);
 
   return transactions
@@ -717,18 +760,31 @@ function pickupsView(transactions, { teams, players, headToHead }) {
  * redraft league re-drafts from scratch and a guillotine team may not be here
  * to use one, so a pick there is not a small asset but no asset.
  */
-function tradesView(transactions, { teams, players, headToHead, withPicks, market, draftOrder = null, board = null }) {
+function tradesView(
+  transactions,
+  { league = null, teams, players, headToHead, withPicks, market, draftOrder = null, board = null },
+) {
   const teamsById = new Map(teams.map((team) => [team.rosterId, team]));
-  const seeds = currentSeeds(teams);
+  const seeds = seedsFor(league, teams);
   const describe = (id) => describePlayer(id, players[id]);
   const picks = (list) =>
     withPicks
       ? { picks: list.map((pick) => pickView(pick, { teamsById, seeds, headToHead, market, draftOrder, board })) }
       : {};
 
+  // A trade the provider sent without its contents (ESPN) is the teams that
+  // made it and nothing else: no sides, so nothing reads as a trade of
+  // nothing. The `tradeContents` unavailable entry says why.
+  const unknownContents = (trade) => ({
+    week: trade.week,
+    completedAt: trade.completedAt,
+    teams: trade.teams,
+    contentsUnknown: true,
+  });
+
   return transactions
     .filter((transaction) => transaction.type === 'trade')
-    .map((trade) => ({
+    .map((trade) => (trade.contentsUnknown ? unknownContents(trade) : {
       week: trade.week,
       completedAt: trade.completedAt,
       sides: trade.sides.map((side) => {
@@ -765,6 +821,24 @@ function tradesView(transactions, { teams, players, headToHead, withPicks, marke
     }));
 }
 
+/**
+ * FantasyCalc's terms of use require its name and a link to FantasyCalc.com
+ * beside its values, for non-commercial use only. The context carries the exact
+ * line so the model does not paraphrase it, and src/validate.mjs checks for it.
+ * The line is part of the post, so it counts toward the post-length limit.
+ */
+export const MARKET_CREDIT_LINE = 'Values: FantasyCalc (fantasycalc.com)';
+
+function marketCreditView() {
+  return {
+    line: MARKET_CREDIT_LINE,
+    instruction:
+      'Any post that quotes a market value (a number from `market`, `receivedMarketTotal`, `value` or `netValue`) ' +
+      `must end with this exact line on its own line: ${MARKET_CREDIT_LINE}. Leave room for it: it counts toward ` +
+      'the post-length limit. A post that quotes no value needs no credit line.',
+  };
+}
+
 /** What the market is, for the edition that quotes it. */
 function marketValuesView(market) {
   return {
@@ -781,6 +855,9 @@ function marketValuesView(market) {
 /**
  * @param {object} input
  * @param {string} input.task one of TASKS
+ * @param {boolean} input.transactionsUnavailable true when the week's
+ *        transactions are unknown (captureWeek's flag), so an empty list is
+ *        not reported as a quiet week.
  * @param {Array|null} input.enrichedTransactions the week's transactions from
  *        src/pipeline.mjs#readTransactions; only read by TRANSACTION_TASKS.
  * @param {object|null} input.marketValues from src/pipeline.mjs#readMarketValues:
@@ -820,6 +897,7 @@ export function buildContext({
   previousRankings = null,
   gradedPredictions = null,
   transactions = null,
+  transactionsUnavailable = false,
   futureDraftCapital = null,
   eliminationLedger = null,
   faabMarket = null,
@@ -834,6 +912,17 @@ export function buildContext({
   pickCapital = null,
   format = 'sleeper',
 }) {
+  // What the league's provider can supply. Third line of defence for an
+  // edition it cannot support at all (src/cli.mjs refuses before and after
+  // contacting it); every gap short of that is an `unavailable` entry.
+  const provider = providerOf(league);
+  const { capabilities } = provider;
+  refuseEditionWithoutCapability(task, {
+    capabilities,
+    provider: provider.displayName,
+    formatType: league.format?.type ?? null,
+  });
+
   // Sleeper reports pairings for every league, including the formats that never
   // play one. Nothing below is allowed to pass one on: a matchup in the context
   // block is a fact the model is entitled to print.
@@ -864,7 +953,9 @@ export function buildContext({
   };
 
   const ranking = RANKING_TASKS.includes(task);
-  const eliminates = hasEliminations(league.format);
+  const eliminates = hasEliminations(league.format, capabilities);
+  // Future picks are an asset only where the format has them and the provider's are read.
+  const holdsFuturePicks = hasFutureDraftCapital(league.format, capabilities);
 
   // Rankings editions judge rosters, so they get the roster picture. In a
   // format where teams are chopped, that picture is the field still alive:
@@ -1020,7 +1111,9 @@ export function buildContext({
   // context and describeMissingContext says so outright.
   // A redraft league has no future picks at all, whatever Sleeper reports for
   // its own upcoming draft.
-  if (futureDraftCapital && ranking && !eliminates && hasFutureDraftCapital(league.format)) {
+  // A provider whose traded picks are not read has no future draft capital to
+  // report either: describeMissingContext says so instead.
+  if (futureDraftCapital && ranking && !eliminates && holdsFuturePicks) {
     context.futureDraftCapital = futureDraftCapital;
   }
 
@@ -1038,7 +1131,7 @@ export function buildContext({
   // no asset.
   let tradedPicks = [];
   if (task === 'trade-report') {
-    const withPicks = !eliminates && hasFutureDraftCapital(league.format);
+    const withPicks = !eliminates && holdsFuturePicks;
     const tradeEntries = (enrichedTransactions ?? []).filter((transaction) => transaction.type === 'trade');
     tradedPicks = withPicks ? tradeEntries.flatMap((trade) => trade.sides.flatMap((s) => s.received.picks)) : [];
     // A traded pick is valued at its projected slot only where the order can
@@ -1046,6 +1139,7 @@ export function buildContext({
     const projectable = withPicks ? draftOrder : null;
     const board = projectable ? prospectBoard : null;
     const trades = tradesView(tradeEntries, {
+      league,
       teams,
       players,
       headToHead,
@@ -1072,7 +1166,7 @@ export function buildContext({
     }
   }
   if (task === 'waiver-report') {
-    const pickups = pickupsView(enrichedTransactions ?? [], { teams, players, headToHead });
+    const pickups = pickupsView(enrichedTransactions ?? [], { league, teams, players, headToHead });
     if (pickups.length) context.pickups = pickups;
   }
 
@@ -1099,7 +1193,7 @@ export function buildContext({
   // place. Absent outside dynasty or without the window and the capital;
   // buildPrompt refuses the edition then.
   let futureStock = null;
-  if (task === FUTURE_STOCK_TASK && rosterWindow && pickCapital && hasFutureDraftCapital(league.format) && !eliminates) {
+  if (task === FUTURE_STOCK_TASK && rosterWindow && pickCapital && holdsFuturePicks && !eliminates) {
     futureStock = futureStockView({ teams, rosterWindow, pickCapital, draftOrder, board: prospectBoard });
     context.teams = teams.map((team) => ({
       ...rosterView(team, players, { headToHead, taxiSlots: league.taxiSlots }),
@@ -1120,27 +1214,53 @@ export function buildContext({
   }
 
   if (transactions?.length && !WITHOUT_TRANSACTION_COLOUR.includes(task)) {
-    context.transactions = transactions.map(({ type, week: leg, teams: names, bid, moves }) => ({
-      type,
-      week: leg,
-      teams: names,
-      bid,
-      moves,
-    }));
+    context.transactions = transactions.map(({ type, week: leg, teams: names, bid, moves, contentsUnknown }) =>
+      // An ESPN trade sent without its items: no `moves` at all, since an
+      // empty list would read as a trade of nothing. `tradeContents` says why.
+      contentsUnknown
+        ? { type, week: leg, teams: names, contentsUnknown: true }
+        : { type, week: leg, teams: names, bid, moves },
+    );
   }
 
-  context.unavailable = describeMissingContext({
+  // Only an edition that actually received FantasyCalc values owes the credit.
+  if (context.marketValues || context.draftCapital?.valueSource) context.marketCredit = marketCreditView();
+
+  // A manager name the provider's source is not confirmed for (ESPN's
+  // displayName, open question 27) never reaches the model, wherever a view
+  // put one: the `managerNames` unavailable entry says why.
+  // A copy: views share objects with the analysis they were built from.
+  const shown = capabilities.managerNames === false ? withoutManagers(context) : context;
+
+  shown.unavailable = describeMissingContext({
     task,
-    context,
+    context: shown,
     week,
     marketUnavailable: marketValues?.unavailable ?? null,
     prize,
     tradedPicks,
     futureStock,
     pickMarketUnavailable: pickCapital?.marketUnavailable ?? null,
+    transactionsUnavailable,
+    league,
+    players,
+    provider,
   });
 
-  return context;
+  return shown;
+}
+
+/** A copy of plain data with every `manager` key left out, at any depth. */
+function withoutManagers(value) {
+  if (Array.isArray(value)) return value.map(withoutManagers);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => key !== 'manager')
+        .map(([key, inner]) => [key, withoutManagers(inner)]),
+    );
+  }
+  return value;
 }
 
 /**
@@ -1161,9 +1281,15 @@ function describeMissingContext({
   tradedPicks = [],
   futureStock = null,
   pickMarketUnavailable = null,
+  transactionsUnavailable = false,
+  league = null,
+  players = {},
+  provider = providerOf(league),
 }) {
   const missing = [];
   const isRanking = RANKING_TASKS.includes(task);
+  const { capabilities } = provider;
+  const providerName = provider.displayName;
 
   // First in the list, because it is the one absence that changes what an
   // edition *is*. Every other entry says a fact is missing; this one says a
@@ -1182,6 +1308,19 @@ function describeMissingContext({
         'a head-to-head result, a winner, a loser, a margin of victory, or who any team played. ' +
         'Do not pair teams against each other for effect. Every fact about a week is a team\'s own ' +
         'score, measured against the rest of the league.',
+    });
+  }
+
+  // `base: null` means the provider listed no reception stat, which is not the
+  // same as a league that pays nothing per catch. The rate stays absent from
+  // the facts and the model is told not to supply one.
+  if (context.league.format?.scoring?.reception?.base === null) {
+    missing.push({
+      field: 'receptionRate',
+      why: "This league's provider did not report how much a reception is worth, so the rate is unknown.",
+      instruction:
+        "Do not state this league's per-catch value, and do not call it standard, half-PPR or full PPR. " +
+        'Do not rank pass catchers as though receptions were worth nothing, or as though they were worth a full point.',
     });
   }
 
@@ -1283,6 +1422,18 @@ function describeMissingContext({
           'discuss draft picks, future picks, or "assets" of that kind at all — judge ' +
           'every roster only on the players currently on it.',
       });
+    } else if (capabilityGap('futurePicks', { capabilities, provider: providerName })) {
+      // A declared dynasty on a provider whose traded picks are not read: the
+      // picks may exist and may have moved, so "nothing traded" would be made up.
+      missing.push({
+        field: 'futureDraftCapital',
+        why:
+          `${capabilityGap('futurePicks', { capabilities, provider: providerName })}. ` +
+          'The future_draft_capital factor in `rankingWeights` cannot be scored from anything in this context.',
+        instruction:
+          'Give the future_draft_capital factor no weight, and do not move any team up or down for draft picks. ' +
+          'Do not say which picks any team holds, has traded or has kept, and do not say that no picks have been traded.',
+      });
     } else {
       missing.push({
         field: 'futureDraftCapital',
@@ -1295,10 +1446,14 @@ function describeMissingContext({
     }
   }
 
+  missing.push(...describeProviderGaps({ context, league, players, capabilities, providerName }));
+
   if (task === 'trade-report') {
-    missing.push(...describeMissingTradeContext({ context, marketUnavailable, tradedPicks, prize }));
+    missing.push(
+      ...describeMissingTradeContext({ context, marketUnavailable, tradedPicks, prize, capabilities, providerName }),
+    );
   } else if (task === 'waiver-report') {
-    missing.push(...describeMissingPickupContext());
+    missing.push(...describeMissingPickupContext({ providerName }));
   } else if (task === TANK_WATCH_TASK) {
     if (context.tankWatch) missing.push(...tankWatchUnavailable({ tankWatch: context.tankWatch, prize, week }));
   } else if (task === FUTURE_STOCK_TASK) {
@@ -1314,6 +1469,16 @@ function describeMissingContext({
         }),
       );
     }
+  } else if (transactionsUnavailable) {
+    // Unknown, not none: the week's transactions were never on file (an ESPN
+    // week imported without its transactions page).
+    missing.push({
+      field: 'transactions',
+      why: "This week's transactions are not in the league data on file, so whether any move was made is unknown.",
+      instruction:
+        'Do not mention trades, waiver claims or free-agent moves, and do not say the week was quiet ' +
+        'or that nobody made a move.',
+    });
   } else if (!context.transactions) {
     missing.push({
       field: 'transactions',
@@ -1330,7 +1495,7 @@ function describeMissingContext({
  * which is computed; how good a player is in general is opinion a model would
  * supply from memory, so it is named here as off limits.
  */
-function describeMissingPickupContext() {
+function describeMissingPickupContext({ providerName = 'Sleeper' } = {}) {
   return [
     {
       field: 'playerQuality',
@@ -1353,19 +1518,31 @@ function describeMissingPickupContext() {
       instruction:
         'Do not cite projected points. Treat a game or two in `playerHistory` as a small sample, not evidence.',
     },
-    {
-      field: 'injuryDetail',
-      why: 'Only Sleeper injury designations (in brackets after a player) are available, not injury news.',
-      instruction: 'Do not describe an injury beyond the designation shown.',
-    },
+    injuryDetailUnavailable(providerName),
   ];
+}
+
+/** The provider's injury designations are all there is. Named for the provider, so an ESPN edition is not told they are Sleeper's. */
+function injuryDetailUnavailable(providerName) {
+  return {
+    field: 'injuryDetail',
+    why: `Only ${providerName} injury designations (in brackets after a player) are available, not injury news.`,
+    instruction: 'Do not describe an injury beyond the designation shown.',
+  };
 }
 
 /**
  * What a trade grade cannot know. These came out of grading a real trade by
  * hand: each one is a fact a model reached for and did not have.
  */
-function describeMissingTradeContext({ context, marketUnavailable, tradedPicks = [], prize = null }) {
+function describeMissingTradeContext({
+  context,
+  marketUnavailable,
+  tradedPicks = [],
+  prize = null,
+  capabilities = {},
+  providerName = 'Sleeper',
+}) {
   const missing = [];
   const formatType = context.league.format?.type;
 
@@ -1405,6 +1582,15 @@ function describeMissingTradeContext({ context, marketUnavailable, tradedPicks =
           : 'Teams are eliminated from this league during the season, so a future pick is worth nothing to a team trying to survive the week.',
       instruction: 'Do not discuss draft picks in any grade. Judge every trade on the players alone.',
     });
+  } else if (capabilityGap('futurePicks', { capabilities, provider: providerName })) {
+    // Picks may have moved in these trades; none is on file, which is not the same as none traded.
+    missing.push({
+      field: 'draftPicks',
+      why: `${capabilityGap('futurePicks', { capabilities, provider: providerName })}.`,
+      instruction:
+        'Do not say whether any trade included draft picks, and do not grade a trade on picks. ' +
+        'Judge every trade on the players shown alone.',
+    });
   }
 
   missing.push(
@@ -1422,12 +1608,145 @@ function describeMissingTradeContext({ context, marketUnavailable, tradedPicks =
         'Do not cite projected points. Treat a game or two of post-trade production in `playerHistory` as ' +
         'a small sample, not evidence.',
     },
-    {
-      field: 'injuryDetail',
-      why: 'Only Sleeper injury designations (in brackets after a player) are available, not injury news.',
-      instruction: 'Do not describe an injury beyond the designation shown.',
-    },
+    injuryDetailUnavailable(providerName),
   );
+
+  return missing;
+}
+
+/** ESPN's playoffSeeding values in words, for the `playoffField` entry. */
+const SEEDING_IN_WORDS = {
+  head_to_head_record: 'head-to-head record',
+  total_points_scored: 'total points scored',
+  intra_division_record: 'record within the division',
+  total_points_against: 'total points against',
+  raw_stat: 'a statistic',
+};
+
+/**
+ * What the league's provider cannot supply, one entry per gap, each telling
+ * the model what not to say. Every condition is on the provider's declared
+ * capabilities or on a field only a provider with the gap reports, so a
+ * Sleeper league gets none of these. The wording is in docs/espn-data.md's
+ * coverage matrix.
+ */
+function describeProviderGaps({ context, league, players, capabilities, providerName }) {
+  const missing = [];
+
+  if (capabilities.seasonPotentialPoints === false) {
+    missing.push({
+      field: 'seasonPotentialPoints',
+      why:
+        `${providerName} is not known to report a team's season potential points (what Sleeper calls max points-for), ` +
+        'so no team carries one.',
+      instruction:
+        "Do not state or estimate any team's season potential points or max points-for, or how many points a team " +
+        'has left on its bench over the season. A single week\'s `potentialPoints` and `lineupEfficiency`, where ' +
+        'given, are about that week only.',
+    });
+  }
+
+  if (capabilities.taxi === false) {
+    missing.push({
+      field: 'taxiSquad',
+      why: `${providerName} leagues have no taxi squad that this version reads, so no team has one in the context.`,
+      instruction: 'Do not mention a taxi squad, and do not describe any player as stashed on one.',
+    });
+  }
+
+  if (context.league.format?.keeper === true) {
+    missing.push({
+      field: 'keeperDesignations',
+      why:
+        'This is a keeper league, covered as redraft: which players each team has kept or will keep is not read ' +
+        'in this version.',
+      instruction:
+        'Do not say which players any team kept, will keep or is likely to keep, and do not value a player for ' +
+        'his keeper status.',
+    });
+  }
+
+  if (league?.waiverType === 'rolling') {
+    missing.push({
+      field: 'waiverBids',
+      why:
+        'This league runs rolling waivers, not a FAAB budget: a claim is won by waiver order, with no bid, ' +
+        'and no team has a budget.',
+      instruction:
+        "Do not mention bids, FAAB, budgets or what a claim cost, and do not say what any team's waiver position is: " +
+        'it is not in the context.',
+    });
+  }
+
+  if (capabilities.playerAge === false && !Object.values(players ?? {}).some((p) => Number.isFinite(p?.age))) {
+    missing.push({
+      field: 'playerAge',
+      why: `${providerName} does not supply players' ages or birth dates in this version, so no player's age is known.`,
+      instruction:
+        'Do not state or imply any player\'s age, and do not call a player young, old, ageing or in his prime, ' +
+        'except where a FantasyCalc `market` entry gives his `age`.',
+    });
+  }
+
+  if (!seedsByWinsThenPointsFor(league)) {
+    const rule = SEEDING_IN_WORDS[league.playoffSeeding];
+    missing.push({
+      field: 'playoffField',
+      why:
+        (rule
+          ? `This league seeds its playoffs by ${rule}, not by wins then points for`
+          : `${providerName} did not report how this league seeds its playoffs`) +
+        ', so no seed and no projected playoff field is in the context.',
+      instruction:
+        "Do not state any team's playoff seed, whether it is in or out of the playoff places, or who would make the " +
+        'playoffs if the season ended now. Any order of teams in the context is not the seeding order.',
+    });
+  }
+
+  if (capabilities.managerNames === false) {
+    missing.push({
+      field: 'managerNames',
+      why:
+        `${providerName} member display names are not confirmed as a source of manager names in this version, ` +
+        'so no manager is named in the context.',
+      instruction:
+        'Refer to every team by its team name. Do not name, guess or recall any manager, and do not invent a ' +
+        'nickname for one.',
+    });
+  }
+
+  if (capabilities.scoringDefaults === false) {
+    missing.push({
+      field: 'scoringDefaults',
+      why:
+        `${providerName} publishes no table of default scoring that this version reads, so which of this league's ` +
+        'settings are ordinary and which are unusual is unknown. Every scored setting is listed under `nonDefault` ' +
+        'for that reason, not because it differs from a default.',
+      instruction:
+        'Do not call any scoring setting standard, default, ordinary or unusual, and do not say this league scores ' +
+        'differently from most leagues. State a setting only as the value given. (A reception `tier` names a ' +
+        'per-catch value and says nothing about defaults.)',
+    });
+  }
+
+  const unknownTrades = [...(context.transactions ?? []), ...(context.trades ?? [])].filter(
+    (entry) => entry.contentsUnknown,
+  );
+  if (unknownTrades.length) {
+    const teams = [...new Set(unknownTrades.flatMap((entry) => entry.teams ?? []))];
+    missing.push({
+      field: 'tradeContents',
+      why:
+        `${providerName} sent ${unknownTrades.length === 1 ? 'a completed trade' : `${unknownTrades.length} completed trades`} ` +
+        `without ${unknownTrades.length === 1 ? 'its' : 'their'} contents (marked \`contentsUnknown\`` +
+        (teams.length ? `, made by ${teams.join(', ')}` : '') +
+        '): it often sends a trade\'s items only to the account that made it. What moved is unknown.',
+      instruction:
+        'Report such a trade only as a trade the teams named made, and say its contents are unknown. Do not say ' +
+        'which players, picks or anything else moved, do not grade it, and never describe it as a trade of nothing, ' +
+        'an empty trade or a trade where nothing changed hands.',
+    });
+  }
 
   return missing;
 }
@@ -1489,6 +1808,18 @@ export function buildPrompt({ task, context, promptsDir = null }) {
     );
   }
 
+  // A preview of a week with no pairings is an edition about no games: the
+  // prompt asks for one post per matchup, the context lists none, and the model
+  // fills the gap with games it makes up. This happens when the schedule has no
+  // entries for the week (past its end, or a playoff period the provider does
+  // not list).
+  if (task === 'preview' && !context.upcomingMatchups?.length) {
+    throw new Error(
+      `Cannot build a preview for week ${context.week}: the schedule lists no matchups for that week, ` +
+        'so there are no games to preview. Choose a week the schedule covers, or skip the edition.',
+    );
+  }
+
   // A trade report about no trades is an edition about nothing, and a model
   // handed one will grade a trade it makes up. The transactions command
   // refuses a quiet week first; this catches any caller that does not.
@@ -1496,6 +1827,19 @@ export function buildPrompt({ task, context, promptsDir = null }) {
     throw new Error(
       'Cannot build a trade-report: no completed trade is in the context for this week. ' +
         'Choose a week with a trade, or skip the edition.',
+    );
+  }
+
+  // The same when every trade arrived without its contents (ESPN often sends
+  // a trade's items only to the account that made it): the trades were made,
+  // but there is nothing in any of them to grade, and an edition of trades the
+  // model is told both to grade and not to grade invites a made-up grade.
+  if (task === 'trade-report' && context.trades.every((trade) => trade.contentsUnknown)) {
+    throw new Error(
+      'Cannot build a trade-report: ' +
+        `${context.trades.length === 1 ? 'the only trade' : 'every trade'} in the context arrived without its ` +
+        'contents (`contentsUnknown`), so there is nothing to grade. ' +
+        'Choose a week with a trade whose contents are known, or skip the edition.',
     );
   }
 

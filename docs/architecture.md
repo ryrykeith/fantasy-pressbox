@@ -3,10 +3,10 @@
 ## The pipeline
 
 ```
-League provider (Sleeper today)   src/providers.mjs picks it from LEAGUE_PROVIDER
-    ↓  provider client, in its own directory (src/sleeper/client.mjs)
+League provider (Sleeper or ESPN)  src/providers.mjs picks it from LEAGUE_PROVIDER
+    ↓  provider client, in its own directory (src/sleeper/client.mjs, src/espn/client.mjs)
 Fetch
-    ↓  provider normalizer (src/sleeper/normalize.mjs), through provider.mjs
+    ↓  provider normalizer (src/sleeper/normalize.mjs, src/espn/normalize.mjs), through provider.mjs
 Normalize
     ↓  src/store.mjs
 Snapshot / persist
@@ -135,6 +135,13 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/sleeper/provider.mjs` | Sleeper behind the provider interface: its descriptor (name, `capabilities`, `playerIdSpace`) and an instance bound to a client (`openLeague`, `fetchWeek`, `currentWeek`, `lookupLeague`, `normalizeWeek`) |
 | `src/sleeper/client.mjs` | HTTP only. Retries, friendly errors, player-file cache |
 | `src/sleeper/normalize.mjs` | Sleeper shapes → league concepts, including a saved week as WeekData (`normalizeWeek`) |
+| `src/espn/provider.mjs` | ESPN behind the same interface, **experimental**. Two routes by `ESPN_ROUTE`: `import` (the default; reads pages the operator saved, contacts nothing) and `fetch` (opt-in; asks ESPN with the cookies). `docs/espn-data.md` is its contract |
+| `src/espn/client.mjs` | HTTP only, the fetch route's. Sends `espn_s2` and `SWID` as a `Cookie` header to the ESPN host and nowhere else; scrubs them from every error |
+| `src/espn/urls.mjs` | Every ESPN address, node-free. The client requests them and `import-espn` lists them for the operator to save, so the two cannot drift |
+| `src/espn/import.mjs` | The import route: validates saved pages (size, JSON, league, season, shape) and refuses a stale league page |
+| `src/espn/shape.mjs` | Shape guards: a response that does not match the documented shape throws `EspnShapeError`, naming the view and field |
+| `src/espn/codes.mjs` | ESPN's numeric code tables (slots, stats, pro teams); an unknown ID throws |
+| `src/espn/normalize.mjs` | ESPN shapes → league concepts, including a saved week as WeekData (`normalizeWeek`). ESPN field names stop here |
 | `src/league/players.mjs` | The player dictionary lookup and the one-line player description every edition prints |
 | `src/league/draftCapital.mjs` | Draft capital from normalized traded picks and the league's draft status: who holds each pick, and whether it is still a future asset |
 | `src/league/pairing.mjs` | Head-to-head pairing on a WeekData roster's `pairingKey` |
@@ -177,8 +184,11 @@ The shapes a provider hands back:
 
 - **League**: the normalized league (season, format, scoring profile, draft
   status, `lastScoredWeek`, and so on), tagged with `provider`, the name of
-  the provider it came from.
-- **Team**: a roster joined with its manager, from `normalizeTeams`.
+  the provider it came from. ESPN's (`src/espn/normalize.mjs`) also carries
+  `waiverType`, `playoffSeeding`, `tradeDeadlineDate` and `format.keeper`, and
+  holds null wherever ESPN reports nothing (`docs/espn-data.md`).
+- **Team**: a roster joined with its manager, from `normalizeTeams`. On ESPN
+  `manager` is absent unless the member's `displayName` is sent.
 - **Player**: the normalized player dictionary, built once per run from the
   provider's player file (`normalizePlayers`). Lookups and the one-line
   description go through `src/league/players.mjs`.
@@ -189,21 +199,71 @@ The shapes a provider hands back:
 - **WeekData**: one week, below.
 
 A provider also declares `capabilities` (`futurePicks`, `taxi`, `guillotine`,
-`lastScoredWeek`). Callers read them, as `hasEliminations` and
+`lastScoredWeek`, `seasonPotentialPoints`, `playerAge`, `managerNames`,
+`scoringDefaults`). Callers read them, as `hasEliminations` and
 `hasFutureDraftCapital` in `src/format.mjs` and the week resolution in
 `src/pipeline.mjs` do, rather than assuming a platform. `playerIdSpace` names
 the ID space the provider's players use.
 
+The capability gates work at two levels:
+
+- An edition that needs a capability (`EDITION_CAPABILITIES` in
+  `src/format.mjs`: future picks for `tank-watch` and `future-stock`,
+  guillotine for the survival editions) is refused by
+  `refuseEditionWithoutCapability`, naming the reason. `src/cli.mjs` runs it
+  before the provider is contacted and again with the opened league, and
+  `buildContext` runs it a third time. A declared guillotine on a provider
+  that cannot run one refuses every edition.
+- A context fact the provider cannot supply is left out, absent rather than
+  null, and `describeMissingContext` (its `describeProviderGaps` sibling) adds
+  an `unavailable` entry saying what not to say: season potential points,
+  taxi, keeper designations, bids under rolling waivers, player age, the
+  playoff seed when the league does not seed on wins then points for, manager
+  names, scoring defaults, and the contents of a trade sent without them. A
+  Sleeper league declares every capability and reports none of those fields,
+  so it gets none of these entries.
+
 A week is read as **WeekData** (`provider.normalizeWeek`; Sleeper's is in
-`src/sleeper/normalize.mjs`):
+`src/sleeper/normalize.mjs`, ESPN's in `src/espn/normalize.mjs`):
 
 - `rosters`: `{ rosterId, playerIds, starterIds, starterPoints, playerPoints,
   points, pairingKey }` per roster. `starterIds` lines up with the league's
   starting slots, and null is an empty slot. Two rosters sharing a
-  `pairingKey` are opponents (`src/league/pairing.mjs`).
+  `pairingKey` are opponents (`src/league/pairing.mjs`). `points` is the
+  team's score as the provider reports it, never a sum of its players.
+  - A provider that may report no points for a player (ESPN) also lists
+    `noPointsIds` and `byeIds`. A player in `noPointsIds` has no key in
+    `playerPoints` and null in `starterPoints`; `analyzeWeek` gives him null
+    points, never 0. If he is also in `byeIds` (the bye table says his NFL
+    team had no game) he is flagged `onBye` and counts 0 for the optimal
+    lineup. Any other player without points makes that team's optimal lineup
+    and lineup efficiency unknowable, so they are left out of its record and
+    `pointsUnreported` names the players. A roster without these lists
+    (Sleeper's) reads a missing value as 0, as it always has.
+    `reportedPoints` and `reportedOnBye` in `src/analysis/week.mjs` are the
+    one reading of this rule, and every other reader of a roster's points
+    uses them: a trade or waiver grade's week-by-week history shows such a
+    week as `points: null` (with `onBye`), its points per game leaves the
+    week out rather than counting 0, the roster window counts it in
+    `startsWithoutPoints` instead of its totals, and a released pool lists
+    the player with null points.
 - `transactions`: `normalizeTransactions` output, with `moves` and `sides`.
+  An ESPN trade whose contents ESPN did not send has `contentsUnknown: true`
+  and no moves or sides.
 - `bids`: `{ playerId, rosterId, week, amount, outcome, type, transactionId }`,
-  won and lost.
+  won and lost. FAAB only: a rolling-waiver league has none.
+- `multiWeekMatchup`: `{ matchupPeriod, weeks }`, only when the week's
+  matchup spans more than one NFL week (ESPN). The rosters' `points` and
+  `pairingKey` are then null, because the provider's score is the whole
+  period's. `captureWeek` does not analyze such a week, because `analyzeWeek`
+  would read every null as 0. Its snapshot keeps the marker in place of an
+  `analysis`. Every edition that reads the week's analysis refuses it, naming
+  the reason (`refuseMultiWeekMatchup` in `src/cli.mjs`): preview, recap,
+  rankings and grade. A preview whose previous week is such a week leaves
+  last week's results out and warns.
+
+`normalizeWeek` is handed the season's bye table as a function and reads it
+only if it needs it, so a Sleeper week never touches it.
 
 The raw bundles under `data/raw/` are saved as the provider returned them,
 tagged with that provider, and normalized on read, so a league folder written
@@ -682,16 +742,22 @@ directly rather than assumed — and Sleeper has no schedule or bye-week
 endpoint either. A bye is the *absence* of a game, so the only honest source
 is the real NFL schedule.
 
-`scripts/fetch-bye-weeks.mjs` walks ESPN's public scoreboard endpoint once per
-season (all 18 regular-season weeks) and writes a reviewable, committed
+`scripts/fetch-bye-weeks.mjs` reads nflverse's schedule (`games.csv` from the
+nflverse-data `schedules` release, published under CC BY 4.0) once per season,
+either downloaded or from a local copy passed as an argument. It keeps the
+regular-season (`REG`) games of weeks 1-18 and writes a reviewable, committed
 `config/bye-weeks.<season>.yml`: 32 teams, each with exactly one bye week. It
 refuses to write a table that does not come out to exactly that shape, and it
 resolves the mapping gotchas that would otherwise silently corrupt the count —
-ESPN reports Washington as `WSH` where Sleeper (and this table) says `WAS`,
-and Sleeper still carries the retired `OAK` code on old players, aliased here
-to `LV`. Nothing at runtime calls ESPN: the table is 32 static rows that do
-not change once the schedule is published, so putting a third-party API on
-the critical path of every edition would buy nothing and risk everything.
+nflverse spells the Rams `LA` where Sleeper (and this table) says `LAR`
+(mapped in `src/nflTeams.mjs`; an unknown code is refused), and Sleeper still
+carries the retired `OAK` code on old players, aliased here to `LV`. The
+generated header credits nflverse, links the licence and notes the changes
+(reduced to each team's bye week, codes mapped), as CC BY 4.0 requires. Nothing
+at runtime calls out: the table is 32 static rows that do not change once the
+schedule is published, so putting a third-party feed on the critical path of
+every edition would buy nothing and risk everything. ESPN's scoreboard is not
+used: the Terms of Use bar reading it with a script.
 
 `src/analysis/byeExposure.mjs` reads that committed table, never the network:
 
@@ -1028,7 +1094,7 @@ further in this direction makes rankings more testable and more explainable.
 
 ## Adding another platform
 
-A platform is a directory next to `src/sleeper/` (ESPN's would be `src/espn/`)
+A platform is a directory next to `src/sleeper/` (ESPN's is `src/espn/`, the second platform)
 holding a client, a normalizer and a `provider.mjs`. The provider is an object
 with the shape of `sleeperProvider` in `src/sleeper/provider.mjs`:
 

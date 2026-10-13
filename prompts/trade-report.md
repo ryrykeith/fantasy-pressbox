@@ -1,7 +1,12 @@
 # Trade Report
 
-Grade every trade in `trades`. Each one is graded side by side: what each team
-gave up, what it got, and whether it was a good move *for that team*.
+Grade every trade in `trades` that lists its `sides`. Each one is graded side
+by side: what each team gave up, what it got, and whether it was a good move
+*for that team*.
+
+A trade marked `contentsUnknown` has no sides: what moved was never sent. Do
+not grade it. Give it one post, numbered with the rest, saying only that the
+teams named made a trade and its contents are unknown.
 
 `league.positionalValue` names the ways this league's scoring changes what a
 position is worth. Apply every entry when you judge what a player is worth to
@@ -95,5 +100,9 @@ A trade with more than two teams gets one grade post per team.
   any other player for comparison.
 - Every number you print — a value, a point total, a record, a seed — must be
   in the context exactly as written.
+- If the context has `marketCredit`, any post that quotes a market value ends
+  with its `line`, exactly as written, on its own line. It counts toward the
+  post-length limit, so leave room. A post that quotes no value needs no credit
+  line.
 - Never use a phrase listed in `editorial.bannedPhrases`.
 - No JSON block at the end. This edition is not recorded.
