@@ -18,7 +18,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [A multi-week ESPN matchup week is analyzed as every team scoring 0 by rankings, record and transactions](./a-multi-week-espn-matchup-week-is.md) | completed |
-| [A preview is built for a week with no pairings, handing the model an edition about no games](./a-preview-is-built-for-a-week-with-no.md) | pending |
+| [A preview is built for a week with no pairings, handing the model an edition about no games](./a-preview-is-built-for-a-week-with-no.md) | completed |
 | [Coverage matrix in docs/espn-data.md](./coverage-matrix-in-docs-espn-data-md.md) | completed |
 | [Provider capability gates for editions and context](./provider-capability-gates-for-editions.md) | completed |
 | [The coverage-matrix drift test misses an unavailable key whose field is not written as `field: '<literal>'`](./the-coverage-matrix-drift-test-misses.md) | pending |
