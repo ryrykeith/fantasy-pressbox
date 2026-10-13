@@ -214,6 +214,13 @@ A week is read as **WeekData** (`provider.normalizeWeek`; Sleeper's is in
     and lineup efficiency unknowable, so they are left out of its record and
     `pointsUnreported` names the players. A roster without these lists
     (Sleeper's) reads a missing value as 0, as it always has.
+    `reportedPoints` and `reportedOnBye` in `src/analysis/week.mjs` are the
+    one reading of this rule, and every other reader of a roster's points
+    uses them: a trade or waiver grade's week-by-week history shows such a
+    week as `points: null` (with `onBye`), its points per game leaves the
+    week out rather than counting 0, the roster window counts it in
+    `startsWithoutPoints` instead of its totals, and a released pool lists
+    the player with null points.
 - `transactions`: `normalizeTransactions` output, with `moves` and `sides`.
   An ESPN trade whose contents ESPN did not send has `contentsUnknown: true`
   and no moves or sides.

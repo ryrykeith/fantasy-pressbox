@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { enrichTransactions } from '../src/analysis/transactions.mjs';
 import { analyzeWeek } from '../src/analysis/week.mjs';
 import { createClient } from '../src/espn/client.mjs';
 import { espnProvider } from '../src/espn/provider.mjs';
@@ -479,4 +480,117 @@ test('an IR player who has points is still left out of the optimal lineup', () =
   const blues = analyze(week).teamWeeks.find((t) => t.rosterId === 1);
   assert.ok(blues.potentialPoints < 99);
   assert.ok(blues.optimalLineup.every((s) => s.points !== 99));
+});
+
+// --- A moved player with no points entry, in the transaction context ----------
+
+/** Removes one player's actual-points entry wherever he is in the week's matchups, and returns his NFL team. */
+function withoutPointsFor(raw, pid) {
+  for (const game of raw.matchups.schedule) {
+    for (const sideOfGame of [game.home, game.away]) {
+      const entry = sideOfGame.rosterForCurrentScoringPeriod.entries.find((e) => e.playerPoolEntry.player.id === pid);
+      if (!entry) continue;
+      const player = entry.playerPoolEntry.player;
+      player.stats = player.stats.filter((s) => s.statSourceId !== 0);
+      return normalizePlayer(player).team;
+    }
+  }
+  throw new Error(`player ${pid} is on no fixture roster`);
+}
+
+/**
+ * The fixture's week-4 trade, enriched against weeks 2, 3 and 4, where weeks
+ * 2 and 3 are the fixture week relabelled (the trade's value is read from the
+ * weeks before it). `blank` maps a week to how the traded running back's
+ * points entry is removed there: 'bye' (his NFL team's bye) or 'missing'.
+ */
+function tradeWithUnreportedWeeks(blank) {
+  const moved = playerId(10, 1);
+  const weeks = [2, 3, SCORED_WEEK].map((week) => {
+    const raw = bundle();
+    let byeWeeks = new Map();
+    if (blank[week]) {
+      const nflTeam = withoutPointsFor(raw, moved);
+      // The normalizer compares the bye with the bundle's own week, which is always the fixture's.
+      byeWeeks = new Map([[nflTeam, blank[week] === 'bye' ? SCORED_WEEK : 99]]);
+    }
+    const data = weekOf(PUBLIC_LEAGUE_ID, raw, { byeWeeks });
+    return { week, rosters: data.rosters, transactions: data.transactions };
+  });
+  const trade = weeks.at(-1).transactions.filter((t) => t.type === 'trade');
+  const enriched = enrichTransactions({ transactions: trade, league: faabLeague, teams, players, weeks });
+  return { moved: String(moved), trade, enriched };
+}
+
+const TRADE_CONFIG = {
+  leagueDisplayName: null,
+  editorial: {
+    tone: 'dry',
+    roast_intensity: 1,
+    ranking_emoji: '',
+    output: { sleeper_max_chars: 900, include_emoji: false },
+    banned_phrases: [],
+    awards: {},
+  },
+  rankings: { weights: { redraft: { starting_lineup: 1 } }, weekly: {} },
+};
+
+test('a traded ESPN player with no points entry that week is never given 0 in the trade history or the report', () => {
+  const { moved, trade, enriched } = tradeWithUnreportedWeeks({ [SCORED_WEEK]: 'missing' });
+  const history = enriched[0].playerHistory.find((h) => h.id === moved);
+  const unreported = history.weeks.find((w) => w.week === SCORED_WEEK);
+  assert.equal(unreported.points, null);
+  assert.ok(!('onBye' in unreported));
+  assert.equal(history.weeks.find((w) => w.week === 2).points, weekPoints(10, 1));
+
+  const context = buildContext({
+    task: 'trade-report',
+    config: TRADE_CONFIG,
+    league: faabLeague,
+    teams,
+    players,
+    week: SCORED_WEEK,
+    transactions: trade,
+    enrichedTransactions: enriched,
+  });
+  const lines = JSON.stringify(context.trades[0].playerHistory);
+  assert.match(lines, new RegExp(`week ${SCORED_WEEK}: [^"]*, no points reported, `));
+  assert.doesNotMatch(lines, new RegExp(`week ${SCORED_WEEK}: [^"]*, 0, `));
+  assert.ok(!lines.includes('null'), lines);
+});
+
+test('a traded ESPN player on his bye with no points entry is flagged onBye, not given 0', () => {
+  const { moved, trade, enriched } = tradeWithUnreportedWeeks({ [SCORED_WEEK]: 'bye' });
+  const unreported = enriched[0].playerHistory.find((h) => h.id === moved).weeks.find((w) => w.week === SCORED_WEEK);
+  assert.equal(unreported.points, null);
+  assert.equal(unreported.onBye, true);
+
+  const context = buildContext({
+    task: 'trade-report',
+    config: TRADE_CONFIG,
+    league: faabLeague,
+    teams,
+    players,
+    week: SCORED_WEEK,
+    transactions: trade,
+    enrichedTransactions: enriched,
+  });
+  assert.match(JSON.stringify(context.trades[0].playerHistory), new RegExp(`week ${SCORED_WEEK}: [^"]*, on bye, no points, `));
+});
+
+test('points per game leaves out a week with no points entry rather than counting it as 0', () => {
+  // The side that gave him up started him before the trade, so its "before" lineup carries his value.
+  const valueOf = ({ enriched, moved }) =>
+    enriched[0].sides.find((s) => s.rosterId === 11).roster.before.projectedStarters.find((s) => s.id === moved);
+
+  const full = valueOf(tradeWithUnreportedWeeks({}));
+  assert.ok(full, 'the traded running back starts for the side that gave him up');
+  assert.equal(full.pointsPerGame, Math.round(weekPoints(10, 1) * 10) / 10);
+
+  // Week 3 unreported: week 2 alone, not week 2 averaged with a made-up 0.
+  assert.equal(valueOf(tradeWithUnreportedWeeks({ 3: 'missing' })).pointsPerGame, full.pointsPerGame);
+
+  // Unreported in every earlier week: unscored, never 0.
+  const none = valueOf(tradeWithUnreportedWeeks({ 2: 'missing', 3: 'missing' }));
+  assert.equal(none?.pointsPerGame ?? null, null);
 });

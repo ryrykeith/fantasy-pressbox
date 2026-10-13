@@ -24,6 +24,7 @@
  * to date that is a difference of at most a year and it keeps one consistent
  * yardstick across the whole table.
  */
+import { reportedPoints } from './week.mjs';
 
 /** Upper-exclusive band edges: under 25, 25 through 28, 29 and over. */
 export const DEFAULT_AGE_BAND_EDGES = [25, 29];
@@ -109,10 +110,17 @@ export function buildRosterWindow({ teams = [], players = {}, weeks = [], ageBan
       const bandPoints = new Map([...bands.map((band) => [band.label, 0]), ['unknown', 0]]);
       const starterPoints = new Map();
       let totalPoints = 0;
+      // A start the provider reported no points for (ESPN's noPointsIds) is
+      // counted here, never added as 0: the totals are of known points only.
+      let startsWithoutPoints = 0;
       for (const { rosters = [] } of weeks) {
         const fielded = rosters.find((roster) => roster.rosterId === team.rosterId);
         for (const id of (fielded?.starterIds || []).filter((slot) => slot !== null)) {
-          const points = fielded.playerPoints?.[id] ?? 0;
+          const points = reportedPoints(fielded, id);
+          if (points === null) {
+            startsWithoutPoints += 1;
+            continue;
+          }
           const age = ageOf(id);
           const band = age === null ? 'unknown' : bands.find((b) => age >= b.min && age < b.max).label;
           bandPoints.set(band, bandPoints.get(band) + points);
@@ -128,6 +136,7 @@ export function buildRosterWindow({ teams = [], players = {}, weeks = [], ageBan
           points: round2(points),
           share: totalPoints > 0 ? round2(points / totalPoints) : null,
         })),
+        ...(startsWithoutPoints > 0 ? { startsWithoutPoints } : {}),
       };
 
       // The lineup as it stands, and the same lineup weighted by output.

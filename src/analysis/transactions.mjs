@@ -26,20 +26,27 @@
 import { playerFor } from '../league/players.mjs';
 import { claimMarket } from './faab.mjs';
 import { bestLineup, eligiblePositions } from './lineup.mjs';
+import { reportedOnBye, reportedPoints } from './week.mjs';
 
 const round1 = (value) => Math.round(value * 10) / 10;
 const round3 = (value) => Math.round(value * 1000) / 1000;
 
 /**
  * Points per rostered game for one player across `weeks`, or null when the
- * player was on no roster in any of them (a free agent until now).
+ * player was on no roster in any of them (a free agent until now), or on
+ * rosters only in weeks his provider reported no points for him.
+ *
+ * A rostered week with no points entry (ESPN's `noPointsIds`) is left out of
+ * the average, neither as a game nor as 0: what he scored that week is
+ * unknown, and counting it as 0 would invent a bad week.
  */
 function pointsPerGame(playerId, weeks) {
   const scores = [];
   for (const { rosters } of weeks) {
     for (const roster of rosters) {
       if (!roster.playerIds.includes(playerId)) continue;
-      scores.push(roster.playerPoints[playerId] ?? 0);
+      const points = reportedPoints(roster, playerId);
+      if (points !== null) scores.push(points);
       break;
     }
   }
@@ -192,7 +199,11 @@ function claimCost({ bid, waiverBudget, remainingAfter }) {
   };
 }
 
-/** Each moved player's week-by-week points, and which roster scored them. */
+/**
+ * Each moved player's week-by-week points, and which roster scored them.
+ * A week his provider reported no points for has `points: null` (never 0),
+ * and `onBye: true` when the bye table says his NFL team had no game.
+ */
 function playerHistory(transaction, weeks, teamName) {
   const ids = [
     ...new Set(transaction.sides.flatMap((side) => [...side.received.players, ...side.gaveUp.players].map((p) => p.id))),
@@ -202,12 +213,14 @@ function playerHistory(transaction, weeks, teamName) {
     weeks: weeks.flatMap(({ week, rosters }) => {
       const roster = rosters.find((r) => r.playerIds.includes(id));
       if (!roster) return [];
+      const points = reportedPoints(roster, id);
       return [
         {
           week,
           rosterId: roster.rosterId,
           team: teamName(roster.rosterId),
-          points: roster.playerPoints[id] ?? 0,
+          points,
+          ...(points === null && reportedOnBye(roster, id) ? { onBye: true } : {}),
           started: roster.starterIds.includes(id),
         },
       ];

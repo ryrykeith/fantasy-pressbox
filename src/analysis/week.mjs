@@ -15,6 +15,22 @@ import { bestLineup, lineupEfficiency } from './lineup.mjs';
 const BENCH_REPORT_LIMIT = 5;
 
 /**
+ * One player's points on a WeekData roster: a number, or null when the
+ * provider reported none for him (`noPointsIds`, ESPN). Null is never 0: a
+ * missing entry is unknown, not scoreless. A roster without the list
+ * (Sleeper's) reads a missing value as 0, as it always has.
+ */
+export function reportedPoints(roster, id) {
+  if ((roster.noPointsIds || []).includes(id)) return null;
+  return roster.playerPoints?.[id] ?? 0;
+}
+
+/** Whether the bye table says a player on a WeekData roster had no game that week (`byeIds`, ESPN). */
+export function reportedOnBye(roster, id) {
+  return (roster.byeIds || []).includes(id);
+}
+
+/**
  * One WeekData roster's starters, in slot order, and its bench. A null starter id is an empty slot.
  *
  * A roster may list `noPointsIds`: players its provider reported no points for

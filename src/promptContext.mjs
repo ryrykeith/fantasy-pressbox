@@ -447,7 +447,10 @@ function faabMarketView(faabMarket, players) {
       releasedBy: pool.team,
       ...(pool.note ? { note: pool.note } : {}),
       players: pool.playerIds.map(
-        (id) => `${describe(id)} — ${pool.playerPoints?.[id] ?? 0} pts that week`,
+        (id) =>
+          pool.playerPoints?.[id] === null
+            ? `${describe(id)} — no points reported that week`
+            : `${describe(id)} — ${pool.playerPoints?.[id] ?? 0} pts that week`,
       ),
       ...(pool.bids?.length
         ? {
@@ -665,11 +668,22 @@ function sideRosterView(side) {
   };
 }
 
+/**
+ * A history week's points: the number, or what is known when the provider
+ * reported none (never 0, which would be a made-up score).
+ */
+const weekPointsLine = (w) => {
+  if (w.points !== null) return w.points;
+  return w.onBye ? 'on bye, no points' : 'no points reported';
+};
+
 /** Each moved player's week-by-week points and the roster that banked them. */
 const playerHistoryView = (history, describe) =>
   history.map((item) => ({
     player: describe(item.id),
-    weeks: item.weeks.map((w) => `week ${w.week}: ${w.team}, ${w.points}${w.started ? ', started' : ', benched'}`),
+    weeks: item.weeks.map(
+      (w) => `week ${w.week}: ${w.team}, ${weekPointsLine(w)}${w.started ? ', started' : ', benched'}`,
+    ),
   }));
 
 /**
