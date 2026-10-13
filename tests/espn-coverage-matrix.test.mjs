@@ -121,16 +121,107 @@ function sourceModules() {
 }
 
 /**
- * Every `field` an `unavailable` entry can carry: the `field: '…'` literals
- * under src/. A `field:` with anything but a literal would hide a key from this
- * test, so it fails instead.
+ * The `field` of every `unavailable` entry in `code`, found by the entry's
+ * shape rather than by how a line is spelled: an object literal holding both a
+ * `why` and an `instruction` (a `factor` instead marks a scoring-profile entry,
+ * which is not one). Each must give `field` as a string literal (either
+ * quote, on any line); anything else (shorthand, a computed value, no field) is
+ * reported in `problems`. An object that merely has a `field` variable is not
+ * an entry and is left alone.
+ */
+export function entryFields(code) {
+  const strings = [];
+  const root = { text: '' };
+  const stack = [root];
+  const objects = [];
+  const top = () => stack[stack.length - 1];
+  const keep = (value) => `\u0001${strings.push(value) - 1}\u0001`;
+
+  const skipQuoted = (from, quote) => {
+    let i = from;
+    while (i < code.length && code[i] !== quote && code[i] !== '\n') i += code[i] === '\\' ? 2 : 1;
+    return i + 1;
+  };
+  // After a backtick, to just past the closing one.
+  const skipTemplate = (from) => {
+    let i = from;
+    while (i < code.length && code[i] !== '`') {
+      if (code[i] === '\\') i += 2;
+      else if (code[i] === '$' && code[i + 1] === '{') i = skipExpression(i + 2);
+      else i += 1;
+    }
+    return i + 1;
+  };
+  // After a `${`, to just past its closing brace.
+  const skipExpression = (from) => {
+    let depth = 1;
+    let i = from;
+    while (i < code.length && depth > 0) {
+      const c = code[i];
+      if (c === '`') i = skipTemplate(i + 1);
+      else if (c === "'" || c === '"') i = skipQuoted(i + 1, c);
+      else {
+        if (c === '{') depth += 1;
+        if (c === '}') depth -= 1;
+        i += 1;
+      }
+    }
+    return i;
+  };
+
+  let i = 0;
+  while (i < code.length) {
+    const c = code[i];
+    if (c === "'" || c === '"' || c === '`') {
+      const end = c === '`' ? skipTemplate(i + 1) : skipQuoted(i + 1, c);
+      top().text += keep(code.slice(i + 1, end - 1));
+      i = end;
+    } else if (c === '/' && code[i + 1] === '/') {
+      while (i < code.length && code[i] !== '\n') i += 1;
+    } else if (c === '/' && code[i + 1] === '*') {
+      const end = code.indexOf('*/', i + 2);
+      i = end < 0 ? code.length : end + 2;
+    } else if (c === '{') {
+      const frame = { text: '' };
+      stack.push(frame);
+      objects.push(frame);
+      i += 1;
+    } else if (c === '}') {
+      if (stack.length > 1) stack.pop();
+      i += 1;
+    } else {
+      top().text += c;
+      i += 1;
+    }
+  }
+  assert.equal(stack.length, 1, 'could not match the braces in a source module: the entry scan needs a fix');
+
+  const keys = new Set();
+  const problems = [];
+  const hasKey = (text, name) => new RegExp(`(?:^|,)\\s*${name}\\s*(?::|(?=,|$))`).test(text);
+  for (const { text } of objects) {
+    if (!hasKey(text, 'why') || !hasKey(text, 'instruction')) continue;
+    // A scoring-profile entry (promptContext.mjs) pairs a fact with an instruction too, but is keyed `factor`.
+    if (hasKey(text, 'factor')) continue;
+    const literal = /(?:^|,)\s*field\s*:\s*\u0001(\d+)\u0001\s*(?=,|$)/.exec(text);
+    const value = literal ? strings[Number(literal[1])] : null;
+    if (value !== null && /^[A-Za-z]+$/.test(value)) keys.add(value);
+    else problems.push(hasKey(text, 'field') ? 'an entry whose field is not a string literal' : 'an entry with no field');
+  }
+  return { keys, problems };
+}
+
+/**
+ * Every `field` an `unavailable` entry can carry, read from the entries under
+ * src/. An entry whose field is not a literal would hide a key from this test,
+ * so it fails, naming the file.
  */
 function unavailableKeys() {
   const keys = new Set();
   for (const { path, code } of sourceModules()) {
-    for (const [, key] of code.matchAll(/\bfield: '([A-Za-z]+)'/g)) keys.add(key);
-    const computed = [...code.matchAll(/\bfield: (?!')(\S+)/g)].map((match) => match[1]);
-    assert.deepEqual(computed, [], `${path} gives an unavailable entry a field that is not a literal: spell it out`);
+    const found = entryFields(code);
+    assert.deepEqual(found.problems, [], `${path} has ${found.problems[0]}: write \`field: 'name'\``);
+    for (const key of found.keys) keys.add(key);
   }
   assert.ok(keys.size > 20, [...keys].join(', '));
   return keys;
@@ -337,4 +428,37 @@ test('the drift check names a key added to the code without a row', () => {
   const rows = matrix.unavailable.filter((row) => !row.names.includes('taxiSquad'));
   assert.deepEqual(drift(rows, unavailableKeys()).missing, ['taxiSquad']);
   assert.deepEqual(drift(matrix.editions, new Set([...cliCommands(), ...TASKS, 'invented-edition'])).missing, ['invented-edition']);
+});
+
+// The scan for `unavailable` entries finds an entry however its field is spelled.
+
+test('entryFields finds literal fields in either quote style, across lines', () => {
+  const { keys, problems } = entryFields(`
+    const a = { field: 'plain', why: 'x', instruction: 'y' };
+    const b = { field:
+      'wrapped', why: \`a \${ { n: 1 }.n } b\`, instruction: "y" };
+    const c = { field: "double", why: 'a { brace', instruction: 'y' };
+  `);
+  assert.deepEqual([...keys].sort(), ['double', 'plain', 'wrapped']);
+  assert.deepEqual(problems, []);
+});
+
+test('entryFields reports a shorthand, computed or missing field', () => {
+  for (const entry of [
+    '({ field, why, instruction })',
+    '({ why, field, instruction })',
+    '({ field: name, why: 1, instruction: 2 })',
+    '({ why: 1, instruction: 2 })',
+  ]) {
+    assert.equal(entryFields(`const gap = (field) => ${entry};`).problems.length, 1, entry);
+  }
+});
+
+test('entryFields leaves an unrelated `field` variable alone', () => {
+  for (const file of ['espn/codes.mjs', 'analysis/draftOrder.mjs']) {
+    assert.deepEqual(entryFields(read(join(SRC, file))).problems, [], file);
+  }
+  const { keys, problems } = entryFields('const x = { field, other: 1 }; const y = [{ field }];');
+  assert.equal(keys.size, 0);
+  assert.deepEqual(problems, []);
 });
