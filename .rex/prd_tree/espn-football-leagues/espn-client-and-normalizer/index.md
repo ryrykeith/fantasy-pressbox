@@ -27,4 +27,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [guardSchedule refuses a whole week when one lineup player has no actual-points stats entry](./guardschedule-refuses-a-whole-week.md) | completed |
 | [guardTeams requires teams[].waiverRank in every league, a field the doc says may be spelled wavierRank](./guardteams-requires-teams-waiverrank.md) | completed |
 | [One NFL team alias module](./one-nfl-team-alias-module.md) | completed |
-| [Transaction, roster-window and released-pool analysis turn an ESPN player's missing points into 0](./transaction-roster-window-and-released.md) | pending |
+| [Transaction, roster-window and released-pool analysis turn an ESPN player's missing points into 0](./transaction-roster-window-and-released.md) | completed |
