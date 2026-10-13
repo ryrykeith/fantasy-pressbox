@@ -22,5 +22,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Coverage matrix in docs/espn-data.md](./coverage-matrix-in-docs-espn-data-md.md) | completed |
 | [Provider capability gates for editions and context](./provider-capability-gates-for-editions.md) | completed |
 | [The coverage-matrix drift test misses an unavailable key whose field is not written as `field: '<literal>'`](./the-coverage-matrix-drift-test-misses.md) | pending |
-| [The transactions command builds a trade report when every trade that week arrived without its contents](./the-transactions-command-builds-a.md) | pending |
+| [The transactions command builds a trade report when every trade that week arrived without its contents](./the-transactions-command-builds-a.md) | completed |
 | [Weekly editions end to end on ESPN fixtures](./weekly-editions-end-to-end-on-espn.md) | completed |
