@@ -158,7 +158,12 @@ test('buildPrompt builds the survival ranking, not the ordinary one, from a guil
 
 test('buildPrompt still builds preview and recap for a dynasty context', () => {
   for (const task of ['preview', 'recap']) {
-    const context = contextFor(task, 'dynasty');
+    // This context has no games, and a preview of none is refused on its own
+    // (tests/espn-editions.test.mjs), so give the preview one.
+    const context = {
+      ...contextFor(task, 'dynasty'),
+      upcomingMatchups: [{ matchupId: 1, teams: [{ team: 'A', manager: 'a', record: '0-0' }, { team: 'B', manager: 'b', record: '0-0' }] }],
+    };
     assert.doesNotThrow(() => buildPrompt({ task, context }));
   }
 });

@@ -1808,6 +1808,18 @@ export function buildPrompt({ task, context, promptsDir = null }) {
     );
   }
 
+  // A preview of a week with no pairings is an edition about no games: the
+  // prompt asks for one post per matchup, the context lists none, and the model
+  // fills the gap with games it makes up. This happens when the schedule has no
+  // entries for the week (past its end, or a playoff period the provider does
+  // not list).
+  if (task === 'preview' && !context.upcomingMatchups?.length) {
+    throw new Error(
+      `Cannot build a preview for week ${context.week}: the schedule lists no matchups for that week, ` +
+        'so there are no games to preview. Choose a week the schedule covers, or skip the edition.',
+    );
+  }
+
   // A trade report about no trades is an edition about nothing, and a model
   // handed one will grade a trade it makes up. The transactions command
   // refuses a quiet week first; this catches any caller that does not.

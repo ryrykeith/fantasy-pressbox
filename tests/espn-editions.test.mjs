@@ -626,3 +626,34 @@ test('import route: transactions still grades a known trade, and carries one wit
   assert.match(prompt, /A trade marked `contentsUnknown` has no sides[^]*Do\s+not grade it/);
   assert.deepEqual(requested(root), []);
 });
+
+// --- A preview is never built for a week with no pairings ----------------------------------
+// A week past the schedule, or a playoff period ESPN does not list, has no
+// matchup entries. The prompt would ask for a post per game and list none.
+
+/** The fixture's schedule ends before this week, so the fetch route gets no entries for it. */
+const UNSCHEDULED_WEEK = 9;
+
+test('fetch route: preview refuses a week with no schedule entries and writes no prompt', async () => {
+  const root = leagueFolder('fetch');
+  const result = runCli('fetch', root, ['preview', '--week', String(UNSCHEDULED_WEEK)]);
+  assert.notEqual(result.status, 0, result.said);
+  assert.match(result.said, new RegExp(`Cannot build a preview for week ${UNSCHEDULED_WEEK}`));
+  assert.match(result.said, /no matchups/);
+  const output = join(root, 'output');
+  assert.deepEqual(existsSync(output) ? readdirSync(output) : [], []);
+});
+
+test('buildPrompt refuses a head-to-head preview whose context has no upcoming matchups, naming the week', async () => {
+  const root = leagueFolder('import');
+  await importWeek(root, SCORED_WEEK);
+  const ok = runCli('import', root, ['rankings', '--week', String(SCORED_WEEK)]);
+  assert.equal(ok.status, 0, ok.said);
+  const context = contextOf(join(root, 'output', EDITIONS.rankings.prompt));
+  for (const upcomingMatchups of [[], undefined]) {
+    assert.throws(
+      () => buildPrompt({ task: 'preview', context: { ...context, week: 9, upcomingMatchups } }),
+      /Cannot build a preview for week 9/,
+    );
+  }
+});
