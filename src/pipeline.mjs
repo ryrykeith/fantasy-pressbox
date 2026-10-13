@@ -444,7 +444,9 @@ async function readSettledWeek({ provider, store, league, teams, players, week, 
   const { transactions } = readBundle(bundle, { store, league, teams, players });
   const draftOrder = snapshot.draftOrder ?? readDraftOrder({ league, teams, config, tradedPicks });
   return {
-    analysis: snapshot.analysis,
+    // A multi-week week's snapshot has no analysis, only the marker.
+    analysis: snapshot.analysis ?? null,
+    ...(snapshot.multiWeekMatchup ? { multiWeekMatchup: snapshot.multiWeekMatchup } : {}),
     transactions,
     played: snapshot.played,
     ...(snapshot.elimination ? { elimination: snapshot.elimination } : {}),
@@ -488,8 +490,15 @@ export async function captureWeek({
   const rawPath = store.saveRaw(league.season, week, bundle);
   const weekData = readBundle(bundle, { store, league, teams, players });
 
-  const analysis = analyzeWeek({ league, teams, rosters: weekData.rosters, players, week });
-  const played = analysis.teamWeeks.some((entry) => entry.points > 0);
+  // A week inside a matchup period that covers more than one NFL week (ESPN
+  // only; Sleeper never sets the marker) has no single week's score: every
+  // roster's points are null. analyzeWeek would read each null as 0, so the
+  // week is not analyzed at all. The snapshot keeps the marker instead, and
+  // every edition that reads the week's analysis refuses it
+  // (docs/plans/espn-football.md, decision 12).
+  const multiWeekMatchup = weekData.multiWeekMatchup ?? null;
+  const analysis = multiWeekMatchup ? null : analyzeWeek({ league, teams, rosters: weekData.rosters, players, week });
+  const played = analysis ? analysis.teamWeeks.some((entry) => entry.points > 0) : false;
 
   // Who is still in the league, and how close each survivor is to joining
   // them, for the formats where that changes. Built from the weeks already
@@ -498,7 +507,9 @@ export async function captureWeek({
   // into the snapshot beside them: the field a week was judged against is as
   // much a part of that week's record as the scores are, and history is not
   // rewritten here.
-  const weeksThroughNow = eliminates(league)
+  // A multi-week week has no scores to judge a chop by. Guillotine is refused
+  // on ESPN, so the two never meet; if they did, no ledger is built from nulls.
+  const weeksThroughNow = eliminates(league) && analysis
     ? [
         ...storedWeekScores(store, league.season, week - 1),
         {
@@ -587,11 +598,14 @@ export async function captureWeek({
     ...(faab ? { faab } : {}),
     ...(byeExposure ? { byeExposure } : {}),
     ...(draftOrder ? { draftOrder } : {}),
-    analysis,
+    // Never both: a week with no single score keeps the marker, not an
+    // analysis of zeros.
+    ...(analysis ? { analysis } : { multiWeekMatchup }),
   });
 
   return {
     analysis,
+    ...(multiWeekMatchup ? { multiWeekMatchup } : {}),
     transactions: weekData.transactions,
     played,
     ...(elimination ? { elimination } : {}),

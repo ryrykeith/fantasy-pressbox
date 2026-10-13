@@ -792,8 +792,8 @@ export function normalizeBids(transactions, { league = null } = {}) {
  *   bids          FAAB bids only (normalizeBids)
  *
  * and, only when the week's matchup period covers more than one scoring
- * period, `multiWeekMatchup: { matchupPeriod, weeks }`, so preview and recap
- * can refuse it. Such a week is never split or summed (decision 12).
+ * period, `multiWeekMatchup: { matchupPeriod, weeks }`, so captureWeek leaves
+ * it unanalyzed and every edition that reads its analysis refuses it. Such a week is never split or summed (decision 12).
  *
  * `rawBundle` is what the ESPN provider's fetchWeek saves: `{ week, matchups,
  * transactions }`, where `matchups` is the mMatchupScore + mScoreboard +

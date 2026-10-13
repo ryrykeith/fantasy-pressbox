@@ -222,7 +222,12 @@ A week is read as **WeekData** (`provider.normalizeWeek`; Sleeper's is in
 - `multiWeekMatchup`: `{ matchupPeriod, weeks }`, only when the week's
   matchup spans more than one NFL week (ESPN). The rosters' `points` and
   `pairingKey` are then null, because the provider's score is the whole
-  period's; preview and recap refuse such a week.
+  period's. `captureWeek` does not analyze such a week, because `analyzeWeek`
+  would read every null as 0. Its snapshot keeps the marker in place of an
+  `analysis`. Every edition that reads the week's analysis refuses it, naming
+  the reason (`refuseMultiWeekMatchup` in `src/cli.mjs`): preview, recap,
+  rankings and grade. A preview whose previous week is such a week leaves
+  last week's results out and warns.
 
 `normalizeWeek` is handed the season's bye table as a function and reads it
 only if it needs it, so a Sleeper week never touches it.

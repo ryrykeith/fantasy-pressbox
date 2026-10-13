@@ -345,6 +345,42 @@ export function refuseSurvivalEditionWithoutEliminations(config, task) {
   );
 }
 
+/** "4 and 5", "4, 5 and 6". */
+function listWeeks(weeks) {
+  return weeks.length > 1 ? `${weeks.slice(0, -1).join(', ')} and ${weeks.at(-1)}` : String(weeks[0]);
+}
+
+/**
+ * Why a week inside a matchup period of more than one NFL week has no score
+ * to report, or null for any other week. `captured` is captureWeek output,
+ * which carries `multiWeekMatchup` only for such a week (ESPN only).
+ */
+export function describeMultiWeekMatchup(captured, week) {
+  const period = captured?.multiWeekMatchup;
+  if (!period) return null;
+  return (
+    `Week ${week} is part of ESPN matchup period ${period.matchupPeriod}, which covers NFL weeks ` +
+    `${listWeeks(period.weeks)}. Its matchups are scored across more than one NFL week, so no single ` +
+    "week's score exists, and none is made up by splitting or summing the period."
+  );
+}
+
+/**
+ * Refuses an edition that reads the captured week's analysis — its scores,
+ * pairings and awards — for a week with no single week's score. captureWeek
+ * saves no analysis for such a week rather than one of zeros
+ * (docs/plans/espn-football.md, decision 12).
+ */
+export function refuseMultiWeekMatchup(captured, { week, edition }) {
+  const reason = describeMultiWeekMatchup(captured, week);
+  if (!reason) return;
+  throw new Error(
+    `${reason}\n\n` +
+      `\`${edition}\` needs that week's scores, so nothing was built. Matchup periods over more than ` +
+      'one NFL week are not covered in this version.',
+  );
+}
+
 function writeOutput(config, name, body) {
   mkdirSync(config.outputDir, { recursive: true });
   const path = join(config.outputDir, name);
@@ -530,7 +566,17 @@ async function commandFetch(config, args) {
   );
   say(`  raw data   ${result.rawPath}`);
   say(`  snapshot   ${result.snapshotPath}`);
-  say(`  status     ${result.played ? 'scores are in' : 'not played yet (all scores are zero)'}`);
+  const multiWeek = describeMultiWeekMatchup(result, week);
+  say(
+    `  status     ${
+      multiWeek
+        ? 'no single week\'s score (multi-week matchup period)'
+        : result.played
+          ? 'scores are in'
+          : 'not played yet (all scores are zero)'
+    }`,
+  );
+  if (multiWeek) say(`  ${multiWeek}`);
   return 0;
 }
 
@@ -727,12 +773,17 @@ async function commandEdition(config, args, task) {
     } else if (task === 'preview') {
       // The week has not been played, so the preview gets the pairings plus
       // last week's results — never this week's partial scores.
+      refuseMultiWeekMatchup(captured, { week, edition: task });
       upcomingAnalysis = captured.analysis;
       if (captured.played) {
         warn(`Note: week ${week} already has scores. A preview may read strangely.`);
       }
       if (week > 1) {
         const prior = await captureWeek({ ...ctx, week: week - 1 });
+        // Last week's results are context, not the subject: a week with no
+        // single score leaves them out, and says so.
+        const priorMultiWeek = describeMultiWeekMatchup(prior, week - 1);
+        if (priorMultiWeek) warn(`${priorMultiWeek} Last week's results are left out of this preview.`);
         priorWeekAnalysis = prior.analysis;
       }
     } else if (task === 'survival-preview') {
@@ -757,6 +808,7 @@ async function commandEdition(config, args, task) {
       // `beforeWeek` by one for a backward-looking task, so the same captured
       // danger board describes this week's own chop rather than the one
       // before it.
+      refuseMultiWeekMatchup(captured, { week, edition: task });
       if (!captured.played) {
         warn(`Week ${week} has no scores yet. Re-run once the games are final.`);
       }
@@ -1081,6 +1133,7 @@ async function commandGrade(config, args) {
   const ctx = await openLeague(config);
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week, offset: -1 });
   const captured = await captureWeek({ ...ctx, week });
+  refuseMultiWeekMatchup(captured, { week, edition: 'grade' });
   const saved = ctx.store.loadPredictions(ctx.league.season, week);
   const graded = gradePredictions(saved?.predictions, captured.analysis, {
     identity: teamIdentityFor(ctx),
