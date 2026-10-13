@@ -101,6 +101,58 @@ export function hasFutureDraftCapital(format, capabilities = null) {
   return !FORMATS_WITHOUT_FUTURE_PICKS.includes(format?.type);
 }
 
+/**
+ * The provider capability each edition cannot be written without, by edition
+ * name. An edition not listed needs none. Named here, not in the edition
+ * modules, so the taxonomy answers "can this league have that edition?" in one
+ * place, the way hasEliminations and hasFutureDraftCapital do.
+ */
+export const EDITION_CAPABILITIES = Object.freeze({
+  'tank-watch': 'futurePicks',
+  'future-stock': 'futurePicks',
+  'survival-preview': 'guillotine',
+  'chop-recap': 'guillotine',
+  'survival-rankings': 'guillotine',
+});
+
+/**
+ * Why a provider without a capability cannot support what needs it, as a
+ * clause naming the provider. Each one says what this version does not read
+ * or support, never that the platform lacks the thing: the sources do not
+ * settle that (ESPN may trade some picks: docs/espn-data.md, open question 25).
+ */
+const CAPABILITY_GAPS = {
+  futurePicks: (provider) =>
+    `${provider} traded picks are not read in this version, so who holds which future draft pick is not known`,
+  guillotine: (provider) => `guillotine leagues are not supported on ${provider} in this version (v1)`,
+};
+
+/** The reason a provider lacks `capability`, or null when it has it (or the capability is not one of the gaps). */
+export function capabilityGap(capability, { capabilities = null, provider = 'Sleeper' } = {}) {
+  if (!capabilities || capabilities[capability] !== false) return null;
+  return CAPABILITY_GAPS[capability]?.(provider) ?? null;
+}
+
+/**
+ * Refuses an edition the league's provider cannot support, naming the reason.
+ *
+ * Runs twice in src/cli.mjs, like refuseTankWatch: with the configured
+ * provider and the declared format before the provider is contacted, and with
+ * the opened league's. A declared guillotine on a provider that cannot run one
+ * refuses every edition, since no edition of that league can be written.
+ *
+ * @param task         the edition
+ * @param capabilities the provider's (src/providers.mjs)
+ * @param provider     its display name
+ * @param formatType   the declared or resolved format type, or null when not yet known
+ */
+export function refuseEditionWithoutCapability(task, { capabilities = null, provider = 'Sleeper', formatType = null } = {}) {
+  const needed = EDITION_CAPABILITIES[task] ?? (formatType === 'guillotine' ? 'guillotine' : null);
+  const reason = needed ? capabilityGap(needed, { capabilities, provider }) : null;
+  if (!reason) return;
+  throw new Error(`\`${task}\` cannot be built for this ${provider} league: ${reason}.`);
+}
+
 /** Where a resolved format came from. */
 export const FORMAT_SOURCES = ['declared', 'detected'];
 

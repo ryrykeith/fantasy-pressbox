@@ -98,6 +98,10 @@ export const sleeperProvider = Object.freeze({
     taxi: true,
     guillotine: true,
     lastScoredWeek: true,
+    seasonPotentialPoints: true,
+    playerAge: true,
+    managerNames: true,
+    scoringDefaults: true,
   }),
   // FantasyCalc keys its players by Sleeper ID.
   playerIdSpace: 'sleeper',

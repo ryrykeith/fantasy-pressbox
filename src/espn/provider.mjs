@@ -352,6 +352,14 @@ export const espnProvider = Object.freeze({
     // scoring period is past it (src/espn/normalize.mjs; doc, "Working out
     // the week"), so a week still being played is never settled.
     lastScoredWeek: true,
+    // No season potential points figure appears in either client (open question 23).
+    seasonPotentialPoints: false,
+    // No source shows ESPN supplying an age or a birth date (open question 10).
+    playerAge: false,
+    // members[].displayName is read by neither client (open question 27).
+    managerNames: false,
+    // No ESPN defaults table, so no setting can be called ordinary or unusual (open question 5).
+    scoringDefaults: false,
   }),
   // FantasyCalc's espnId (task 6.1 keys market values by it).
   playerIdSpace: 'espn',

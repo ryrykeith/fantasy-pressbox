@@ -192,10 +192,29 @@ The shapes a provider hands back:
 - **WeekData**: one week, below.
 
 A provider also declares `capabilities` (`futurePicks`, `taxi`, `guillotine`,
-`lastScoredWeek`). Callers read them, as `hasEliminations` and
+`lastScoredWeek`, `seasonPotentialPoints`, `playerAge`, `managerNames`,
+`scoringDefaults`). Callers read them, as `hasEliminations` and
 `hasFutureDraftCapital` in `src/format.mjs` and the week resolution in
 `src/pipeline.mjs` do, rather than assuming a platform. `playerIdSpace` names
 the ID space the provider's players use.
+
+The capability gates work at two levels:
+
+- An edition that needs a capability (`EDITION_CAPABILITIES` in
+  `src/format.mjs`: future picks for `tank-watch` and `future-stock`,
+  guillotine for the survival editions) is refused by
+  `refuseEditionWithoutCapability`, naming the reason. `src/cli.mjs` runs it
+  before the provider is contacted and again with the opened league, and
+  `buildContext` runs it a third time. A declared guillotine on a provider
+  that cannot run one refuses every edition.
+- A context fact the provider cannot supply is left out, absent rather than
+  null, and `describeMissingContext` (its `describeProviderGaps` sibling) adds
+  an `unavailable` entry saying what not to say: season potential points,
+  taxi, keeper designations, bids under rolling waivers, player age, the
+  playoff seed when the league does not seed on wins then points for, manager
+  names, scoring defaults, and the contents of a trade sent without them. A
+  Sleeper league declares every capability and reports none of those fields,
+  so it gets none of these entries.
 
 A week is read as **WeekData** (`provider.normalizeWeek`; Sleeper's is in
 `src/sleeper/normalize.mjs`, ESPN's in `src/espn/normalize.mjs`):

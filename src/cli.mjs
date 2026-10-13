@@ -11,7 +11,7 @@ import { homedir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { getProvider, providerDisplayName } from './providers.mjs';
+import { getProvider, providerDisplayName, providerOf } from './providers.mjs';
 import { ESPN_COOKIE_HELP } from './init.mjs';
 import {
   LEAGUE_ID_KEYS,
@@ -27,7 +27,12 @@ import {
   workspaceIsPackage,
 } from './config.mjs';
 import { copyLeagueWorkspace, isLeagueWorkspace, requireLeagueWorkspace } from './workspace.mjs';
-import { describeFormat, hasFutureDraftCapital, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
+import {
+  describeFormat,
+  hasFutureDraftCapital,
+  refuseEditionWithoutCapability,
+  UNDETECTABLE_FORMAT_TYPES,
+} from './format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './scoringReport.mjs';
 import { describeEliminationLedger } from './eliminationReport.mjs';
 import { describeDraftOrder } from './rookieDraft.mjs';
@@ -863,8 +868,25 @@ export function describeQuietTransactionWeek(summary, week) {
   return null;
 }
 
+/**
+ * Refuses an edition the league's provider cannot support, before it is
+ * contacted: the configured provider and the declared format are enough
+ * (src/format.mjs#refuseEditionWithoutCapability). Runs ahead of the format
+ * guards, so an ESPN league asked for a guillotine edition hears that ESPN
+ * cannot run one, not that it should declare LEAGUE_FORMAT=guillotine.
+ */
+export function refuseEditionForProvider(config, task) {
+  const provider = getProvider(config.league.provider);
+  refuseEditionWithoutCapability(task, {
+    capabilities: provider.capabilities,
+    provider: provider.displayName,
+    formatType: config.leagueFormat,
+  });
+}
+
 async function commandEdition(config, args, task) {
   requireLeague(config);
+  refuseEditionForProvider(config, task);
   refuseOrdinaryEditionInGuillotineLeague(config, task);
   refuseSurvivalEditionWithoutEliminations(config, task);
   const isTankWatch = task === TANK_WATCH_TASK;
@@ -883,14 +905,23 @@ async function commandEdition(config, args, task) {
 
   const ctx = await openLeague(config, { refreshPlayers: args.refreshPlayers });
   const { league, teams, players, store, client } = ctx;
+  // Again with the opened league: its provider and its resolved format.
+  const leagueProvider = providerOf(league);
+  refuseEditionWithoutCapability(task, {
+    capabilities: leagueProvider.capabilities,
+    provider: leagueProvider.displayName,
+    formatType: league.format.type,
+  });
   // Null for a provider with no traded future picks (ESPN); every use is gated on that capability.
   const tradedPicks = ctx.draftCapital?.tradedPicks ?? [];
   const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]));
 
   // Not computed for a format without future picks: Sleeper can still report
   // picks traded for a redraft league's own upcoming draft, so the data being
-  // present says nothing about whether the concept exists.
-  const futureDraftCapital = hasFutureDraftCapital(league.format)
+  // present says nothing about whether the concept exists. Nor for a provider
+  // whose traded picks are not read: every team would appear to hold only its
+  // own picks, which nothing on file says.
+  const futureDraftCapital = hasFutureDraftCapital(league.format, leagueProvider.capabilities)
     ? normalizeFutureDraftCapital({
         tradedPicks,
         league,

@@ -118,7 +118,19 @@ test('the registry knows Sleeper, with every capability', () => {
   assert.equal(sleeper.displayName, 'Sleeper');
   assert.equal(sleeper.experimental, false);
   assert.equal(sleeper.playerIdSpace, 'sleeper');
-  assert.deepEqual({ ...sleeper.capabilities }, { futurePicks: true, taxi: true, guillotine: true, lastScoredWeek: true });
+  assert.deepEqual(
+    { ...sleeper.capabilities },
+    {
+      futurePicks: true,
+      taxi: true,
+      guillotine: true,
+      lastScoredWeek: true,
+      seasonPotentialPoints: true,
+      playerAge: true,
+      managerNames: true,
+      scoringDefaults: true,
+    },
+  );
   // A League from before leagues were tagged is Sleeper's.
   assert.equal(providerOf({}).name, 'sleeper');
   assert.throws(() => getProvider('nope'), /Known providers: sleeper, espn/);
@@ -129,7 +141,19 @@ test('the registry knows ESPN: experimental, with no future picks, taxi or guill
   assert.equal(espn.displayName, 'ESPN');
   assert.equal(espn.experimental, true);
   assert.equal(espn.playerIdSpace, 'espn');
-  assert.deepEqual({ ...espn.capabilities }, { futurePicks: false, taxi: false, guillotine: false, lastScoredWeek: true });
+  assert.deepEqual(
+    { ...espn.capabilities },
+    {
+      futurePicks: false,
+      taxi: false,
+      guillotine: false,
+      lastScoredWeek: true,
+      seasonPotentialPoints: false,
+      playerAge: false,
+      managerNames: false,
+      scoringDefaults: false,
+    },
+  );
   assert.equal(providerOf({ provider: 'espn' }).name, 'espn');
   for (const method of ['fromConfig', 'forClient', 'lookupLeague', 'normalizeWeek']) {
     assert.equal(typeof espn[method], 'function', method);
