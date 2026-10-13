@@ -475,6 +475,13 @@ async function commandDoctor(config) {
     ctx = await openLeague(config, { allowStaleLeague: true });
     ({ week, source } = await resolveWeek({ client: ctx.client, league: ctx.league, config }));
   } catch (error) {
+    // Nothing imported yet on the import route: the same addresses and notes a
+    // successful open prints, with no weeks. No request is made.
+    if (espnRoute.imported && error?.name === 'EspnImportError' && /has not been imported yet/.test(error.message)) {
+      say(`\n  ✗ ${error.message.split('\n')[0]}`);
+      for (const line of describeImportToSave(config, { season: config.league.season, weeks: [] })) say(line);
+      return 1;
+    }
     const explained = explainEspnError(error, config);
     if (!explained) throw error;
     say(`\n  ✗ ${explained.join('\n    ')}`);
@@ -498,7 +505,7 @@ async function commandDoctor(config) {
   for (const line of describeUnmodelledScoring(league.format.scoring, { provider: providerDisplayName(league.provider) })) say(`  ${line}`);
   say(`  Current week       ${week} (from ${source})`);
   const staleLeaguePage = reportSavedPages(ctx);
-  if (espnRoute.imported) for (const line of describeImportToSave(ctx, config)) say(line);
+  if (espnRoute.imported) for (const line of describeImportToSave(config, { season: league.season, weeks: savedWeeks(ctx) })) say(line);
 
   // Who is still in the league, for the formats where that changes. Built from
   // the weeks already fetched, so doctor stays a cheap check — a league with no
@@ -579,10 +586,12 @@ function describeEspnRoute(config) {
 }
 
 /** What to save on the import route, and which weeks are saved already. */
-function describeImportToSave(ctx, config) {
-  const pages = ctx.provider.savedPages?.();
-  const weeks = (pages?.weeks ?? []).map((w) => w.week);
-  const links = ctx.provider.importLinks({ leagueId: config.league.id, season: ctx.league.season, weeks });
+function savedWeeks(ctx) {
+  return (ctx.provider.savedPages?.()?.weeks ?? []).map((w) => w.week);
+}
+
+function describeImportToSave(config, { season, weeks }) {
+  const links = getProvider(config.league.provider).importLinks({ leagueId: config.league.id, season, weeks });
   const lines = [
     `  Imported weeks     ${weeks.length ? weeks.join(', ') : 'none yet'}`,
     "  Addresses to save  Open each in a browser signed in to ESPN and save the page in this league's folder,",

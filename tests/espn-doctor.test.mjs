@@ -218,6 +218,10 @@ test('import route with nothing imported: no request, the addresses to save', ()
     assert.equal(result.status, 1, out);
     assert.ok(!out.includes('fetch was called'));
     assert.ok(out.includes(espnImportLinks({ leagueId: PUBLIC_LEAGUE_ID, season: SEASON }).league));
+    assert.match(out, /Imported weeks\s+none yet/);
+    assert.match(out, /personal use under ESPN's terms/);
+    assert.match(out, /private league's page shows on a plain signed-in visit is unverified/);
+    assert.ok(!/^Error: /m.test(result.stderr), result.stderr);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
