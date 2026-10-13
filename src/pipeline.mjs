@@ -127,7 +127,7 @@ function readBundle(bundle, { store, league, teams = [], players = {}, describeP
  * here, on read, so a league folder written before WeekData existed needs no
  * migration.
  */
-function savedWeeks({ store, league, teams = [], players = {}, describePlayer, throughWeek }) {
+export function savedWeeks({ store, league, teams = [], players = {}, describePlayer, throughWeek }) {
   return store
     .loadRawThrough(league.season, throughWeek)
     .map((bundle) => readBundle(bundle, { store, league, teams, players, describePlayer }));
