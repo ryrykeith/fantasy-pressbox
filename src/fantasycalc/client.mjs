@@ -110,23 +110,31 @@ export async function fetchMarketValues(query, { fetchImpl = fetch } = {}) {
 const PICK_NAME = /^(\d{4}) (\d+)(?:st|nd|rd|th)(?: \((Early|Mid|Late)\))?$/;
 
 /**
- * The player-ID space normalizeMarketValues keys players by: a provider's
- * `playerIdSpace`. A league whose players use another space cannot be priced
- * from this list, because its IDs would be looked up among Sleeper's.
+ * The player-ID spaces FantasyCalc carries, each mapped to the field on a
+ * FantasyCalc player that holds it. The keys are a provider's `playerIdSpace`.
  */
-export const MARKET_PLAYER_ID_SPACE = 'sleeper';
+const ID_FIELD = { sleeper: 'sleeperId', espn: 'espnId' };
+export const MARKET_ID_SPACES = Object.keys(ID_FIELD);
+
+/** A saved snapshot's ID space. One saved before the field existed was keyed by Sleeper ID. */
+export function snapshotIdSpace(snapshot) {
+  return snapshot?.idSpace ?? 'sleeper';
+}
 
 /**
  * FantasyCalc's list → `{ players, picks }`.
  *
- *   players  keyed by Sleeper player id: value, overall and positional rank, age
+ *   players  keyed by the provider's player id (`idSpace`): value, overall and positional rank, age
  *   picks    keyed by `<season>-<round>`: the generic value and any tiered ones
  *
- * A player FantasyCalc has no Sleeper id for cannot be matched to a roster and
- * is dropped. Pick names in any other shape (a specific slot, say) are dropped
- * too: nothing here can say which of them a traded pick is.
+ * A player FantasyCalc has no id in that space for cannot be matched to a
+ * roster and is dropped, never matched by name. Pick names in any other shape
+ * (a specific slot, say) are dropped too: nothing here can say which of them a
+ * traded pick is.
  */
-export function normalizeMarketValues(entries) {
+export function normalizeMarketValues(entries, idSpace = 'sleeper') {
+  const idField = ID_FIELD[idSpace];
+  if (!idField) throw new Error(`FantasyCalc has no player IDs in the "${idSpace}" space.`);
   const players = {};
   const picks = {};
   for (const entry of entries ?? []) {
@@ -144,8 +152,9 @@ export function normalizeMarketValues(entries) {
       continue;
     }
 
-    if (!player.sleeperId) continue;
-    players[String(player.sleeperId)] = {
+    const id = player[idField];
+    if (id === undefined || id === null || id === '') continue;
+    players[String(id)] = {
       name: player.name ?? null,
       position: player.position ?? null,
       value: entry.value,

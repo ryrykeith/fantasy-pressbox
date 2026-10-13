@@ -18,11 +18,12 @@ import { buildRosterWindow } from './analysis/rosterWindow.mjs';
 import { buildPickCapital, pickCapitalSeasons } from './analysis/pickCapital.mjs';
 import { byeWeekTableSource, upcomingByeExposure } from './analysis/byeExposure.mjs';
 import {
-  MARKET_PLAYER_ID_SPACE,
+  MARKET_ID_SPACES,
   MarketValuesError,
   fetchMarketValues,
   marketValueQuery,
   normalizeMarketValues,
+  snapshotIdSpace,
 } from './fantasycalc/client.mjs';
 import { hasEliminations, hasFutureDraftCapital } from './format.mjs';
 import { createStore } from './store.mjs';
@@ -282,25 +283,28 @@ export function readTransactions({ store, league, teams, players, describePlayer
  * reason, and src/promptContext.mjs turns that into an `unavailable` entry
  * telling the model not to quote any value.
  *
- * A league whose players are not in FantasyCalc's ID space (ESPN's, until the
- * espnId join exists) is never priced: it fetches nothing and reads no saved
- * market, because its player IDs looked up among Sleeper's could name another
- * player's value.
+ * Players are keyed by the league provider's ID space (`playerIdSpace`), and the
+ * snapshot records it as `idSpace`. A saved snapshot with no `idSpace` predates
+ * the field and was keyed by Sleeper ID. One whose `idSpace` is not the
+ * league's is fetched again, never read: an ID looked up in another space could
+ * name a different player's value.
  */
 export async function readMarketValues({ store, league, teams, week, refresh = false, fetchImpl = fetch }) {
   const provider = providerOf(league);
-  if (provider.playerIdSpace !== MARKET_PLAYER_ID_SPACE) {
+  const idSpace = provider.playerIdSpace;
+  if (!MARKET_ID_SPACES.includes(idSpace)) {
     return { unavailable: `FantasyCalc values are not matched to ${provider.displayName} player IDs in this version` };
   }
   if (!refresh) {
     const saved = store.loadMarketValues(league.season, week);
-    if (saved) return saved;
+    if (saved && snapshotIdSpace(saved) === idSpace) return saved;
   }
   const query = marketValueQuery({ format: league.format, teamCount: teams.length });
   try {
-    const { players, picks } = normalizeMarketValues(await fetchMarketValues(query, { fetchImpl }));
+    const { players, picks } = normalizeMarketValues(await fetchMarketValues(query, { fetchImpl }), idSpace);
     const snapshot = {
       source: 'FantasyCalc',
+      idSpace,
       label: query.label,
       fetchedAt: new Date().toISOString(),
       week,

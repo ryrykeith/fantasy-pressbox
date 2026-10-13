@@ -10,7 +10,7 @@ import { normalizeLeague } from '../src/espn/normalize.mjs';
 import { espnProvider } from '../src/espn/provider.mjs';
 import { capabilityGap, EDITION_CAPABILITIES, refuseEditionWithoutCapability } from '../src/format.mjs';
 import { FUTURE_STOCK_TASK } from '../src/futureStock.mjs';
-import { captureWeek, readTransactions } from '../src/pipeline.mjs';
+import { captureWeek, readMarketValues, readTransactions } from '../src/pipeline.mjs';
 import { buildContext, describePlayer, TASKS } from '../src/promptContext.mjs';
 import { createStore } from '../src/store.mjs';
 import { TANK_WATCH_TASK } from '../src/tankWatch.mjs';
@@ -333,7 +333,21 @@ before(async () => {
   const tradeWithoutItems = { ...trade, moves: [], sides: [], contentsUnknown: true };
   const lastRankings = { label: 'Week 3', week: 3, rankings: base.teams.map((team, index) => ({ rank: index + 1, team: team.name })) };
 
+  // A reachable market, keyed by ESPN ID: the trade report then carries marketValues and the credit. The entry is invented.
+  const market = await readMarketValues({
+    store: createStore({ dataDir: realpathSync(mkdtempSync(join(tmpdir(), 'pressbox-espn-matrix-market-'))) }),
+    league: base.league,
+    teams: base.teams,
+    week: SCORED_WEEK,
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => [{ value: 1000, overallRank: 1, positionRank: 1, player: { name: 'Invented Player', position: 'RB', espnId: '9000001' } }],
+    }),
+  });
+
   contexts.push(
+    espnContext('trade-report', base, { marketValues: market }),
     espnContext('rankings', base, { league: keeper }),
     espnContext('recap', base, { league: { ...base.league, playoffSeeding: 'total_points_scored' } }),
     espnContext('recap', base, { league: { ...base.league, playoffSeeding: null } }),

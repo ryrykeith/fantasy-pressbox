@@ -827,7 +827,10 @@ refused.
 | The share of FantasyCalc's priced players that carry an `espnId`. | **Unknown.** Task 2.1 checks. |
 
 **decision** (plan Appendix A, 6.1): market values join on `espnId` only. A
-player with no `espnId` is unpriced, never matched by name.
+player with no `espnId` is unpriced, never matched by name. A saved market
+records its `idSpace` (`sleeper` or `espn`); one saved without it reads as
+`sleeper`, and a saved market whose `idSpace` is not the league's is fetched
+again, never read. **verified**: `tests/espn-editions.test.mjs`.
 
 ## League formats
 
@@ -1015,7 +1018,7 @@ never null.
 | `transactions` | **Supported** outside the transaction editions: the week's readable moves, with FAAB bids where the league has a budget. A trade sent without its items is `contentsUnknown`, with no `moves` (`tradeContents`). A week imported without its transactions page gets the `transactions` entry instead. | **assumed**: `mTransactions2` (open question 6). |
 | `trades` | **Supported** in `trade-report`: each side's team, what it received and its standing. No picks. | **assumed**: `mTransactions2` (open question 6). |
 | `pickups` | **Supported** in `waiver-report`: each claim or free-agent move, with its bid in a FAAB league. | **assumed**: open questions 6, 24. |
-| `marketValues`, `marketCredit` | **Unavailable**: FantasyCalc values are not matched to ESPN player IDs in this version (task 6.1 adds the `espnId` join), so no market is fetched or read (`marketValues`). The FantasyCalc credit goes only with values, so it is absent too. | **verified**: `tests/espn-editions.test.mjs`. |
+| `marketValues`, `marketCredit` | **Supported**: priced by `espnId` when FantasyCalc can be reached; a player with no `espnId` is unpriced. When it cannot be reached the edition carries the ordinary `marketValues` unavailable entry and no credit: the credit goes only with values. | **verified**: `tests/espn-editions.test.mjs`. |
 | `futureDraftCapital` | **Unavailable** in the ranking editions (the `futureDraftCapital` entry): ESPN traded picks are not read, and a redraft league has none. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `draftCapital`, `draftProjection`, `prospectBoard`, `rosterWindow`, `tankWatch` | **Refused**: only `tank-watch`, `future-stock` and a trade report's traded picks carry them. The first two are refused, and an ESPN trade carries no picks. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `survivorCount`, `eliminationHistory`, `faabMarket`, `dangerBoard`, `byeExposure` | **Refused**: guillotine facts, and guillotine is refused on ESPN (decision 9). | **verified**: `tests/espn-capability-gates.test.mjs`. |
@@ -1044,7 +1047,7 @@ reason.
 | `receptionRate` | **Emitted** when the league lists no reception stat (stat 53). Told: do not state the per-catch value or call the league standard, half-PPR or full PPR, and do not rank pass catchers as though a catch were worth nothing or a full point. | **assumed**: `scoringItems` (open questions 4, 5). `tests/espn-normalize.test.mjs`. |
 | `futureDraftCapital` | **Emitted** in the ranking editions. In a redraft (or keeper) league: there is no future draft capital, and the model is told not to discuss picks at all. In a declared dynasty: ESPN traded picks are not read, and the model is told to give the `future_draft_capital` factor no weight, and not to say which picks any team holds or has traded, or that none have been traded. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `draftPicks` | **Emitted** in `trade-report`. Redraft: do not discuss draft picks in any grade. Declared dynasty: ESPN traded picks are not read, so do not say whether any trade included picks, or grade on them. | **verified**: `tests/espn-capability-gates.test.mjs`. |
-| `marketValues` | **Emitted** in `trade-report`: "FantasyCalc values are not matched to ESPN player IDs in this version". Told: do not quote, estimate or recall any trade value; grade on roster fit, `playerHistory` and the standings, and say once that market values were unavailable. | **verified**: `tests/espn-editions.test.mjs`. |
+| `marketValues` | **Emitted** in `trade-report` only when the market could not be fetched (the reason is FantasyCalc's error). Told: do not quote, estimate or recall any trade value; grade on roster fit, `playerHistory` and the standings, and say once that market values were unavailable. | **verified**: `tests/espn-editions.test.mjs`. |
 | `injuryDetail` | **Emitted** in `trade-report` and `waiver-report`: only ESPN's injury designations are available, not injury news. Told: do not describe an injury beyond the designation shown. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `managerMotives` | **Emitted** in `trade-report` and `waiver-report`. Told: do not state a motive as fact; a read framed as a read is fine. | **verified**: `tests/espn-coverage-matrix.test.mjs`. |
 | `projections` | **Emitted** in `trade-report` and `waiver-report`. Told: do not cite projected points, and treat a game or two in `playerHistory` as a small sample. | **verified**: `tests/espn-coverage-matrix.test.mjs`. |
@@ -1056,7 +1059,7 @@ reason.
 | `matchups` | **Never**: only a format without head-to-head games (guillotine) gets it, and guillotine is refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `chopLine` | **Never**: survival editions only, refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `faabMarket` | **Never**: survival editions only, refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
-| `marketValuesAtTradeTime` | **Never**: given only beside market values, which an ESPN league never has. | **verified**: `tests/espn-editions.test.mjs`. |
+| `marketValuesAtTradeTime` | **Emitted** beside market values: values from the moment each trade was made are not available. | **verified**: `tests/espn-editions.test.mjs`. |
 | `previousTankWatch` | **Never**: `tank-watch` only, refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `pickTradeHistory` | **Never**: `tank-watch` and `future-stock` only, both refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `finalDraftOrder`, `laterRoundPickNumbers`, `projectedDraftSlot`, `projectedSlotAtTradeTime`, `boardRankIsNotAvailability`, `prospectBoard`, `prospectsNotOnBoard` | **Never**: they describe future picks, which only `tank-watch`, `future-stock` and a trade report's traded picks carry. The first two are refused, and an ESPN trade carries no picks because ESPN traded picks are not read. | **verified**: `tests/espn-capability-gates.test.mjs`. |

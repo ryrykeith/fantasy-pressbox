@@ -95,9 +95,14 @@ function runCli(route, root, args) {
   return { ...result, said: `${result.stdout}\n${result.stderr}` };
 }
 
+/** The FantasyCalc market is not ESPN: a trade or pick edition asks it for values on either route, and the fixtures refuse it. */
+const isMarketUrl = (url) => new URL(url).host === 'api.fantasycalc.com';
+
+/** Every address the CLI asked for, other than the trade-value market's. */
 function requested(root) {
   const log = join(root, 'network.log');
-  return existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean) : [];
+  const urls = existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean) : [];
+  return urls.filter((url) => !isMarketUrl(url));
 }
 
 /** loadConfig for a folder, with no league key taken from this shell. */
@@ -295,7 +300,7 @@ for (const route of ['import', 'fetch']) {
       const path = join(output, edition.prompt);
       assert.ok(existsSync(path), `no prompt at ${path}:\n${result.said}`);
       assert.match(result.stdout, new RegExp(`Prompt written to ${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-      assert.doesNotMatch(result.said, /a request was made to/);
+      assert.doesNotMatch(result.said, /a request was made to (?!https:\/\/api\.fantasycalc\.com)/);
     });
   }
 
@@ -344,7 +349,7 @@ for (const route of ['import', 'fetch']) {
 
     const trades = context('transactions');
     assertUnavailable(trades, ['marketValues', 'draftPicks', 'injuryDetail'], `${route} transactions`);
-    assert.match(trades.unavailable.find((e) => e.field === 'marketValues').why, /not matched to ESPN player IDs/);
+    assert.match(trades.unavailable.find((e) => e.field === 'marketValues').why, /Could not reach FantasyCalc/);
     assert.match(trades.unavailable.find((e) => e.field === 'injuryDetail').why, /^Only ESPN injury designations/);
     assert.ok(!('marketValues' in trades));
     assert.deepEqual(trades.trades[0].sides.map((side) => side.team).sort(), [team(6), team(10)].sort());
@@ -445,32 +450,78 @@ for (const route of ['import', 'fetch']) {
     );
     assertNoForeignFacts(context, `${route} waiver-report`);
     assertUnavailable(context, ['injuryDetail'], `${route} waiver-report`);
-    if (route === 'import') assert.deepEqual(asked, []);
-    else assert.ok(asked.every((url) => new URL(url).host === 'lm-api-reads.fantasy.espn.com'), asked.join('\n'));
+    // The market is FantasyCalc's, not ESPN's, and the fakes refuse it.
+    const espnAsked = asked.filter((url) => !isMarketUrl(url));
+    if (route === 'import') assert.deepEqual(espnAsked, []);
+    else assert.ok(espnAsked.every((url) => new URL(url).host === 'lm-api-reads.fantasy.espn.com'), asked.join('\n'));
   });
 }
 
-// --- Market values are not looked up by an ESPN ID ----------------------------------------
+// --- Market values are looked up by the ESPN ID -------------------------------------------
 
-test('readMarketValues never prices an ESPN league: it fetches nothing and reads no saved market', async () => {
-  const dataDir = tempDir('pressbox-espn-market-');
-  const store = createStore({ dataDir });
-  const league = { provider: 'espn', season: String(SEASON), format: { type: 'redraft', scoring: {} } };
-  // A market saved for the week, keyed by Sleeper ID, is not read either: an ESPN ID could name another player in it.
+const espnLeague = (format = { type: 'redraft', scoring: {} }) => ({ provider: 'espn', season: String(SEASON), format });
+
+/** FantasyCalc's shape. The names are invented: one player has both IDs, one only a Sleeper ID, one only an ESPN ID. */
+const MARKET_FIXTURE = [
+  { value: 7000, overallRank: 1, positionRank: 1, player: { name: 'Rival Runner', position: 'RB', sleeperId: '111', espnId: '9000011', maybeAge: 24.04 } },
+  { value: 3000, overallRank: 2, positionRank: 1, player: { name: 'Sleeperonly Receiver', position: 'WR', sleeperId: '222' } },
+  { value: 2000, overallRank: 3, positionRank: 2, player: { name: 'Espnonly Receiver', position: 'WR', espnId: '9000033' } },
+];
+
+function fakeMarket() {
+  const calls = [];
+  const impl = async (url) => {
+    calls.push(String(url));
+    return { ok: true, status: 200, json: async () => MARKET_FIXTURE };
+  };
+  return { impl, calls };
+}
+
+const marketArgs = (store, league, impl) => ({ store, league, teams: TEAMS_AFTER_WEEK_4, week: SCORED_WEEK, fetchImpl: impl });
+
+test('an ESPN league is priced by espnId: a player with no espnId is unpriced, never matched by name', async () => {
+  const store = createStore({ dataDir: tempDir('pressbox-espn-market-') });
+  const market = fakeMarket();
+  const result = await readMarketValues(marketArgs(store, espnLeague(), market.impl));
+  assert.equal(result.idSpace, 'espn');
+  assert.deepEqual(Object.keys(result.players).sort(), ['9000011', '9000033']);
+  assert.equal(result.players['9000011'].value, 7000);
+  // Sleeperonly Receiver has no ESPN ID: he is not keyed by his Sleeper ID, and not found by name.
+  assert.ok(!('222' in result.players));
+  assert.ok(!Object.values(result.players).some((p) => p.name === 'Sleeperonly Receiver'));
+  assert.equal(store.loadMarketValues(String(SEASON), SCORED_WEEK).idSpace, 'espn');
+});
+
+test('a saved market with no idSpace reads as Sleeper, so an ESPN league fetches it again, never reads it', async () => {
+  const store = createStore({ dataDir: tempDir('pressbox-espn-market-') });
+  // An ESPN ID looked up in a Sleeper-keyed market could name another player.
   store.saveMarketValues(String(SEASON), SCORED_WEEK, { source: 'FantasyCalc', players: { 9000011: { value: 9999 } }, picks: {} });
-  let calls = 0;
-  const result = await readMarketValues({
-    store,
-    league,
-    teams: TEAMS_AFTER_WEEK_4,
-    week: SCORED_WEEK,
-    fetchImpl: async () => {
-      calls += 1;
-      throw new Error('fetched');
-    },
-  });
-  assert.deepEqual(result, { unavailable: 'FantasyCalc values are not matched to ESPN player IDs in this version' });
-  assert.equal(calls, 0);
+  const market = fakeMarket();
+  const result = await readMarketValues(marketArgs(store, espnLeague(), market.impl));
+  assert.equal(market.calls.length, 1);
+  assert.equal(result.players['9000011'].value, 7000);
+  // The new snapshot replaced it and is read back without another fetch.
+  await readMarketValues(marketArgs(store, espnLeague(), market.impl));
+  assert.equal(market.calls.length, 1);
+});
+
+test('a saved ESPN market is fetched again for a Sleeper league', async () => {
+  const store = createStore({ dataDir: tempDir('pressbox-espn-market-') });
+  store.saveMarketValues(String(SEASON), SCORED_WEEK, { source: 'FantasyCalc', idSpace: 'espn', players: { 111: { value: 1 } }, picks: {} });
+  const market = fakeMarket();
+  const sleeper = { provider: 'sleeper', season: String(SEASON), format: { type: 'redraft', scoring: {} } };
+  const result = await readMarketValues(marketArgs(store, sleeper, market.impl));
+  assert.equal(market.calls.length, 1);
+  assert.deepEqual(Object.keys(result.players).sort(), ['111', '222']);
+});
+
+test('an ESPN keeper league is priced as redraft and a declared-dynasty one as dynasty', async () => {
+  for (const [type, isDynasty] of [['redraft', false], ['dynasty', true]]) {
+    const store = createStore({ dataDir: tempDir('pressbox-espn-market-') });
+    const market = fakeMarket();
+    await readMarketValues(marketArgs(store, espnLeague({ type, keeper: type === 'redraft', scoring: {} }), market.impl));
+    assert.equal(new URL(market.calls[0]).searchParams.get('isDynasty'), String(isDynasty), type);
+  }
 });
 
 // --- A settled week is kept, even when ESPN later reports it differently ------------------
