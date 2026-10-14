@@ -15,6 +15,7 @@
  *   predictions/<season>/week-<n>.json  what we said would happen
  *   market/<season>/week-<n>.json       trade values as fetched for that week
  *   tank-watch/<season>/week-<n>.json   the draft order a tank watch reported
+ *   editions/<season>/week-<n>-<task>.json  the whole reply an edition was recorded from
  *
  * This module has no node: imports. A back end supplies four operations:
  *   read(kind, season, file)         → the saved value, or null
@@ -24,6 +25,9 @@
  */
 
 const WEEK_FILE = /^week-(\d+)\.json$/;
+
+/** Where an edition's reply is kept: `week-<n>-<task>.json`. */
+const editionFile = (week, task) => `week-${week}-${task}.json`;
 
 /** The week numbers of the `week-<n>.json` files in a listing, ascending. */
 function weeksIn(files) {
@@ -177,6 +181,26 @@ export function createStoreOver(backend) {
       const earlier = weeksIn(list('tank-watch', season)).filter((week) => week < beforeWeek);
       if (!earlier.length) return null;
       return read('tank-watch', season, weekFile(earlier[earlier.length - 1]));
+    },
+
+    /**
+     * The whole reply an edition was recorded from (recordEdition), so it can
+     * be read again later: the rankings and predictions files keep only its
+     * machine-readable tail. `from` is 'pasted' or 'generated'. Recording the
+     * same edition again replaces it, as it replaces the rankings.
+     */
+    saveEdition(season, week, task, { text, from }) {
+      return write('editions', season, editionFile(week, task), {
+        season: String(season),
+        week,
+        task,
+        from,
+        savedAt: new Date().toISOString(),
+        text,
+      });
+    },
+    loadEdition(season, week, task) {
+      return read('editions', season, editionFile(week, task));
     },
   };
 

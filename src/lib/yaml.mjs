@@ -170,6 +170,94 @@ function parseBlock(lines, start, indent, path, limits) {
 }
 
 /**
+ * Writes `value` as YAML that parseYaml reads back as the same value: maps,
+ * lists of scalars and lists of maps, every string quoted. Used to turn a
+ * league file's declared settings back into a league folder's config files
+ * (src/leagueFile.mjs).
+ *
+ * The subset is parseYaml's, so anything it cannot read back is refused rather
+ * than written wrong: a string holding a line break or both kinds of quote, a
+ * number written with an exponent, a list inside a list. An empty map or list
+ * is written as an empty value, which reads back as null.
+ */
+export function stringifyYaml(value) {
+  if (!isMap(value)) throw new TypeError('stringifyYaml writes a map at the top level');
+  const lines = mapLines(value, 0, []);
+  return lines.length ? `${lines.join('\n')}\n` : '';
+}
+
+const isMap = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+const isEmpty = (value) => (Array.isArray(value) ? value.length === 0 : isMap(value) && Object.keys(value).length === 0);
+
+function yamlField(path) {
+  return path.length ? path.join('.') : 'the top level';
+}
+
+function yamlQuoted(text, path) {
+  if (/[\r\n]/.test(text)) throw new Error(`${yamlField(path)}: a line break cannot be written to this YAML`);
+  if (!text.includes('"')) return `"${text}"`;
+  if (!text.includes("'")) return `'${text}'`;
+  throw new Error(`${yamlField(path)}: a text holding both kinds of quote cannot be written to this YAML`);
+}
+
+function yamlScalar(value, path) {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'boolean') return String(value);
+  if (typeof value === 'number') {
+    const text = String(value);
+    if (!/^-?\d+$/.test(text) && !/^-?\d*\.\d+$/.test(text)) {
+      throw new Error(`${yamlField(path)}: the number ${text} cannot be written to this YAML`);
+    }
+    return text;
+  }
+  if (typeof value === 'string') return yamlQuoted(value, path);
+  throw new Error(`${yamlField(path)}: a ${typeof value} cannot be written to YAML`);
+}
+
+function yamlKey(key, path) {
+  return /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(key) ? key : yamlQuoted(key, path);
+}
+
+/** A map's lines at `indent`; the first may be prefixed by the caller (a list's dash). */
+function mapLines(map, indent, path) {
+  const pad = ' '.repeat(indent);
+  const lines = [];
+  for (const [key, value] of Object.entries(map)) {
+    const here = [...path, key];
+    const head = `${pad}${yamlKey(key, here)}:`;
+    if (Array.isArray(value) && value.length) {
+      lines.push(head, ...listLines(value, indent + 2, here));
+    } else if (isMap(value) && !isEmpty(value)) {
+      lines.push(head, ...mapLines(value, indent + 2, here));
+    } else if (isEmpty(value)) {
+      lines.push(head);
+    } else {
+      lines.push(`${head} ${yamlScalar(value, here)}`);
+    }
+  }
+  return lines;
+}
+
+function listLines(list, indent, path) {
+  const pad = ' '.repeat(indent);
+  const lines = [];
+  list.forEach((item, index) => {
+    const here = [...path, index];
+    if (Array.isArray(item)) throw new Error(`${yamlField(here)}: a list inside a list cannot be written to this YAML`);
+    if (isMap(item) && !isEmpty(item)) {
+      // `- first: value`, then the rest of the map lined up under `first`.
+      const [first, ...rest] = mapLines(item, indent + 2, here);
+      lines.push(`${pad}- ${first.slice(indent + 2)}`, ...rest);
+    } else if (isEmpty(item)) {
+      throw new Error(`${yamlField(here)}: an empty map or list inside a list cannot be written to this YAML`);
+    } else {
+      lines.push(`${pad}- ${yamlScalar(item, here)}`);
+    }
+  });
+  return lines;
+}
+
+/**
  * Parses `source`. `limits` defaults to CONFIG_LIMITS (src/lib/safeInput.mjs).
  * A refusal is an UnsafeInputError naming the field; the caller puts the
  * file's name in front of it.

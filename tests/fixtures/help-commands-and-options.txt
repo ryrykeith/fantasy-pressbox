@@ -2,6 +2,8 @@ Commands
   init                          Set up a league folder (run this first)
   doctor                        Check that everything is configured and reachable
   migrate <folder>              Copy this league into a new folder; nothing is removed
+  export-league [file]          Save this league's history and settings as one league file
+  import-league <file>          Turn a league file into a league folder
 
   preview                       Build the weekly matchup previews
   recap                         Build the weekly recap and awards

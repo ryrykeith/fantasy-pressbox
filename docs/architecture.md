@@ -98,6 +98,86 @@ workspace's config folder.
 Run from a checkout's own folder, the two roots are the same directory, which
 is how a cloned repository covering one league keeps working unchanged.
 
+### The league file
+
+A league file (`src/leagueFile.mjs`) is one JSON file holding a league's
+history and settings, so a league can move between the CLI and the website,
+or between machines. `export-league [file]` writes one from a league folder
+(by default `output/<display-name>.fantasy-pressbox.json`); `import-league
+<file>` turns one into a league folder. Both go through the same validator
+the website uses.
+
+```json
+{
+  "schemaVersion": 1,
+  "kind": "fantasy-pressbox.league",
+  "writtenBy": { "package": "fantasy-pressbox", "version": "0.1.0", "surface": "cli" },
+  "writtenAt": "2026-10-14T18:00:00.000Z",
+  "league": { "provider": "sleeper", "leagueId": "000000000000000000" },
+  "settings": {
+    "displayName": "Taco Tuesday League", "format": null, "season": null, "week": null,
+    "espnRoute": null, "tone": null, "roastIntensity": null, "postFormat": "sleeper",
+    "maxChars": null, "rankEmoji": { "mode": "default" }, "editorial": null, "rankings": null,
+    "declared": { "eliminations": null, "rookieDraft": null, "prospects": {} }
+  },
+  "seasons": {
+    "2026": {
+      "raw": {}, "import": {}, "snapshots": {}, "rankings": {}, "predictions": {},
+      "market": {}, "tankWatch": {}, "editions": {}
+    }
+  }
+}
+```
+
+- **Seasons mirror the store one to one.** Each kind of history is a store
+  kind (`tankWatch` is `tank-watch`) and each entry is one of its files, named
+  without `.json`: `seasons["2026"].rankings["week-3"]` is
+  `data/rankings/2026/week-3.json`. An import writes each file back as the
+  store writes it, so a folder exported and imported again has the same
+  `data/` files byte for byte. `editions` holds each recorded reply's whole
+  text (`week-<n>-<task>`), which `record` and `--generate` save from the
+  release after 0.1.0; history recorded before then has none.
+- **A setting is what the folder declares**, null when it declares nothing so
+  the package default applies. From `.env`: `displayName`
+  (`LEAGUE_DISPLAY_NAME`), `format` (`LEAGUE_FORMAT`), `season`
+  (`LEAGUE_SEASON`, else `SLEEPER_SEASON`), `week` (`FANTASY_WEEK`),
+  `espnRoute` (`ESPN_ROUTE`), `tone` (`PRESSBOX_TONE`, else `tone` in
+  `editorial.yml`), `maxChars` (`POST_MAX_LENGTH`, else
+  `SLEEPER_POST_MAX_LENGTH`, else `editorial.yml`), and `rankEmoji`:
+  `none` when emoji are off (`INCLUDE_EMOJI`), `custom` with the table when
+  `editorial.yml` has a `ranking_emoji` table, `default` otherwise.
+  `roastIntensity` is `editorial.yml`'s `roast_intensity`; `editorial` is the
+  rest of that file, and `rankings` is `config/rankings.yml`. `declared` holds
+  `guillotine.yml`'s eliminations, `rookie-draft.yml` and every
+  `prospects.<year>.yml`. `postFormat` is the website's posting choice; the CLI
+  takes it from `--format` on each run.
+- **The folder is read through an allowlist** (`leagueFileFromWorkspace`): from
+  `.env` only `LEAGUE_FILE_ENV_KEYS`, every other line dropped before its value
+  is read; the config files above; `data/<kind>/<YYYY>/<name>.json`. Everything
+  else, `data/cache/` among it, is listed as not read and never opened. So the
+  file never holds an API key, `ESPN_S2`, `ESPN_SWID`, `AI_PROVIDER`,
+  `AI_MODEL`, `DATA_DIR`, `OUTPUT_DIR` or `DEBUG`.
+- **Saved ESPN pages lose their people** (members, owners, first and last
+  names, every braced GUID): see "The league file" in `docs/espn-data.md`.
+  `serializeLeagueFile` refuses a file still holding a value shaped like an
+  ESPN member ID.
+- **Refused, naming the field:** an unknown top-level key, settings key, `kind`
+  or kind of history; a malformed entry (`seasons.2026.rankings.week-3.rankings
+  must be a list`); a schema version newer than the package reads, in plain
+  words ("Update the package"). An older version is migrated (`MIGRATIONS`;
+  there is none yet). The JSON is read with `parseJsonSafely` at
+  `LEAGUE_JSON_LIMITS`.
+- **Written unindented, raw bundles included.** One invented 12-team, 17-week
+  dynasty season (`node scripts/measure-league-file.mjs`, 2026-10-14) is
+  2,614 KB with its raw bundles and 2,402 KB without (6,501 and 5,904 KB
+  indented; 294 and 251 KB gzipped). The raw bundles are 212 KB of it, against
+  1,257 KB of snapshots and 832 KB of trade values, and the FAAB market reads
+  them, so they stay in.
+- `import-league` writes into the workspace (`--workspace`, then
+  `PRESSBOX_WORKSPACE`, then the current folder), creating it if needed. It
+  refuses a folder that is already a league, the package folder, and any file
+  that already exists; the `.env` is written last.
+
 ### Workspace overrides
 
 A workspace may adjust the shipped defaults without copying the package:
@@ -124,9 +204,11 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 
 | Path | Responsibility |
 |---|---|
-| `src/lib/yaml.mjs` | A small YAML reader, so `config/` needs no dependency |
+| `src/lib/yaml.mjs` | A small YAML reader, so `config/` needs no dependency, and `stringifyYaml`, which writes only what the reader reads back as the same value (import-league's config files) |
 | `src/lib/safeInput.mjs` | The rules every parser applies to text a stranger could hand it: refuse keys named `__proto__`, `constructor` or `prototype`, and enforce size, nesting-depth and string-length limits (`CONFIG_LIMITS` for settings, `LEAGUE_JSON_LIMITS` for league JSON). `parseJsonSafely` and `safeJsonReviver` read league JSON; the YAML reader and `deepMerge` use the same checks. Refusals name the file and field, never a value. No `node:` imports |
-| `src/lib/env.mjs` | `.env` parsing, so secrets need no dependency |
+| `src/lib/envText.mjs` | `.env` parsing, so secrets need no dependency, and `parseEnvAllowlist`, which drops every key but the allowed ones before reading its value. No `node:` imports |
+| `src/lib/env.mjs` | Reads a `.env` file from disk through `envText.mjs`, under any real environment variable |
+| `src/version.mjs` | The package's name and version as code, for the browser; a test holds them to `package.json` |
 | `src/config.mjs` | Merges flags, env, `config/*.yml` and defaults; owns the package root and the workspace root (above) |
 | `src/workspace.mjs` | What makes a folder a league workspace, the refusal outside one, and the copy-only `migrate` |
 | `src/init.mjs` | What init offers and writes, without the terminal: format choices, rookie draft presets, answers read by the loader's parsers, and a `rookie-draft.yml` checked back through them. `setup.mjs` asks the questions |
@@ -162,7 +244,9 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/futureStock.mjs` | The future-stock edition: its refusal (dynasty only) and each team's age, production-by-age and priced pick capital, with held picks placed at their projected slot |
 | `src/fantasycalc/client.mjs` | FantasyCalc trade values: query from the league's format and scoring, fetch, normalize. FantasyCalc field names stop here, as Sleeper's stop at `src/sleeper/` |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
-| `src/storeCore.mjs` | The store's methods (raw, snapshots, rankings, predictions, market values, tank watch, imported league) over a back end, and `createMemoryStore`. No `node:` imports |
+| `src/storeCore.mjs` | The store's methods (raw, snapshots, rankings, predictions, market values, tank watch, imported league, and each recorded edition's whole reply) over a back end, and `createMemoryStore`. No `node:` imports |
+| `src/leagueFile.mjs` | The league file: one versioned JSON file holding a league's history and settings, which the website and the CLI share ([The league file](#the-league-file)). Schema, validator, migration, the folder mapping both ways, and the stripping of people from saved ESPN pages. No `node:` imports |
+| `src/leagueFolder.mjs` | The disk half of `export-league` and `import-league`: reads a league folder's files (only those the mapping reads) and writes a league file's folder without overwriting anything |
 | `src/store.mjs` | The file back end: `createStore({ dataDir })`, data/<kind>/<season>/<file>.json. The CLI makes it and passes it to `openLeague`; the pipeline never makes a store |
 | `src/rankingGrades.mjs` | Ranking movement and prediction grading. Pure, no `node:` imports |
 | `src/teamIdentity.mjs` | Which roster a published team name means, across renames |
@@ -171,7 +255,7 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/validate.mjs` | Post splitting and length checking |
 | `src/pipeline.mjs` | The run order |
 | `src/options.mjs` | `EDITIONS` and `OPTIONS`, the descriptors both surfaces read: each edition's command, formats, and whether it is recordable or forward-looking; each option's flag, values, default, help line, the editions it changes, and whether only the CLI offers it. `parseArgs` is built from them. No `node:` imports |
-| `src/edition.mjs` | The steps of an edition, shared by the CLI and the website: `prepareEdition` (every refusal, open, resolve the week, capture, build the context and the prompt) and `recordEdition` (file a reply's machine-readable tail). No `node:` imports, directly or through anything it imports |
+| `src/edition.mjs` | The steps of an edition, shared by the CLI and the website: `prepareEdition` (every refusal, open, resolve the week, capture, build the context and the prompt) and `recordEdition` (file a reply's machine-readable tail, then keep the whole reply). No `node:` imports, directly or through anything it imports |
 | `src/cli.mjs` | Commands and human-facing output: finds the league folder, calls `prepareEdition`/`recordEdition`, writes files, and makes the optional AI call. `--help` is built from the descriptors |
 | `src/welcome.mjs` | How the CLI talks someone through starting: the command line its advice prints (global install, npx, a project's node_modules, or a clone), the banner, the getting-started steps and the weekly routine |
 

@@ -188,7 +188,7 @@ test('--help lists exactly the editions in EDITIONS that a command builds', () =
   for (const edition of built) {
     assert.match(commands, new RegExp(`^ {2}${edition.command} +${edition.summary.replace(/[()]/g, '\\$&')}$`, 'm'));
   }
-  const others = ['init', 'doctor', 'migrate', 'record', 'grade', 'check', 'fetch', 'import-espn'];
+  const others = ['init', 'doctor', 'migrate', 'export-league', 'import-league', 'record', 'grade', 'check', 'fetch', 'import-espn'];
   assert.deepEqual([...listed].sort(), [...others, ...built.map((edition) => edition.command)].sort());
 });
 
@@ -230,8 +230,8 @@ function importGraph(entry) {
   return seen;
 }
 
-test('prepareEdition and recordEdition import nothing from node:, directly or through anything they import', () => {
-  for (const entry of ['edition.mjs', 'options.mjs']) {
+test('prepareEdition, recordEdition and the league file import nothing from node:, directly or through anything they import', () => {
+  for (const entry of ['edition.mjs', 'options.mjs', 'leagueFile.mjs']) {
     const graph = importGraph(join(SRC, entry));
     assert.ok(graph.size > 10, `${entry} graph looks too small: ${graph.size}`);
     for (const [file, specifiers] of graph) {

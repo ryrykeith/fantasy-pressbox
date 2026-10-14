@@ -8,7 +8,7 @@
  */
 import { writeFileSync, mkdirSync, readFileSync, existsSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getProvider, providerDisplayName } from './providers.mjs';
@@ -40,6 +40,15 @@ import { generate, describeProvider, detectProvider } from './generate.mjs';
 import { checkPosts, stripJsonBlock } from './validate.mjs';
 import { gradePredictions } from './rankingGrades.mjs';
 import { createStore } from './store.mjs';
+import {
+  leagueFileFromWorkspace,
+  leagueFileName,
+  parseLeagueFile,
+  serializeLeagueFile,
+  workspaceFromLeagueFile,
+} from './leagueFile.mjs';
+import { readLeagueFolder, writeLeagueFolder } from './leagueFolder.mjs';
+import { LEAGUE_JSON_LIMITS } from './lib/safeInput.mjs';
 import {
   EDITIONS,
   OPTIONS,
@@ -110,6 +119,8 @@ const SETUP_COMMANDS = [
   ['init', 'Set up a league folder (run this first)'],
   ['doctor', 'Check that everything is configured and reachable'],
   ['migrate <folder>', 'Copy this league into a new folder; nothing is removed'],
+  ['export-league [file]', "Save this league's history and settings as one league file"],
+  ['import-league <file>', 'Turn a league file into a league folder'],
 ];
 const OTHER_COMMANDS = [
   ['record <file>', 'File a finished edition you pasted back from a chat'],
@@ -921,6 +932,98 @@ function commandMigrate(config, args) {
   return 0;
 }
 
+/**
+ * Writes this league as one league file (src/leagueFile.mjs): its history
+ * under data/ and its settings from .env and config/, through the same
+ * mapping the website uses. An AI key, the ESPN cookies and the other .env
+ * lines a league file never holds are dropped as the .env is read.
+ */
+function commandExportLeague(config, args) {
+  requireLeague(config);
+  const { entries, unread } = readLeagueFolder({
+    workspaceRoot: config.workspaceRoot,
+    dataDir: config.dataDir,
+    fromPackage: workspaceIsPackage(config.workspaceRoot),
+  });
+  const { leagueFile, skipped, ignoredEnvKeys } = leagueFileFromWorkspace(entries, { surface: 'cli' });
+  const text = serializeLeagueFile(leagueFile);
+
+  const target = resolve(args._[1] ?? join(config.outputDir, leagueFileName(leagueFile)));
+  if (isInsideFolder(resolve(config.dataDir), target)) {
+    throw new Error(`${target} is inside the league's data folder, which holds only its history. Choose another place.`);
+  }
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, text);
+
+  say(`League file written to ${target} (${formatBytes(Buffer.byteLength(text))}).`);
+  for (const [season, kinds] of Object.entries(leagueFile.seasons)) {
+    const counts = Object.entries(kinds)
+      .filter(([, files]) => Object.keys(files).length)
+      .map(([kind, files]) => `${kind} ${Object.keys(files).length}`);
+    say(`  ${season}: ${counts.join(', ') || 'no history'}`);
+  }
+  if (ignoredEnvKeys.length) {
+    say(`Left out of the file from .env: ${ignoredEnvKeys.join(', ')}. A league file never holds a key or a cookie.`);
+  }
+  const notRead = [...new Set([...unread, ...skipped])];
+  if (notRead.length) say(`Not read: ${notRead.join(', ')}`);
+  return 0;
+}
+
+/**
+ * Turns a league file into a league folder: the workspace (--workspace,
+ * PRESSBOX_WORKSPACE or this folder) gets the .env, config files and data/
+ * the file describes. Refused when the folder already holds a league, or any
+ * file the import would write.
+ */
+function commandImportLeague(args) {
+  const file = args._[1];
+  if (!file) {
+    throw new Error(
+      `Usage: ${CLI_COMMAND} import-league <file> [--workspace <folder>]\n` +
+        'Writes the league in <file> into a new league folder (this folder, or the one --workspace names).',
+    );
+  }
+  const workspaceRoot = resolveWorkspaceRoot({ flag: args.workspace, create: true });
+  if (isInsideFolder(realpathSync(PACKAGE_ROOT), realpathSync(workspaceRoot))) {
+    throw new Error(
+      `${workspaceRoot} is inside the Fantasy Pressbox package folder (${PACKAGE_ROOT}). ` +
+        'A league lives in its own folder: name one with --workspace <folder>.',
+    );
+  }
+  if (isLeagueWorkspace(workspaceRoot)) {
+    throw new Error(
+      `${workspaceRoot} is already a league folder (it has a .env). ` +
+        'Import into a new or empty folder with --workspace <folder>, so no two histories are mixed.',
+    );
+  }
+
+  const path = resolve(file);
+  if (!existsSync(path)) throw new Error(`${file} does not exist.`);
+  const stats = statSync(path);
+  if (!stats.isFile()) throw new Error(`${file} is not a file.`);
+  if (stats.size > LEAGUE_JSON_LIMITS.maxBytes) {
+    throw new Error(`${file} is larger than ${formatBytes(LEAGUE_JSON_LIMITS.maxBytes)}, the most a league file may be, so it was not read.`);
+  }
+  const leagueFile = parseLeagueFile(readFileSync(path, 'utf8'), { name: file });
+  const written = writeLeagueFolder({ workspaceRoot, entries: workspaceFromLeagueFile(leagueFile) });
+
+  const { writtenBy, writtenAt, league } = leagueFile;
+  say(`Imported the ${providerDisplayName(league.provider)} league ${league.leagueId ?? '(no league ID yet)'} into ${workspaceRoot}`);
+  say(`  written by ${writtenBy.package} ${writtenBy.version} (${writtenBy.surface}) at ${writtenAt}; ${written.length} file(s).`);
+  if (!league.leagueId) say(`Add the league ID to ${join(workspaceRoot, '.env')} before running anything.`);
+  say(`\nCheck it with: ${CLI_COMMAND} doctor --workspace ${workspaceRoot}`);
+  say('A league file never holds an AI key: add yours to .env again if you use --generate.');
+  return 0;
+}
+
+/** A byte count as people read it: 812 bytes, 41.3 KB, 2.4 MB. */
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /* -------------------------------------------------------------------- main */
 
 async function main() {
@@ -936,14 +1039,18 @@ async function main() {
     return 0;
   }
 
-  // Before any config is read: the folder init sets up may not exist yet.
+  // Before any config is read: the folder init sets up may not exist yet, and
+  // neither may the one a league file is imported into.
   if (command === 'init') return commandInit(args);
+  if (command === 'import-league') return commandImportLeague(args);
 
   const config = loadConfig({ workspaceRoot: resolveWorkspaceRoot({ flag: args.workspace }) });
 
   switch (command) {
     case 'migrate':
       return commandMigrate(config, args);
+    case 'export-league':
+      return commandExportLeague(config, args);
     case 'doctor':
       return commandDoctor(config);
     case 'fetch':

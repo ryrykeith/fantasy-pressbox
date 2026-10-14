@@ -41,20 +41,11 @@ import { fileURLToPath } from 'node:url';
 import { parseYaml } from './lib/yaml.mjs';
 import { environmentWithFile } from './lib/env.mjs';
 import { parseDeclaredFormatType } from './format.mjs';
-import { DEFAULT_PROVIDER, providerDisplayName } from './providers.mjs';
+import { providerDisplayName } from './providers.mjs';
 import { loadAssets } from './assets.mjs';
 import { createDiskPlayerCache } from './diskPlayerCache.mjs';
 import { parseProspectBoard } from './prospectBoard.mjs';
-import {
-  ESPN_ROUTE_KEY,
-  LEAGUE_ID_KEYS,
-  LEAGUE_PROVIDER_KEY,
-  firstSet,
-  mergeSettingsLayer,
-  parseEspnRoute,
-  parseLeagueProvider,
-  resolveSettings,
-} from './settings.mjs';
+import { firstSet, leagueSettingsFromEnv, mergeSettingsLayer, resolveSettings } from './settings.mjs';
 
 // The pure half moved to src/settings.mjs. Re-exported so existing importers
 // of config.mjs keep working; new code that has no business with the disk
@@ -209,19 +200,7 @@ function readYamlLayer(path) {
  * through `resolveSettings`.
  */
 function readLeagueSettings(env) {
-  const declared = parseLeagueProvider(env[LEAGUE_PROVIDER_KEY]);
-  const named = Object.entries(LEAGUE_ID_KEYS).filter(([, key]) => firstSet(env, [key]));
-  if (!declared && named.length > 1) {
-    const keys = named.map(([, key]) => key);
-    throw new Error(
-      `.env sets both ${keys.join(' and ')}, so it does not say which league this folder covers.\n\n` +
-        `Add ${LEAGUE_PROVIDER_KEY} to .env, naming the platform: ` +
-        `${named.map(([name]) => `${LEAGUE_PROVIDER_KEY}=${name}`).join(' or ')}.`,
-    );
-  }
-  const provider = declared ?? DEFAULT_PROVIDER;
-  // ESPN_ROUTE only means something to ESPN; a Sleeper folder's stray line is ignored.
-  const route = provider === 'espn' ? parseEspnRoute(env[ESPN_ROUTE_KEY]) : null;
+  const { provider, id, season, route } = leagueSettingsFromEnv(env);
   // Sleeper's API is public: there is nothing secret to hold. ESPN's cookies
   // are read only on the fetch route: under import they are never read, even
   // when set. They live here and are never copied into process.env.
@@ -240,14 +219,7 @@ function readLeagueSettings(env) {
       secrets.ESPN_SWID = swid;
     }
   }
-  return {
-    provider,
-    id: firstSet(env, [LEAGUE_ID_KEYS[provider]]) ?? '',
-    // The generic key wins over the Sleeper-named one.
-    season: firstSet(env, ['LEAGUE_SEASON', 'SLEEPER_SEASON']),
-    route,
-    secrets,
-  };
+  return { provider, id, season, route, secrets };
 }
 
 function bool(value, fallback) {

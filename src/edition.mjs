@@ -691,6 +691,9 @@ export async function prepareEdition({
  * `league` and `teams` are the opened league's; with them every team name in
  * the block is pinned to its roster before anything is saved.
  *
+ * Once the block is filed, the whole reply is saved too
+ * (store.saveEdition, editions/<season>/week-<n>-<task>.json).
+ *
  * → whether anything was recorded.
  */
 export function recordEdition({
@@ -714,7 +717,14 @@ export function recordEdition({
     }
     log.say(`Recording ${task} for week ${week}.`);
   }
-  return recordBlock({ store, league, week, task, block, previousRankings, say: log.say, teams });
+  const recorded = recordBlock({ store, league, week, task, block, previousRankings, say: log.say, teams });
+  // The whole reply is kept beside its tail, so the edition can be read again
+  // later; the rankings and predictions files hold only what the block said.
+  if (recorded) {
+    const path = store.saveEdition(league.season, week, task, { text, from });
+    log.say(`Saved the whole reply → ${path}`);
+  }
+  return recorded;
 }
 
 /**

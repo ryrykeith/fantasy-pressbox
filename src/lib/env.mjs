@@ -1,31 +1,14 @@
 /**
- * Reads a .env file into a plain object. No dependency on dotenv.
+ * Reads a .env file from disk into a plain object. No dependency on dotenv.
+ * The parsing itself is src/lib/envText.mjs, which the browser can load too.
  *
- * Supports `KEY=value`, `export KEY=value`, `#` comments, blank lines and
- * optionally quoted values. Values already present in the real environment
- * win, so `SLEEPER_LEAGUE_ID=... npx fantasy-pressbox` overrides the file.
+ * Values already present in the real environment win, so
+ * `SLEEPER_LEAGUE_ID=... npx fantasy-pressbox` overrides the file.
  */
 import { readFileSync, existsSync } from 'node:fs';
+import { parseEnv } from './envText.mjs';
 
-export function parseEnv(source) {
-  const values = {};
-  for (const line of source.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (trimmed === '' || trimmed.startsWith('#')) continue;
-    const match = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(trimmed);
-    if (!match) continue;
-    let value = match[2].trim();
-    const quoted = /^"(.*)"$/s.exec(value) || /^'(.*)'$/s.exec(value);
-    if (quoted) {
-      value = quoted[1];
-    } else {
-      // Only strip comments from unquoted values, so URLs with # survive quotes.
-      value = value.replace(/\s+#.*$/, '').trim();
-    }
-    values[match[1]] = value;
-  }
-  return values;
-}
+export { parseEnv };
 
 export function loadEnvFile(path) {
   if (!existsSync(path)) return {};

@@ -440,6 +440,41 @@ export function parseEspnRoute(value, { source = `${ESPN_ROUTE_KEY} in .env` } =
   );
 }
 
+/**
+ * Which league a folder's .env names, without its secrets:
+ * `{ provider, id, season, route }`.
+ *
+ * - provider: LEAGUE_PROVIDER, else Sleeper. A .env naming both league IDs
+ *   without saying which platform is refused.
+ * - id: the provider's league ID key, '' when it is not set.
+ * - season: LEAGUE_SEASON, else SLEEPER_SEASON (the generic key wins), or null.
+ * - route: ESPN_ROUTE for an ESPN league, null for any other (a Sleeper
+ *   folder's stray line is ignored).
+ *
+ * The ESPN cookies are not read here: src/config.mjs reads them, and only on
+ * the fetch route. The league file (src/leagueFile.mjs) reads a folder's
+ * .env through this too, so both agree on which league a folder covers.
+ */
+export function leagueSettingsFromEnv(env) {
+  const declared = parseLeagueProvider(env[LEAGUE_PROVIDER_KEY]);
+  const named = Object.entries(LEAGUE_ID_KEYS).filter(([, key]) => firstSet(env, [key]));
+  if (!declared && named.length > 1) {
+    const keys = named.map(([, key]) => key);
+    throw new Error(
+      `.env sets both ${keys.join(' and ')}, so it does not say which league this folder covers.\n\n` +
+        `Add ${LEAGUE_PROVIDER_KEY} to .env, naming the platform: ` +
+        `${named.map(([name]) => `${LEAGUE_PROVIDER_KEY}=${name}`).join(' or ')}.`,
+    );
+  }
+  const provider = declared ?? DEFAULT_PROVIDER;
+  return {
+    provider,
+    id: firstSet(env, [LEAGUE_ID_KEYS[provider]]) ?? '',
+    season: firstSet(env, ['LEAGUE_SEASON', 'SLEEPER_SEASON']),
+    route: provider === 'espn' ? parseEspnRoute(env[ESPN_ROUTE_KEY]) : null,
+  };
+}
+
 /** The emoji that precedes a team at a given rank, e.g. 1 -> 🥇. */
 export function rankEmoji(config, rank) {
   if (!config.editorial.output.include_emoji) return '';
