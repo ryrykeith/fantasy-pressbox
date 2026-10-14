@@ -31,6 +31,7 @@ import {
   stripEspnPersonalData,
   workspaceFromLeagueFile,
 } from '../src/leagueFile.mjs';
+import { LEAGUE_JSON_LIMITS } from '../src/lib/safeInput.mjs';
 import { parseYaml, stringifyYaml } from '../src/lib/yaml.mjs';
 import { createMemoryStore } from '../src/storeCore.mjs';
 import { PACKAGE_NAME, PACKAGE_VERSION } from '../src/version.mjs';
@@ -500,4 +501,57 @@ test('an ESPN league file holds no member ID, owner or real name, and the rebuil
   ok(runCli(copy, ['recap', '--week', String(SCORED_WEEK)]));
   const undated = (prompt) => prompt.replace(/"generatedAt": "[^"]+"/g, '"generatedAt": "…"');
   assert.equal(undated(readFileSync(join(copy, 'output', recap), 'utf8')), undated(readFileSync(join(root, 'output', recap), 'utf8')));
+});
+
+/** A league file whose serialized text is exactly `bytes` long, padded through rankings entries of ordinary-sized strings. */
+function leagueFileOfSize(bytes) {
+  const file = newLeagueFile({ surface: 'cli', leagueId: FAKE_LEAGUE_ID });
+  const rankings = {};
+  file.seasons = { 2026: { rankings } };
+  const entries = 10;
+  for (let week = 1; week <= entries; week += 1) {
+    rankings[`week-${week}`] = { season: '2026', label: `week-${week}`, week, rankings: [] };
+  }
+  // Serializing fills in defaults, so the written text is longer than the object stringified.
+  const written = Buffer.byteLength(serializeLeagueFile(file));
+  const need = bytes - written;
+  // m strings cost their characters, two quotes each and a comma between neighbours in a list.
+  const overhead = (m) => 3 * m - Math.min(m, entries);
+  let count = 1;
+  while (need - overhead(count) > 90_000 * count) count += 1;
+  let chars = need - overhead(count);
+  for (let i = 0; i < count; i += 1) {
+    const length = Math.min(90_000, chars);
+    chars -= length;
+    rankings[`week-${(i % entries) + 1}`].rankings.push('x'.repeat(length));
+  }
+  return file;
+}
+
+const LIMIT = LEAGUE_JSON_LIMITS.maxBytes;
+
+test('serializeLeagueFile reads back text at the byte limit and refuses text over it, naming size and limit', () => {
+  const atLimit = serializeLeagueFile(leagueFileOfSize(LIMIT));
+  assert.equal(Buffer.byteLength(atLimit), LIMIT);
+  assert.equal(parseLeagueFile(atLimit, { name: 'league.json' }).seasons['2026'].rankings['week-1'].week, 1);
+
+  refused(() => serializeLeagueFile(leagueFileOfSize(LIMIT + 1)), '', /would be 20\.0 MB, over the 20\.0 MB a league file may be\. It was not written/);
+  refused(() => serializeLeagueFile(leagueFileOfSize(LIMIT + 5 * 1024 * 1024)), '', /would be 25\.0 MB, over the 20\.0 MB/);
+});
+
+test('export-league exits non-zero and writes no file when the league file would be over the limit', () => {
+  const root = tempDir('export-over-limit');
+  mkdirSync(join(root, 'data', 'rankings', '2026'), { recursive: true });
+  writeFileSync(join(root, '.env'), `LEAGUE_PROVIDER=sleeper\nSLEEPER_LEAGUE_ID=${FAKE_LEAGUE_ID}\n`);
+  // Each file is under the 20 MB a single file is read at; together they are not.
+  const chunk = 'x'.repeat(90_000);
+  for (let week = 1; week <= 9; week += 1) {
+    const entry = { season: '2026', label: `week-${week}`, week, rankings: Array.from({ length: 30 }, () => chunk) };
+    writeFileSync(join(root, 'data', 'rankings', '2026', `week-${week}.json`), JSON.stringify(entry));
+  }
+  const target = join(root, 'league.json');
+  const result = runCli(root, ['export-league', target]);
+  assert.notEqual(result.status, 0, result.said);
+  assert.match(result.said, /would be \d+\.\d MB, over the 20\.0 MB a league file may be/);
+  assert.ok(!existsSync(target));
 });

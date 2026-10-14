@@ -39,7 +39,7 @@
  * website hands in the files a person chose.
  */
 import { parseEnvAllowlist } from './lib/envText.mjs';
-import { LEAGUE_JSON_LIMITS, parseJsonSafely } from './lib/safeInput.mjs';
+import { LEAGUE_JSON_LIMITS, parseJsonSafely, utf8Length } from './lib/safeInput.mjs';
 import { parseYaml, stringifyYaml } from './lib/yaml.mjs';
 import { parseDeclaredFormatType } from './format.mjs';
 import { EDITIONS, optionNamed } from './options.mjs';
@@ -567,7 +567,9 @@ export function newLeagueFile({ provider = 'sleeper', leagueId = null, surface, 
 /**
  * A league file's text, ready to save. It is checked first, so nothing that
  * parseLeagueFile would refuse is ever written, and refused outright if any
- * value is shaped like an ESPN member ID.
+ * value is shaped like an ESPN member ID. Refused as well when the text is
+ * over LEAGUE_JSON_LIMITS.maxBytes, which parseLeagueFile and import-league
+ * would refuse to read back.
  *
  * Written without indentation: indenting more than doubled a full invented
  * season (2.6 MB unindented, 6.5 MB indented; scripts/measure-league-file.mjs),
@@ -579,8 +581,20 @@ export function serializeLeagueFile(file) {
   if (memberId) {
     throw new LeagueFileError(memberId, 'holds a value shaped like an ESPN member ID, which a league file never carries');
   }
-  return `${JSON.stringify(checked)}\n`;
+  const text = `${JSON.stringify(checked)}\n`;
+  const bytes = utf8Length(text);
+  if (bytes > LEAGUE_JSON_LIMITS.maxBytes) {
+    throw new LeagueFileError(
+      '',
+      `The league file would be ${megabytes(bytes)} MB, over the ${megabytes(LEAGUE_JSON_LIMITS.maxBytes)} MB a league file may be. ` +
+        'It was not written, because neither the command line nor the website could read it back.',
+      { whole: true },
+    );
+  }
+  return text;
 }
+
+const megabytes = (bytes) => (bytes / (1024 * 1024)).toFixed(1);
 
 /**
  * A league file's history as a memory store's data (createMemoryStore in
