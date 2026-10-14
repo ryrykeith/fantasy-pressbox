@@ -688,8 +688,8 @@ export async function prepareEdition({
  * written for an edition (`--generate`): a missing block is reported, not
  * refused, since the posts are already written.
  *
- * `league` and `teams` are the opened league's; with them every team name in
- * the block is pinned to its roster before anything is saved.
+ * `league` and `teams` are the opened league's (`teams` is required); every
+ * team name in the block is pinned to its roster before anything is saved.
  *
  * Once the block is filed, the whole reply is saved too
  * (store.saveEdition, editions/<season>/week-<n>-<task>.json).
@@ -702,11 +702,20 @@ export function recordEdition({
   text,
   store,
   league,
-  teams = null,
+  teams,
   previousRankings = null,
   from = 'pasted',
   log = SILENT,
 }) {
+  // Required: without the roster, a typo'd or renamed team would be filed as
+  // written and become a "new" team with no history. recordBlock alone keeps
+  // teams optional, for its own tests.
+  if (!Array.isArray(teams)) {
+    throw new Error(
+      "recordEdition needs the `teams` argument (the opened league's team list, as prepareEdition returns it) " +
+        'so every team name in the reply can be pinned to its roster.',
+    );
+  }
   const block = extractJsonBlock(text);
   if (from === 'pasted') {
     if (!block) {

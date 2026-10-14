@@ -338,7 +338,20 @@ test('prepareEdition in memory builds the prompt the CLI writes, and recordEditi
   assert.equal(store.loadPreviousRankings('2026', 2).rankings[0].team, team);
 
   assert.throws(
-    () => recordEdition({ task: 'rankings', week: 1, text: 'no block here', store, league: prepared.league }),
+    () => recordEdition({ task: 'rankings', week: 1, text: 'no block here', store, league: prepared.league, teams: prepared.teams }),
     /No ```json block found at the end of that file/,
   );
+});
+
+test('recordEdition refuses a call without teams and saves nothing', () => {
+  const saved = [];
+  const store = new Proxy({}, { get: (_, name) => (...args) => saved.push([name, args]) });
+  const reply = 'Post\n%%%\n```json\n[{ "rank": 1, "team": "Typo Team" }]\n```\n';
+  for (const teams of [undefined, null, 'nope']) {
+    assert.throws(
+      () => recordEdition({ task: 'rankings', week: 1, text: reply, store, league: { season: '2026' }, teams }),
+      /needs the `teams` argument/,
+    );
+  }
+  assert.deepEqual(saved, []);
 });
