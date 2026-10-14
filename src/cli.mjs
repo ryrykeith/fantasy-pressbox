@@ -73,6 +73,13 @@ import { createStore } from './store.mjs';
 const fileStore = (config) => createStore({ dataDir: config.dataDir });
 // The shipped prompts and defaults, read from disk; a workspace's own prompts shadow them.
 const diskAssets = (config) => loadDiskAssets({ promptsDir: config.promptsDir });
+/**
+ * Opens the league with the folder's store and the shipped assets (prompts and
+ * the bye-week table). Every command opens through this, so none can open a
+ * league without the table that captureWeek needs.
+ */
+const openFolderLeague = (config, options = {}) =>
+  openLeague(config, { store: fileStore(config), assets: diskAssets(config), ...options });
 import {
   createTeamIdentity,
   attachRosterIds,
@@ -484,7 +491,7 @@ async function commandDoctor(config) {
   let week;
   let source;
   try {
-    ctx = await openLeague(config, { store: fileStore(config), assets: diskAssets(config), allowStaleLeague: true });
+    ctx = await openFolderLeague(config, { allowStaleLeague: true });
     ({ week, source } = await resolveWeek({ client: ctx.client, league: ctx.league, config }));
   } catch (error) {
     // Nothing imported yet on the import route: the same addresses and notes a
@@ -704,8 +711,8 @@ function reportRankEmoji(config, teamCount) {
 
 async function commandFetch(config, args) {
   requireLeague(config);
-  const ctx = await openLeague(config, { store: fileStore(config), assets: diskAssets(config), refreshPlayers: args.refreshPlayers });
-  const { week } =await resolveWeek({ ...ctx, config, requested: args.week });
+  const ctx = await openFolderLeague(config, { refreshPlayers: args.refreshPlayers });
+  const { week } = await resolveWeek({ ...ctx, config, requested: args.week });
   const result = await captureWeek({ ...ctx, week });
   reportCapture(result, week, ctx);
   return 0;
@@ -818,7 +825,7 @@ async function commandImportEspn(config, args) {
   // Opened even when the league page is now behind the week pages, only to
   // say so: nothing is captured from it then (a settled snapshot is kept as
   // it is, so stale standings must never reach one).
-  const ctx = await openLeague(config, { store: fileStore(config), assets: diskAssets(config), allowStaleLeague: true });
+  const ctx = await openFolderLeague(config, { allowStaleLeague: true });
   say(`\n${ctx.league.name}: ${ctx.teams.length} teams, current week ${ctx.league.currentWeek ?? 'unknown'} (the latest saved page).`);
   const stale = ctx.provider.staleLeagueNotice?.({ week: imported.week }) ?? null;
   if (stale) {
@@ -932,7 +939,7 @@ async function commandEdition(config, args, task) {
     throw new Error(`--format must be "sleeper" or "imessage", got "${format}".`);
   }
 
-  const ctx = await openLeague(config, { store: fileStore(config), assets: diskAssets(config), refreshPlayers: args.refreshPlayers });
+  const ctx = await openFolderLeague(config, { refreshPlayers: args.refreshPlayers });
   const { league, teams, players, store, assets, client } = ctx;
   // Again with the opened league: its provider and its resolved format.
   const leagueProvider = providerOf(league);
@@ -1420,8 +1427,8 @@ async function commandRecord(config, args) {
     throw new Error(`Pass --task followed by one of: ${recordable.join(', ')}.`);
   }
 
-  const ctx = await openLeague(config, { store: fileStore(config) });
-  const offset =FORWARD_LOOKING_TASKS.includes(task) ? 0 : -1;
+  const ctx = await openFolderLeague(config);
+  const offset = FORWARD_LOOKING_TASKS.includes(task) ? 0 : -1;
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week, offset });
 
   const text = readFileSync(file, 'utf8');
@@ -1459,7 +1466,7 @@ function commandCheck(config, args) {
 
 async function commandGrade(config, args) {
   requireLeague(config);
-  const ctx = await openLeague(config, { store: fileStore(config) });
+  const ctx = await openFolderLeague(config);
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week, offset: -1 });
   const captured = await captureWeek({ ...ctx, week });
   refuseMultiWeekMatchup(captured, { week, edition: 'grade' });
