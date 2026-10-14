@@ -105,6 +105,43 @@ test('the guard fails on process, import.meta, dynamic node: imports and generat
   ]);
 });
 
+// The ESPN cookie client (src/espn/client.mjs createClient) is built only by
+// espnProvider.fromConfig on ESPN_ROUTE=fetch, which openProvider calls, and by
+// espnProvider.lookupLeague. This pins every call in core's graph that opens a
+// provider or a league, so a new way to the client fails here. A new one must
+// go through openLeagueOnSurface (src/edition.mjs), which runs refuseCliOnly
+// first; add it to the list only once it does.
+const OPENERS = /\b(openProvider|fromConfig|lookupLeague|importSavedFiles|openLeague\w*)\s*\(/g;
+const EXPECTED_OPENERS = {
+  // The providers' own definitions (instance and import-instance openLeague,
+  // fromConfig, lookupLeague). They call none of these.
+  'src/espn/provider.mjs': ['openLeague', 'openLeague', 'fromConfig', 'lookupLeague'],
+  'src/sleeper/provider.mjs': ['openLeague', 'fromConfig', 'lookupLeague'],
+  // openProvider is the one caller of fromConfig.
+  'src/providers.mjs': ['openProvider', 'fromConfig'],
+  // pipeline.mjs's openLeague (openProvider, then the instance's openLeague)
+  // and importSavedFiles open a provider with no surface check. Core exports
+  // neither (the export list test below), and nothing core reaches calls
+  // importSavedFiles.
+  'src/pipeline.mjs': ['openLeague', 'openProvider', 'openLeague', 'importSavedFiles', 'openProvider'],
+  // openLeagueOnSurface: refuseCliOnly, then pipeline.mjs's openLeague.
+  // prepareEdition opens through it, and core exports it as openLeague.
+  'src/edition.mjs': ['openLeagueOnSurface', 'openLeague', 'openLeagueOnSurface'],
+};
+
+test('no core export can reach the ESPN cookie client except through refuseCliOnly', async () => {
+  const found = {};
+  for (const file of walkCore(ENTRY).files) {
+    const names = [...stripComments(readFileSync(file, 'utf8')).matchAll(OPENERS)].map((match) => match[1]);
+    if (names.length) found[relative(PACKAGE_ROOT, file).split('\\').join('/')] = names;
+  }
+  assert.deepEqual(found, EXPECTED_OPENERS);
+
+  const core = await import('../src/core/index.mjs');
+  const edition = await import('../src/edition.mjs');
+  assert.equal(core.openLeague, edition.openLeagueOnSurface, "core's openLeague is the surface-checked one");
+});
+
 test('core exports the documented surface and nothing that fetches from ESPN', async () => {
   const core = await import('../src/core/index.mjs');
   const expected = [

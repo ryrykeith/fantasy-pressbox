@@ -23,8 +23,10 @@ export { OPTIONS, EDITIONS } from '../options.mjs';
 export { resolveSettings, rankEmoji } from '../settings.mjs';
 
 // Editions
-export { openLeague, resolveWeek } from '../pipeline.mjs';
-export { prepareEdition, recordEdition } from '../edition.mjs';
+// openLeague is edition.mjs's surface-checked one: off the command line it
+// refuses ESPN_ROUTE=fetch before any client exists (refuseCliOnly).
+export { openLeagueOnSurface as openLeague, prepareEdition, recordEdition } from '../edition.mjs';
+export { resolveWeek } from '../pipeline.mjs';
 export { buildPrompt } from '../promptContext.mjs';
 
 // Replies

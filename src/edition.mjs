@@ -300,6 +300,19 @@ export function refuseCliOnly({ settings, options = {}, surface }) {
   );
 }
 
+/**
+ * openLeague (src/pipeline.mjs) for a surface, and the only way anything in
+ * this module or src/core/ opens a league: refuseCliOnly runs first, so off the
+ * command line an ESPN league on ESPN_ROUTE=fetch is refused before a client
+ * exists or a request is made. `surface` defaults to 'core'; the command line
+ * passes 'cli'. The other options are openLeague's. src/core/ exports this as
+ * `openLeague`.
+ */
+export async function openLeagueOnSurface(config, { surface = 'core', ...options } = {}) {
+  refuseCliOnly({ settings: config, surface });
+  return openLeague(config, options);
+}
+
 /** The `--format` value an edition is written for, or a refusal naming the allowed ones. */
 function outputFormat(options) {
   const option = optionNamed('format');
@@ -386,7 +399,7 @@ export async function prepareEdition({
 
   // Without allowStaleLeague: a provider with an import route refuses a saved
   // league page older than its saved week pages (EspnStaleLeagueError).
-  const ctx = await openLeague(config, { store, assets, refreshPlayers: options.refreshPlayers });
+  const ctx = await openLeagueOnSurface(config, { surface, store, assets, refreshPlayers: options.refreshPlayers });
   const { league, teams, players, client } = ctx;
   // Again with the opened league: its provider and its resolved format.
   const leagueProvider = providerOf(league);

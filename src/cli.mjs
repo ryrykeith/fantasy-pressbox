@@ -34,7 +34,7 @@ import { describeScoringSummary, describeUnmodelledScoring } from './scoringRepo
 import { describeEliminationLedger } from './eliminationReport.mjs';
 import { describeDraftOrder } from './rookieDraft.mjs';
 import { describeProspectBoard } from './prospectBoard.mjs';
-import { openLeague, resolveWeek, captureWeek, importSavedFiles, readEliminationLedger } from './pipeline.mjs';
+import { resolveWeek, captureWeek, importSavedFiles, readEliminationLedger } from './pipeline.mjs';
 import { FUTURE_STOCK_TASK } from './futureStock.mjs';
 import { describeInspection, inspectLeague } from './inspect.mjs';
 import { PACKAGE_NAME, PACKAGE_VERSION } from './version.mjs';
@@ -63,6 +63,7 @@ import {
   parseArgs,
 } from './options.mjs';
 import {
+  openLeagueOnSurface,
   prepareEdition,
   recordEdition,
   refuseMultiWeekMatchup,
@@ -96,7 +97,7 @@ const diskAssets = (config) => loadDiskAssets({ promptsDir: config.promptsDir })
  * league without the table that captureWeek needs.
  */
 const openFolderLeague = (config, options = {}) =>
-  openLeague(config, { store: fileStore(config), assets: diskAssets(config), ...options });
+  openLeagueOnSurface(config, { surface: 'cli', store: fileStore(config), assets: diskAssets(config), ...options });
 
 /**
  * This CLI as a command typed from the current folder: the installed
