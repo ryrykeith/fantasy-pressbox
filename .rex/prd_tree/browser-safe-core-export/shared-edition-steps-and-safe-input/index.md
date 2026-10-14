@@ -17,4 +17,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Fix grade in guillotine leagues: open every CLI league with the bye table](./fix-grade-in-guillotine-leagues-open.md) | completed |
 | [Move edition steps into core, with one option list](./move-edition-steps-into-core-with-one.md) | completed |
 | [recordEdition files team names unpinned when a caller omits teams](./recordedition-files-team-names.md) | pending |
-| [Refuse hostile input in the parsers](./refuse-hostile-input-in-the-parsers.md) | pending |
+| [Refuse hostile input in the parsers](./refuse-hostile-input-in-the-parsers.md) | completed |
