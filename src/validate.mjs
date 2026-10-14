@@ -18,6 +18,32 @@ export function splitPosts(text) {
 }
 
 /**
+ * Tidies a post's line endings and spacing without re-spacing it: CRLF becomes
+ * LF, trailing spaces and tabs go, and three or more line breaks collapse into
+ * one blank line. The model's own single blank lines are kept, and no invisible
+ * characters are added. Provider-neutral: it claims nothing about any chat.
+ */
+export function formatPost(text) {
+  return String(text)
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
+/**
+ * True when the posts run several lines and none has a blank line anywhere.
+ * That is what a reply looks like after being highlighted and copied out of
+ * ChatGPT, which drops the blank lines; its copy button keeps them.
+ * Accepts post strings or checked posts (objects with `text`).
+ */
+export function looksCollapsed(posts) {
+  const list = (Array.isArray(posts) ? posts : [posts]).map((post) => String(post?.text ?? post));
+  const lines = list.flatMap((post) => formatPost(post).trim().split('\n'));
+  const filled = lines.filter((line) => line.trim() !== '').length;
+  return filled >= 3 && !lines.some((line) => line.trim() === '');
+}
+
+/**
  * Every market value an edition's context carries, as numbers. FantasyCalc
  * values appear under `value`, `netValue`, `generic` and `tiers`, wherever the
  * context nests them (trades, pick tiers, held-pick capital). Walking the

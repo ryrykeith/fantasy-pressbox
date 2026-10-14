@@ -38,7 +38,7 @@ import { openLeague, resolveWeek, captureWeek, importSavedFiles, readElimination
 import { FUTURE_STOCK_TASK } from './futureStock.mjs';
 import { systemPromptOnly, taskPromptOnly } from './promptContext.mjs';
 import { generate, describeProvider, detectProvider } from './generate.mjs';
-import { checkPosts, stripJsonBlock } from './validate.mjs';
+import { checkPosts, looksCollapsed, stripJsonBlock } from './validate.mjs';
 import { gradePredictions } from './rankingGrades.mjs';
 import { createStore } from './store.mjs';
 import {
@@ -124,9 +124,12 @@ const SETUP_COMMANDS = [
   ['import-league <file>', 'Turn a league file into a league folder'],
 ];
 const OTHER_COMMANDS = [
-  ['record <file>', 'File a finished edition you pasted back from a chat'],
+  [
+    'record <file>',
+    "File a finished edition you pasted back from a chat (copy it with the chat's copy button, not by highlighting)",
+  ],
   ['grade', "Score last week's predictions against what happened"],
-  ['check <file>', 'Check a file of finished posts against the length limit'],
+  ['check <file>', "Check a file of finished posts against the league's post length limit"],
   ['fetch', 'Download and save a week of league data'],
   [
     'import-espn [--week <n>] <files>',
@@ -776,6 +779,10 @@ function reportLengths(body, config, format, context = null) {
   const max = config.editorial.output.sleeper_max_chars;
   const report = checkPosts(body, { maxChars: max, context });
   say(`\n${report.count} post(s), limit ${max} characters.`);
+  if (looksCollapsed(report.posts)) {
+    warn('These posts have no blank lines, which usually means the reply was highlighted and copied.');
+    warn("Copy the reply with the chat's copy button instead, and the blank lines come through.");
+  }
   if (report.allOk) {
     say('All posts are within the limit.');
     return;

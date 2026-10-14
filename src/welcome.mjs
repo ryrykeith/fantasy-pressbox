@@ -127,6 +127,8 @@ export function gettingStarted(cli, folder = EXAMPLE_LEAGUE_FOLDER) {
     `       ${cli} doctor`,
     '  3. Build your first edition:',
     `       ${cli} rankings`,
+    "  Copy the chat's reply with its copy button, not by highlighting it:",
+    '  highlighting can drop the blank lines.',
   ];
 }
 

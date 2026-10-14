@@ -568,8 +568,8 @@ team — fix the typo in your file and run `record` again.
 fantasy-pressbox preview
 ```
 
-Paste the file into a new chat, post the previews, then copy the reply into a
-file and record it, so next week can grade the picks:
+Paste the file into a new chat, post the previews, then copy the reply (with the
+chat's copy button, not by highlighting) into a file and record it, so next week can grade the picks:
 
 ```bash
 fantasy-pressbox record output/my-previews.txt --task preview
@@ -634,7 +634,7 @@ terminal). Only `init`, `import-league` and `check` work without one.
 | `fantasy-pressbox tank-watch` | Build the tank watch: the race for next season's top rookie picks, who owns them, and which picks jump if their team crosses the playoff line. Dynasty leagues only. It needs a declared draft order (see `config/rookie-draft.yml`) and opens from the middle of the regular season. |
 | `fantasy-pressbox future-stock` | Rank every team on the next three seasons rather than this week: production by age band, each position's age curve, and priced future picks, with its own weight set (`weights.future_stock` in `config/rankings.yml`). Dynasty leagues only. Not recorded, so it prints no movement arrows. |
 | `fantasy-pressbox record <file> --task <name>` | File a finished edition you pasted back from a chat. `<name>` is `preview`, `survival-preview`, `rankings`, `survival-rankings` or `preseason-rankings`. |
-| `fantasy-pressbox check <file>` | Check a file of posts against the Sleeper length limit. |
+| `fantasy-pressbox check <file>` | Check a file of posts against the league's post length limit (`POST_MAX_LENGTH`). It warns when a reply has lost its blank lines, which is what highlighting and copying does; use the chat's copy button. |
 | `fantasy-pressbox grade` | Show how last week's predictions actually did. |
 | `fantasy-pressbox migrate <folder>` | Copy this league — `.env`, league settings, `data/` and `output/` — into a new folder. Nothing is removed. See [Moving a league](#moving-a-league). |
 | `fantasy-pressbox export-league [file]` | Save this league's history and settings as one league file (by default in `output/`). It never holds your AI key or ESPN cookies. See [A league file](#a-league-file). |

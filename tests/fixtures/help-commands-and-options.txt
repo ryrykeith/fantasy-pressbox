@@ -18,9 +18,9 @@ Commands
   chop-recap                    Build the weekly chop recap and awards (guillotine leagues)
   survival-rankings             Build the weekly survival rankings (guillotine leagues)
 
-  record <file>                 File a finished edition you pasted back from a chat
+  record <file>                 File a finished edition you pasted back from a chat (copy it with the chat's copy button, not by highlighting)
   grade                         Score last week's predictions against what happened
-  check <file>                  Check a file of finished posts against the length limit
+  check <file>                  Check a file of finished posts against the league's post length limit
   fetch                         Download and save a week of league data
   import-espn [--week <n>] <files>
                                 ESPN leagues: import pages you saved from ESPN in your browser
