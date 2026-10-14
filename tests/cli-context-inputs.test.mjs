@@ -1,12 +1,13 @@
 /**
- * The edition builder in src/cli.mjs computes an edition's inputs and then
- * hands them to buildContext in one call. Unit tests build the context
- * directly, so they cannot see a CLI that computes an input and forgets to
- * pass it — which is how the future stock edition first shipped: every test
- * green, and the command itself refusing to run because rosterWindow and
- * pickCapital never reached the context.
+ * The edition builder (src/edition.mjs#prepareEdition, which the CLI's
+ * edition commands call) computes an edition's inputs and then hands them to
+ * buildContext in one call. Unit tests build the context directly, so they
+ * cannot see a builder that computes an input and forgets to pass it — which
+ * is how the future stock edition first shipped: every test green, and the
+ * command itself refusing to run because rosterWindow and pickCapital never
+ * reached the context.
  *
- * This reads the call and checks that every input the CLI prepares for
+ * This reads the call and checks that every input the builder prepares for
  * buildContext is passed to it.
  */
 import test from 'node:test';
@@ -16,7 +17,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const cli = readFileSync(join(ROOT, 'src', 'cli.mjs'), 'utf8');
+const cli = readFileSync(join(ROOT, 'src', 'edition.mjs'), 'utf8');
 const promptContext = readFileSync(join(ROOT, 'src', 'promptContext.mjs'), 'utf8');
 
 /** The names destructured by buildContext's parameter list. */

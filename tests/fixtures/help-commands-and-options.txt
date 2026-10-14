@@ -1,0 +1,41 @@
+Commands
+  init                          Set up a league folder (run this first)
+  doctor                        Check that everything is configured and reachable
+  migrate <folder>              Copy this league into a new folder; nothing is removed
+  export-league [file]          Save this league's history and settings as one league file
+  import-league <file>          Turn a league file into a league folder
+
+  preview                       Build the weekly matchup previews
+  recap                         Build the weekly recap and awards
+  rankings                      Build the weekly power rankings
+  transactions                  Grade the week's trades (quiet weeks are skipped)
+  preseason-rankings            Build preseason rankings (ignores all results)
+
+  tank-watch                    Build the rookie draft tank watch (dynasty leagues, second half)
+  future-stock                  Rank teams on the next three seasons: age, production, picks (dynasty leagues)
+
+  survival-preview              Build the weekly survival preview (guillotine leagues)
+  chop-recap                    Build the weekly chop recap and awards (guillotine leagues)
+  survival-rankings             Build the weekly survival rankings (guillotine leagues)
+
+  record <file>                 File a finished edition you pasted back from a chat (copy it with the chat's copy button, not by highlighting)
+  grade                         Score last week's predictions against what happened
+  check <file>                  Check a file of finished posts against the league's post length limit
+  fetch                         Download and save a week of league data
+  import-espn [--week <n>] <files>
+                                ESPN leagues: import pages you saved from ESPN in your browser
+                                (run it with no files to see the addresses to save)
+
+Options
+  --week <n>                    Which week to work on (default: worked out from Sleeper)
+  --format <sleeper|imessage>   Who the output is for (default: sleeper)
+  --emoji <default|none>        Rank emoji for this run: the shipped table or none
+                                (default: the league's setting)
+  --task <name>                 Which edition a recorded file is (used with record)
+  --generate                    Call the AI provider in .env and write finished posts
+  --refresh-players             Re-download the NFL player list instead of using the cache
+  --refresh-market              Fetch trade values again instead of reusing the week's saved ones
+  --early                       Run the tank watch before its start week
+  --workspace <folder>          The league folder: its .env, config, data and output
+                                (default: $PRESSBOX_WORKSPACE, else the current folder)
+  --help                        Show this message

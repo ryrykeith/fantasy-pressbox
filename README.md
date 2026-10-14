@@ -568,8 +568,8 @@ team — fix the typo in your file and run `record` again.
 fantasy-pressbox preview
 ```
 
-Paste the file into a new chat, post the previews, then copy the reply into a
-file and record it, so next week can grade the picks:
+Paste the file into a new chat, post the previews, then copy the reply (with the
+chat's copy button, not by highlighting) into a file and record it, so next week can grade the picks:
 
 ```bash
 fantasy-pressbox record output/my-previews.txt --task preview
@@ -615,12 +615,12 @@ fantasy-pressbox rankings --format imessage
 
 Run every command from inside a league folder, or point it at one with
 `--workspace <folder>` (or set `PRESSBOX_WORKSPACE=<folder>` once in your
-terminal). Only `init` and `check` work without one.
+terminal). Only `init`, `import-league` and `check` work without one.
 
 | Command | What it does |
 |---|---|
 | `fantasy-pressbox init` | Set up a league folder. Run this first. With `--workspace <folder>` it creates that folder. |
-| `fantasy-pressbox doctor` | Check your settings, league config and connection. Run this when something is wrong. |
+| `fantasy-pressbox doctor` | Check your settings, league config and connection, and see where the league stands: the week, what was recorded for last week, whether its predictions can be graded, and what this week still needs. Run this when something is wrong. |
 | `fantasy-pressbox fetch` | Just download and save a week of league data. |
 | `fantasy-pressbox import-espn --week <n> <files>` | ESPN leagues (experimental): import pages you saved from ESPN yourself. Fantasy Pressbox never contacts ESPN on this route. Run it with no files to see the addresses to open in your signed-in browser; save each page into your league folder, never into the Fantasy Pressbox folder. Save the league page each week along with the week's two pages: a league page older than the newest week page is refused, because its standings and rosters would be out of date. This is your own manual, personal use of your league's pages. |
 | `fantasy-pressbox preview` | Build this week's matchup previews. |
@@ -634,9 +634,11 @@ terminal). Only `init` and `check` work without one.
 | `fantasy-pressbox tank-watch` | Build the tank watch: the race for next season's top rookie picks, who owns them, and which picks jump if their team crosses the playoff line. Dynasty leagues only. It needs a declared draft order (see `config/rookie-draft.yml`) and opens from the middle of the regular season. |
 | `fantasy-pressbox future-stock` | Rank every team on the next three seasons rather than this week: production by age band, each position's age curve, and priced future picks, with its own weight set (`weights.future_stock` in `config/rankings.yml`). Dynasty leagues only. Not recorded, so it prints no movement arrows. |
 | `fantasy-pressbox record <file> --task <name>` | File a finished edition you pasted back from a chat. `<name>` is `preview`, `survival-preview`, `rankings`, `survival-rankings` or `preseason-rankings`. |
-| `fantasy-pressbox check <file>` | Check a file of posts against the Sleeper length limit. |
+| `fantasy-pressbox check <file>` | Check a file of posts against the league's post length limit (`POST_MAX_LENGTH`). It warns when a reply has lost its blank lines, which is what highlighting and copying does; use the chat's copy button. |
 | `fantasy-pressbox grade` | Show how last week's predictions actually did. |
 | `fantasy-pressbox migrate <folder>` | Copy this league — `.env`, league settings, `data/` and `output/` — into a new folder. Nothing is removed. See [Moving a league](#moving-a-league). |
+| `fantasy-pressbox export-league [file]` | Save this league's history and settings as one league file (by default in `output/`). It never holds your AI key or ESPN cookies. See [A league file](#a-league-file). |
+| `fantasy-pressbox import-league <file>` | Turn a league file into a league folder: this folder, or the one `--workspace` names. It refuses a folder that already holds a league. |
 
 Useful options:
 
@@ -644,6 +646,7 @@ Useful options:
 |---|---|
 | `--week 3` | Work on a specific week instead of the current one. |
 | `--format imessage` | One long message instead of Sleeper-sized posts (`sleeper` is the default). |
+| `--emoji none` | No rank emoji for this run (`default` puts the shipped table back). Your league's setting is not changed. |
 | `--generate` | Call the AI for you and write finished posts. |
 | `--task <name>` | Which edition a file is, for `record`. |
 | `--early` | Run the tank watch before its start week. |
@@ -782,7 +785,12 @@ It prints your finished table against your real number of teams:
 | Have an 18-team league | The default already runs to 18 — guillotine leagues usually start that big, so nothing repeats |
 | Have fewer teams than emoji | The extras are simply never used |
 | Write your own list | It **replaces** the default completely — no leftovers mixed in |
-| Want no emoji at all | Set `include_emoji: false` under `output:` and the whole scheme switches off |
+| Want no emoji at all | Set `include_emoji: false` under `output:` (or `INCLUDE_EMOJI=false` in `.env`) and the whole scheme switches off. For a single run, add `--emoji none` |
+| Put one that is not an emoji in the list | It is refused, naming the rank. Each entry must be exactly one emoji |
+
+`doctor`'s "Rank emoji" line shows which of the three modes is in force:
+`default` (the shipped table), `custom` (a `ranking_emoji` table of your own)
+or `none`.
 
 **A few ideas**
 
@@ -1000,6 +1008,7 @@ the prompt for any other format. Keep those lines intact in your copy.
 │   ├── predictions/   every pick you've made
 │   ├── tank-watch/    the draft order each tank watch reported
 │   ├── market/        the trade values each week was graded against
+│   ├── editions/      the whole reply behind each edition you recorded
 │   └── cache/         the NFL player list (safe to delete; re-downloaded)
 └── output/          the files you paste into a chat, and the finished posts
 
@@ -1053,6 +1062,24 @@ and only then delete the old one yourself.
 This is also how you move a league you were running from a clone of the
 repository (from before league folders existed) into a folder of its own: run
 `node src/cli.mjs migrate ~/leagues/<name>` from the clone.
+
+### A league file
+
+`export-league` saves a league as one file you can keep, send to another
+machine, or open on the Fantasy Pressbox website:
+
+```bash
+fantasy-pressbox export-league                       # output/<league-name>.fantasy-pressbox.json
+fantasy-pressbox import-league my-league.fantasy-pressbox.json --workspace ~/leagues/my-league
+```
+
+The file holds `data/` (except the player list in `data/cache/`) and the
+league's settings from `.env` and `config/`. It never holds your AI keys, ESPN
+cookies, `AI_PROVIDER`, `AI_MODEL`, `DATA_DIR`, `OUTPUT_DIR` or `DEBUG`: those
+lines are dropped as `.env` is read, and `export-league` lists the ones it left
+out. For an ESPN league, the saved pages go in without their members' IDs and
+names. `import-league` writes a new league folder from the file; add your AI
+key to its `.env` again if you use `--generate`.
 
 ---
 

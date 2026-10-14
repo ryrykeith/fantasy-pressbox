@@ -884,8 +884,11 @@ requests the fetch route makes, built by the same code:
 (`src/espn/import.mjs`, node-free so the browser core can reuse it):
 
 - **Untrusted input.** A page is refused, naming the file, when it is over
-  20 MB, is not JSON, does not hold a JSON object, holds a key named
-  `__proto__`, `constructor` or `prototype`, names no league ID or another
+  20 MB, nests more than 32 levels, has a text longer than 20,000
+  characters, is not JSON, does not hold a JSON object, holds a key named
+  `__proto__`, `constructor` or `prototype` (these limits are
+  `ESPN_IMPORT_LIMITS`, checked by core's shared reader,
+  `parseJsonSafely` in `src/lib/safeInput.mjs`), names no league ID or another
   league than `ESPN_LEAGUE_ID` (open question 34), is for another season than
   `LEAGUE_SEASON`, or fails its shape guard. No value from a page is echoed
   in a refusal. A path inside the installed package is refused before it is
@@ -930,6 +933,33 @@ nothing would say so.
 - Saving and importing the league page again clears it.
 - The fetch route is unaffected: it reads the league live on every run.
 
+## The league file
+
+**decision** (owner, 2026-10-13): a league file (`export-league`,
+`src/leagueFile.mjs`) **strips the people from saved ESPN pages**. The saved
+league page (`import/<season>/league.json`) and every raw week bundle tagged
+`espn` go into the file through `stripEspnPersonalData`:
+
+- `members[]` and every team's `owners[]` are emptied. Member IDs are in the
+  same braced form as the `SWID` cookie and are probably the same value.
+- `firstName`, `lastName`, `owner`, `primaryOwner` and `memberId` are removed
+  wherever they appear (a transaction's `memberId` among them).
+- Any other field holding a braced GUID is removed, and a braced GUID in a
+  list of text is dropped. `serializeLeagueFile` refuses a file that still
+  holds one anywhere.
+
+Nothing the code reads is lost. No edition names an ESPN manager
+(`managerNames` under [Unavailable entries](#unavailable-entries)), and no
+shape guard had to change: `guardTeams` accepts an empty `members[]` and empty
+`owners[]` lists, which normalize to teams with no `manager`. So a league folder
+rebuilt from the file (`import-league`) builds the same editions, and
+`tests/league-file.test.mjs` checks that it builds the same recap. The
+snapshots already saved in the file keep the `manager` they were captured
+with; a week captured again in the rebuilt folder has none.
+
+The cookies are never in a league file on either route: `.env` is read
+through an allowlist that leaves out `ESPN_S2` and `ESPN_SWID`.
+
 ## Coverage matrix
 
 What every edition, command and context fact does on an ESPN league, as the
@@ -964,6 +994,8 @@ editions that no command builds yet.
 |---|---|---|
 | `init` | **Supported.** Setup reads the league ID from a bare ID or a pasted address. It offers dynasty and redraft only, and says a keeper league counts as redraft. Guillotine is not offered. The import route is the default: setup makes no request and asks for no cookie. The fetch route is an opt-in after the terms notice; it confirms the league with ESPN and takes the cookies for a private league, kept only in `.env`. | **assumed**: the fetch route's confirmation reads the league response ([League settings](#league-settings)). `tests/init-espn.test.mjs` checks it on the fixtures. |
 | `migrate` | **Supported.** It copies `.env`, the league's config, and the whole `data/` and `output/` folders, saved ESPN pages included. Nothing in it reads ESPN data. | **assumed**: no test runs it on an ESPN league folder. |
+| `export-league` | **Supported.** It writes the league file: the saved league page and week bundles go in without the people in them ([The league file](#the-league-file)). It reads no ESPN data beyond that, and never a cookie. | **verified**: `tests/league-file.test.mjs` exports an ESPN folder and checks no member ID, owner or first or last name reaches the file. |
+| `import-league` | **Supported.** It writes a league folder from a league file. The rebuilt folder builds the same recap as the one it was exported from. | **verified**: `tests/league-file.test.mjs`. |
 | `doctor` | **Supported.** On the import route it makes no request. It prints the addresses to save, the imported weeks and the period each saved page is from, and flags a stale league page with a non-zero exit. On the fetch route it reports the route, whether both cookies are set (never their values), explains a 401, and names the view and field of a response that fails its shape guard. | **assumed**: the league facts it prints come from ESPN's responses. `tests/espn-doctor.test.mjs` and `tests/espn-stale-league.test.mjs` check it on the fixtures. |
 | `fetch` | **Supported.** It captures a week. On the fetch route it asks ESPN, with the cookies for a private league; on the import route it reads only saved pages and makes no request. A multi-week matchup period is saved, and is reported as having no single score, not as all zeros. | **assumed**: [Endpoints used](#endpoints-used). `tests/espn-multi-week.test.mjs`, `tests/espn-import.test.mjs`. |
 | `import-espn` | **Supported**, ESPN only. It reads the pages saved per [Importing saved files](#importing-saved-files) and refuses a Sleeper league folder or `ESPN_ROUTE=fetch`. | **assumed**: the saved pages' shapes, and a private league's pages in a browser are **Unverified** (open question 35). `tests/espn-import.test.mjs`. |
@@ -984,7 +1016,7 @@ editions that no command builds yet.
 | `grade` | **Supported.** It scores recorded predictions against the week's results. **Refused** for a multi-week matchup period. | **assumed**: as `recap`. `tests/espn-editions.test.mjs`, `tests/espn-multi-week.test.mjs`. |
 
 Opening the league refuses every command that needs it (all but `init`,
-`migrate` and `check`; `doctor` and `import-espn` report a stale league page
+`migrate`, `export-league`, `import-league` and `check`; `doctor` and `import-espn` report a stale league page
 rather than refusing it):
 
 - a response that fails its shape guard (`EspnShapeError`, naming the view and

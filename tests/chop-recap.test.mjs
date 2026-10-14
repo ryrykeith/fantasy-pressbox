@@ -12,6 +12,7 @@ import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { buildDangerBoard } from '../src/analysis/danger.mjs';
 import { deriveScoringProfile, normalizePlayers } from '../src/sleeper/normalize.mjs';
 import { PACKAGE_ROOT } from '../src/config.mjs';
+import { assets } from './fixtures/assets.mjs';
 
 /**
  * The chop recap: the backward-looking edition a guillotine league gets
@@ -225,7 +226,7 @@ test('chop-recap is a registered task with a prompt file of its own', () => {
 });
 
 test('buildPrompt embeds the chop-recap prompt file and the context', () => {
-  const prompt = buildPrompt({ task: 'chop-recap', context: chopRecapContext() });
+  const prompt = buildPrompt({ task: 'chop-recap', context: chopRecapContext(), assets });
   assert.match(prompt, /CHOP RECAP/i);
   assert.match(prompt, /# LEAGUE CONTEXT/);
   assert.match(prompt, /"task": "chop-recap"/);
@@ -284,7 +285,7 @@ test('buildPrompt refuses a chop recap built from a head-to-head context', () =>
   for (const formatType of ['dynasty', 'redraft']) {
     const context = chopRecapContext({ formatType, dangerBoard: null, weekAnalysis: null });
     assert.throws(
-      () => buildPrompt({ task: 'chop-recap', context }),
+      () => buildPrompt({ task: 'chop-recap', context, assets }),
       /nobody is eliminated/i,
       `expected a refusal for a ${formatType} league`,
     );

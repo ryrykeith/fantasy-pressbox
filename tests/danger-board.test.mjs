@@ -9,6 +9,7 @@ import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { captureWeek, readDangerBoard } from '../src/pipeline.mjs';
 import { createStore } from '../src/store.mjs';
 import { normalizePlayers } from '../src/sleeper/normalize.mjs';
+import { assets } from './fixtures/assets.mjs';
 
 /**
  * The chop-line math a guillotine week is actually about: who scored the
@@ -298,6 +299,7 @@ test('captureWeek records the danger board in a guillotine snapshot', async () =
   const result = await captureWeek({
     client: fakeClient(),
     store,
+    assets,
     league: leagueOf('guillotine'),
     teams,
     players: PLAYERS,
@@ -320,6 +322,7 @@ test('a format with no eliminations gets no danger key at all, rather than a nul
   const result = await captureWeek({
     client: fakeClient(),
     store,
+    assets,
     league: leagueOf('dynasty'),
     teams,
     players: PLAYERS,
@@ -337,7 +340,7 @@ test('readDangerBoard fetches nothing and rebuilds the board from weeks already 
   const league = leagueOf('guillotine');
   const config = { guillotine: { eliminations: [] } };
 
-  await captureWeek({ client: fakeClient(), store, league, teams, players: PLAYERS, week: 1, config });
+  await captureWeek({ client: fakeClient(), store, assets, league, teams, players: PLAYERS, week: 1, config });
 
   // A client whose methods throw if called proves readDangerBoard fetches nothing.
   const noFetchClient = {

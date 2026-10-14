@@ -267,7 +267,12 @@ export function parseStartWeekAnswer(answer) {
  * refuse.
  */
 export function readRookieDraftConfig(text, { source = 'config/rookie-draft.yml' } = {}) {
-  const parsed = parseYaml(text) ?? {};
+  let parsed;
+  try {
+    parsed = parseYaml(text) ?? {};
+  } catch (error) {
+    throw new Error(`Could not read ${source}: ${error.message}`, { cause: error });
+  }
   return {
     order: parseDeclaredDraftOrder(parsed.order ?? null, { source: `order in ${source}` }),
     rounds: parseDeclaredRoundOrder(parsed.rounds, { source: `rounds in ${source}` }),

@@ -11,6 +11,7 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { weeklyEditions } from './options.mjs';
 
 export const BIN_NAME = 'fantasy-pressbox';
 
@@ -127,6 +128,8 @@ export function gettingStarted(cli, folder = EXAMPLE_LEAGUE_FOLDER) {
     `       ${cli} doctor`,
     '  3. Build your first edition:',
     `       ${cli} rankings`,
+    "  Copy the chat's reply with its copy button, not by highlighting it:",
+    '  highlighting can drop the blank lines.',
   ];
 }
 
@@ -135,10 +138,7 @@ export function gettingStarted(cli, folder = EXAMPLE_LEAGUE_FOLDER) {
  * A guillotine league plays no matchups, so it gets its own three editions.
  */
 export function weeklyRoutine(cli, formatType = null) {
-  const [preview, recap, rankings] =
-    formatType === 'guillotine'
-      ? ['survival-preview', 'chop-recap', 'survival-rankings']
-      : ['preview', 'recap', 'rankings'];
+  const [preview, recap, rankings] = weeklyEditions(formatType).map((edition) => edition.task);
   const rows = [
     ['Before the games', `${cli} ${preview}`],
     ['', `${cli} record <reply file> --task ${preview}`],

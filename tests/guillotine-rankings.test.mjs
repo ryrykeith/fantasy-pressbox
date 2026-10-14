@@ -19,6 +19,7 @@ import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { buildDangerBoard } from '../src/analysis/danger.mjs';
 import { deriveScoringProfile, normalizePlayers } from '../src/sleeper/normalize.mjs';
 import { loadConfig, rankEmoji, resolveRankingWeights, PACKAGE_ROOT } from '../src/config.mjs';
+import { assets } from './fixtures/assets.mjs';
 
 /**
  * The survival rankings: the guillotine league's power ranking.
@@ -205,7 +206,7 @@ test('survival-rankings is an edition that ranks, and an elimination-only one', 
 });
 
 test('buildPrompt embeds the survival-rankings prompt file and the context', () => {
-  const prompt = buildPrompt({ task: 'survival-rankings', context: rankingContext() });
+  const prompt = buildPrompt({ task: 'survival-rankings', context: rankingContext(), assets });
   assert.match(prompt, /SURVIVAL RANKINGS/i);
   assert.match(prompt, /# LEAGUE CONTEXT/);
   assert.match(prompt, /"task": "survival-rankings"/);
@@ -420,7 +421,7 @@ test('buildPrompt refuses an ordinary ranking built from a guillotine context', 
   for (const task of ['rankings', 'preseason-rankings', 'postseason']) {
     const context = rankingContext({ task });
     assert.throws(
-      () => buildPrompt({ task, context }),
+      () => buildPrompt({ task, context, assets }),
       /guillotine league/i,
       `expected buildPrompt to refuse ${task}`,
     );
@@ -431,7 +432,7 @@ test('buildPrompt refuses a survival ranking built from a head-to-head context',
   for (const formatType of ['dynasty', 'redraft']) {
     const context = rankingContext({ formatType, dangerBoard: null, byeExposure: null });
     assert.throws(
-      () => buildPrompt({ task: 'survival-rankings', context }),
+      () => buildPrompt({ task: 'survival-rankings', context, assets }),
       /nobody is eliminated/i,
       `expected a refusal for a ${formatType} league`,
     );

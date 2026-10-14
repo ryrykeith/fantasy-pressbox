@@ -7,6 +7,7 @@ import { renderFormatBlocks } from '../src/promptTemplate.mjs';
 import { buildContext, buildPrompt, taskPromptOnly } from '../src/promptContext.mjs';
 import { PACKAGE_ROOT } from '../src/config.mjs';
 import { FORMAT_TYPES } from '../src/format.mjs';
+import { assets } from './fixtures/assets.mjs';
 
 /**
  * Prompt files share one house style across formats, and mark the parts that
@@ -89,42 +90,42 @@ const DYNASTY_ONLY = [/dynasty/i, /draft capital/i, /futureDraftCapital/, /taxi/
 
 for (const task of ['rankings', 'preseason-rankings']) {
   test(`the redraft ${task} instructions never mention a dynasty-only concept`, () => {
-    const text = taskPromptOnly(task, 'redraft');
+    const text = taskPromptOnly(task, 'redraft', { assets });
     for (const pattern of DYNASTY_ONLY) {
       assert.doesNotMatch(text, pattern);
     }
   });
 
   test(`the redraft ${task} instructions still let age count where it bears on this season`, () => {
-    const text = taskPromptOnly(task, 'redraft');
+    const text = taskPromptOnly(task, 'redraft', { assets });
     assert.match(text, /\bage\b/i);
     assert.match(text, /this season/i);
   });
 
   test(`the dynasty ${task} instructions keep asset value and draft capital`, () => {
-    const text = taskPromptOnly(task, 'dynasty');
+    const text = taskPromptOnly(task, 'dynasty', { assets });
     assert.match(text, /dynasty/i);
     assert.match(text, /futureDraftCapital/);
   });
 }
 
 test('the preseason redraft prompt does not ask for asset value and age curve', () => {
-  assert.doesNotMatch(taskPromptOnly('preseason-rankings', 'redraft'), /asset value and age curve/);
-  assert.match(taskPromptOnly('preseason-rankings', 'dynasty'), /dynasty asset value and age curve/);
+  assert.doesNotMatch(taskPromptOnly('preseason-rankings', 'redraft', { assets }), /asset value and age curve/);
+  assert.match(taskPromptOnly('preseason-rankings', 'dynasty', { assets }), /dynasty asset value and age curve/);
 });
 
 test('buildPrompt resolves the blocks from the context it is given', () => {
-  const prompt = buildPrompt({ task: 'rankings', context: rankingContext('redraft') });
+  const prompt = buildPrompt({ task: 'rankings', context: rankingContext('redraft'), assets });
   assert.doesNotMatch(prompt, /<!--/);
   assert.doesNotMatch(prompt, /## Draft capital/);
 
-  const dynastyPrompt = buildPrompt({ task: 'rankings', context: rankingContext('dynasty') });
+  const dynastyPrompt = buildPrompt({ task: 'rankings', context: rankingContext('dynasty'), assets });
   assert.doesNotMatch(dynastyPrompt, /<!--/);
   assert.match(dynastyPrompt, /## Draft capital/);
 });
 
 test('taskPromptOnly with no format refuses a prompt that has format blocks', () => {
-  assert.throws(() => taskPromptOnly('rankings'), /no league format/);
+  assert.throws(() => taskPromptOnly('rankings', undefined, { assets }), /no league format/);
 });
 
 function rankingContext(type) {

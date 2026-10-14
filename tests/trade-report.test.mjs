@@ -17,6 +17,7 @@ import { TASKS, buildContext, buildPrompt, describePlayer } from '../src/promptC
 import { readMarketValues } from '../src/pipeline.mjs';
 import { createStore } from '../src/store.mjs';
 import { checkPosts } from '../src/validate.mjs';
+import { assets } from './fixtures/assets.mjs';
 
 /**
  * The trade report: a DJ Moore-shaped week 3 trade — a receiver and a 2027
@@ -393,28 +394,28 @@ test('a guillotine trade carries no picks, no record and no seed', () => {
 /* ---------------------------------------------------------------- prompt */
 
 test('the prompt states the format\'s rule for picks and nothing from the others', () => {
-  const dynasty = buildPrompt({ task: 'trade-report', context: context() });
+  const dynasty = buildPrompt({ task: 'trade-report', context: context(), assets });
   assert.match(dynasty, /# Trade Report/);
   assert.match(dynasty, /do not\s+put it in a tier or name a slot/);
   assert.doesNotMatch(dynasty, /weekly floor/);
 
-  const redraft = buildPrompt({ task: 'trade-report', context: context({ l: league('redraft') }) });
+  const redraft = buildPrompt({ task: 'trade-report', context: context({ l: league('redraft') }), assets });
   assert.match(redraft, /Ignore draft picks\s+entirely/);
   assert.doesNotMatch(redraft, /projectedDraftSlot` entry/);
 
-  const guillotine = buildPrompt({ task: 'trade-report', context: context({ l: league('guillotine') }) });
+  const guillotine = buildPrompt({ task: 'trade-report', context: context({ l: league('guillotine') }), assets });
   assert.match(guillotine, /weekly floor/);
 });
 
 test('the prompt allows a trade with no clear winner', () => {
-  const prompt = buildPrompt({ task: 'trade-report', context: context() });
+  const prompt = buildPrompt({ task: 'trade-report', context: context(), assets });
   assert.match(prompt, /no clear winner may be called exactly that/);
 });
 
 test('a trade report with no trade in it is refused', () => {
   const quiet = context({ transactions: enriched().filter((t) => t.type !== 'trade') });
   assert.equal(quiet.trades, undefined);
-  assert.throws(() => buildPrompt({ task: 'trade-report', context: quiet }), /no completed trade/);
+  assert.throws(() => buildPrompt({ task: 'trade-report', context: quiet, assets }), /no completed trade/);
 });
 
 test('an edition in the requested four-post shape passes the Sleeper length check', () => {

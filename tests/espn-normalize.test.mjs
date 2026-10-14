@@ -17,6 +17,7 @@ import { EspnShapeError } from '../src/espn/shape.mjs';
 import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
 import { buildContext, buildPrompt } from '../src/promptContext.mjs';
 import { createStore } from '../src/store.mjs';
+import { assets } from './fixtures/assets.mjs';
 import {
   LEAGUE_BY_ID,
   PLAYERS_WL,
@@ -394,7 +395,7 @@ function everythingWritten(v) {
     }
   }
   const context = buildContext({ task: 'rankings', config: CONFIG, league: normalizedLeague, teams, players, week: 4 });
-  const prompt = buildPrompt({ task: 'rankings', context });
+  const prompt = buildPrompt({ task: 'rankings', context, assets });
 
   const dataDir = mkdtempSync(join(tmpdir(), 'espn-names-'));
   try {

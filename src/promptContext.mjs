@@ -10,9 +10,7 @@
  * business printing that number. Keeping facts in structured form rather than
  * prose is what makes that rule enforceable.
  */
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { PACKAGE_ROOT, resolveFutureStockWeights, resolveRankingWeights } from './config.mjs';
+import { rankEmojiOf, resolveFutureStockWeights, resolveRankingWeights } from './settings.mjs';
 import {
   capabilityGap,
   hasMatchups,
@@ -71,7 +69,8 @@ const WITHOUT_TRANSACTION_COLOUR = [...TRANSACTION_TASKS, TANK_WATCH_TASK, FUTUR
  * exist yet), while a chop recap is *about* the week that just settled and
  * must see exactly that week's chop line, not the one before it.
  *
- * src/cli.mjs reads the same list to decide which way to offset `resolveWeek`
+ * src/options.mjs reads the same list (EDITIONS' `forwardLooking`), which
+ * decides which way prepareEdition and `record` offset `resolveWeek`
  * — imported from here rather than duplicated, so the two decisions can never
  * drift apart.
  */
@@ -99,7 +98,8 @@ const FIXED_FIELD_RANKING_TASKS = ['preseason-rankings', 'rankings', 'postseason
  * outright rather than ranked on somebody else's — so asking for one in an
  * edition that ranks nobody would block it on a decision it never reads.
  *
- * Exported because src/cli.mjs needs the same list to decide what `record`
+ * Exported because src/options.mjs (RECORDABLE_TASKS) and src/edition.mjs
+ * need the same list to decide what `record`
  * will accept and what shape recordBlock files — one list, so a new ranking
  * edition cannot be publishable and unrecordable at the same time.
  */
@@ -110,18 +110,18 @@ export const RANKING_TASKS = [...FIXED_FIELD_RANKING_TASKS, 'survival-rankings']
  * src/promptTemplate.mjs) for `formatType`. A file with no such sections reads
  * the same for every format, so `formatType` may be omitted for it.
  *
- * Prompts ship with the package. `promptsDir` is a workspace's own prompts
- * folder: a file in it shadows the shipped file of the same name, and the rest
- * still come from the package. Either way the text goes through
- * renderFormatBlocks, so an override's format blocks resolve exactly as the
- * shipped prompt's do.
+ * Prompts ship with the package and arrive as `assets` (src/assets.mjs): this
+ * module reads no file. Whether a workspace's own prompt shadows the shipped
+ * one is decided by the readText the assets were loaded with (the CLI's is
+ * diskReadText in src/config.mjs), so an override's text goes through
+ * renderFormatBlocks exactly as the shipped prompt's does.
  */
-function readPrompt(file, formatType, promptsDir = null) {
-  const local = promptsDir ? join(promptsDir, file) : null;
-  const path = local && existsSync(local) ? local : join(PACKAGE_ROOT, 'prompts', file);
-  if (!existsSync(path)) throw new Error(`Missing prompt file: prompts/${file}`);
-  const text = renderFormatBlocks(readFileSync(path, 'utf8').trim(), formatType, file);
-  if (!text) throw new Error(`Prompt file ${path === local ? path : `prompts/${file}`} is empty.`);
+function readPrompt(file, formatType, assets) {
+  if (!assets || typeof assets.prompt !== 'function') {
+    throw new Error('Building a prompt needs the loaded assets: pass loadAssets(readText) (src/assets.mjs).');
+  }
+  const text = renderFormatBlocks(assets.prompt(file).trim(), formatType, file);
+  if (!text) throw new Error(`Prompt file prompts/${file} is empty.`);
   return text;
 }
 
@@ -347,14 +347,30 @@ function awardsView(awards, headToHead) {
   );
 }
 
+/**
+ * The rank emoji as the model sees it: the mode, the table that applies and,
+ * when emoji are off, the rule in words. Without the rule an empty table is
+ * easy to read as "pick your own".
+ */
+function rankEmojiView(config) {
+  const { mode, table } = rankEmojiOf(config);
+  if (mode !== 'none') return { mode, table };
+  return {
+    mode,
+    table: {},
+    rule:
+      'Print no rank emoji anywhere: not beside a team in a ranking, not in a tier list, ' +
+      'and not beside a team in a standings line, a matchup header or a recap.',
+  };
+}
+
 function editorialView(config, format, task) {
   const formatType = format?.type;
   return {
     tone: config.editorial.tone,
     roastIntensity: config.editorial.roast_intensity,
-    rankingEmoji: config.editorial.ranking_emoji,
+    rankEmoji: rankEmojiView(config),
     sleeperMaxChars: config.editorial.output.sleeper_max_chars,
-    includeEmoji: config.editorial.output.include_emoji,
     // Weights are per-format: a redraft league is never judged on the dynasty
     // set's dynasty_value/future_draft_capital factors, and a guillotine
     // league is judged on a weekly floor neither of the others weighs at all.
@@ -913,7 +929,7 @@ export function buildContext({
   format = 'sleeper',
 }) {
   // What the league's provider can supply. Third line of defence for an
-  // edition it cannot support at all (src/cli.mjs refuses before and after
+  // edition it cannot support at all (src/edition.mjs refuses before and after
   // contacting it); every gap short of that is an `unavailable` entry.
   const provider = providerOf(league);
   const { capabilities } = provider;
@@ -1764,11 +1780,11 @@ const MATCHUP_ONLY_TASKS = ['preview', 'recap'];
 export const ELIMINATION_ONLY_TASKS = ['survival-preview', 'chop-recap', 'survival-rankings'];
 
 /** The complete text to paste into a chat, or send to an API. */
-export function buildPrompt({ task, context, promptsDir = null }) {
+export function buildPrompt({ task, context, assets }) {
   const file = TASK_PROMPTS[task];
   if (!file) throw new Error(`Unknown task "${task}". Known tasks: ${TASKS.join(', ')}`);
 
-  // Second line of defence: src/cli.mjs already refuses a guillotine
+  // Second line of defence: prepareEdition (src/edition.mjs) already refuses a guillotine
   // preview/recap before any work begins, using the declared format alone.
   // This catches any other caller that reaches buildPrompt directly and skips
   // that guard — the JSON context block is authoritative, so a prompt built
@@ -1782,7 +1798,7 @@ export function buildPrompt({ task, context, promptsDir = null }) {
     );
   }
 
-  // The same guard in the other direction. src/cli.mjs refuses this off the
+  // The same guard in the other direction. prepareEdition refuses this off the
   // declared format before any work begins; this catches a caller that reaches
   // buildPrompt directly.
   if (ELIMINATION_ONLY_TASKS.includes(task) && !hasEliminations(context.league.format)) {
@@ -1853,7 +1869,7 @@ export function buildPrompt({ task, context, promptsDir = null }) {
   }
 
   // A tank watch is about a rookie draft, which only a dynasty league has, and
-  // about a projected order, which needs a declared rule. src/cli.mjs refuses
+  // about a projected order, which needs a declared rule. prepareEdition refuses
   // both before any work begins; this catches a caller that reaches here
   // directly.
   if (task === TANK_WATCH_TASK) {
@@ -1872,7 +1888,7 @@ export function buildPrompt({ task, context, promptsDir = null }) {
   }
 
   // A future stock edition ranks a multi-season window, which only a dynasty
-  // league has, from the roster window and the pick capital. src/cli.mjs
+  // league has, from the roster window and the pick capital. prepareEdition
   // refuses the format first; this catches a caller that reaches here directly.
   if (task === FUTURE_STOCK_TASK) {
     refuseFutureStock({ formatType: context.league.format?.type ?? 'unknown' });
@@ -1899,11 +1915,11 @@ export function buildPrompt({ task, context, promptsDir = null }) {
     '',
     '---',
     '',
-    readPrompt('system.md', context.league.format?.type, promptsDir),
+    readPrompt('system.md', context.league.format?.type, assets),
     '',
     '---',
     '',
-    readPrompt(file, context.league.format?.type, promptsDir),
+    readPrompt(file, context.league.format?.type, assets),
     '',
     '---',
     '',
@@ -1925,13 +1941,13 @@ export function buildPrompt({ task, context, promptsDir = null }) {
 }
 
 /** The system prompt alone, resolved for the league's format type. */
-export function systemPromptOnly(formatType, { promptsDir = null } = {}) {
-  return readPrompt('system.md', formatType, promptsDir);
+export function systemPromptOnly(formatType, { assets } = {}) {
+  return readPrompt('system.md', formatType, assets);
 }
 
 /** One edition's instructions alone, resolved for the league's format type. */
-export function taskPromptOnly(task, formatType, { promptsDir = null } = {}) {
+export function taskPromptOnly(task, formatType, { assets } = {}) {
   const file = TASK_PROMPTS[task];
   if (!file) throw new Error(`Unknown task "${task}". Known tasks: ${TASKS.join(', ')}`);
-  return readPrompt(file, formatType, promptsDir);
+  return readPrompt(file, formatType, assets);
 }

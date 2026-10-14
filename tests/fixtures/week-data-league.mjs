@@ -17,6 +17,7 @@
  * (week-data-reads.json) needs re-checking. Not a test file itself: `npm test`
  * only runs tests/*.test.mjs.
  */
+import { assets } from './assets.mjs';
 import { BYE_WEEK_BLUES, LOWERED_EXPECTATIONS, PUNT_INTENDED, SUNDAY_SCARIES } from './mock-dynasty-league.mjs';
 
 export const STARTING_SLOTS = ['QB', 'RB', 'WR', 'FLEX'];
@@ -296,7 +297,7 @@ export async function readSavedWeeks(api, { dataDir, transactionsOf }) {
     const store = createStore({ dataDir: `${dataDir}/${type}` });
     const league = leagueOf(type);
     const config = type === 'guillotine' ? { guillotine: { eliminations: [] } } : null;
-    const ctx = { client: fakeClient(), store, league, teams, players, config };
+    const ctx = { client: fakeClient(), store, assets, league, teams, players, config };
 
     const out = {};
     for (const week of [1, 2]) {
@@ -305,10 +306,10 @@ export async function readSavedWeeks(api, { dataDir, transactionsOf }) {
       out[`week${week}`] = { ...stable(fresh), transactions: transactionsOf(fresh, ctx) };
       out[`week${week}Settled`] = { ...stable(settled), transactions: transactionsOf(settled, ctx) };
     }
-    out.transactions = stable(readTransactions({ store, league, teams, players, describePlayer, week: 2, throughWeek: 2 }));
-    out.transactionsWeek1 = stable(readTransactions({ store, league, teams, players, describePlayer, week: 1, throughWeek: 2 }));
-    out.rosterWindow = stable(readRosterWindow({ store, league: { ...league, format: { type: 'dynasty' } }, teams, players, throughWeek: 2 }));
-    out.faabMarket = stable(readFaabMarket({ store, league: { ...league, format: { type: 'guillotine' } }, teams, config, throughWeek: 2 }));
+    out.transactions = stable(readTransactions({ store, assets, league, teams, players, describePlayer, week: 2, throughWeek: 2 }));
+    out.transactionsWeek1 = stable(readTransactions({ store, assets, league, teams, players, describePlayer, week: 1, throughWeek: 2 }));
+    out.rosterWindow = stable(readRosterWindow({ store, assets, league: { ...league, format: { type: 'dynasty' } }, teams, players, throughWeek: 2 }));
+    out.faabMarket = stable(readFaabMarket({ store, assets, league: { ...league, format: { type: 'guillotine' } }, teams, config, throughWeek: 2 }));
     reads[type] = out;
   }
   return reads;

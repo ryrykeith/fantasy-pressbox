@@ -31,6 +31,9 @@ Open with both teams, rank emoji and final scores, winner first:
 🥈 BENCH MOB 133.07
 ```
 
+The emoji are the default table's. Use `editorial.rankEmoji.table`; when
+`editorial.rankEmoji.mode` is `none`, print both lines without one.
+
 Then cover, in whatever order reads best:
 
 - Who actually won it: the starters who scored, by name and points.

@@ -136,7 +136,7 @@ export function capabilityGap(capability, { capabilities = null, provider = 'Sle
 /**
  * Refuses an edition the league's provider cannot support, naming the reason.
  *
- * Runs twice in src/cli.mjs, like refuseTankWatch: with the configured
+ * Runs twice in prepareEdition (src/edition.mjs), like refuseTankWatch: with the configured
  * provider and the declared format before the provider is contacted, and with
  * the opened league's. A declared guillotine on a provider that cannot run one
  * refuses every edition, since no edition of that league can be written.

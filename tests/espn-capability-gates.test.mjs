@@ -17,6 +17,7 @@ import { getProvider } from '../src/providers.mjs';
 import { normalizePlayers as sleeperPlayers, normalizeTeams as sleeperTeams } from '../src/sleeper/normalize.mjs';
 import { sleeperProvider } from '../src/sleeper/provider.mjs';
 import { createStore } from '../src/store.mjs';
+import { assets } from './fixtures/assets.mjs';
 import { createFakeEspnFetch } from './fixtures/fake-espn-fetch.mjs';
 import {
   LEAGUE_BY_ID,
@@ -380,7 +381,7 @@ test('tradeContents: a trade ESPN sent with no items is a trade by the teams nam
   assertEntry(report, 'tradeContents', /ESPN sent a completed trade without its contents/);
   // Its only trade has nothing to grade, so no trade report is built from it.
   assert.throws(
-    () => buildPrompt({ task: 'trade-report', context: report }),
+    () => buildPrompt({ task: 'trade-report', context: report, assets }),
     /Cannot build a trade-report: the only trade in the context arrived without its contents/,
   );
   // (A week with a known trade beside it still builds: tests/espn-editions.test.mjs, through the CLI.)

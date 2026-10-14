@@ -8,18 +8,20 @@
  */
 import { writeFileSync, mkdirSync, readFileSync, existsSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { getProvider, providerDisplayName, providerOf } from './providers.mjs';
+import { getProvider, providerDisplayName } from './providers.mjs';
 import { ESPN_COOKIE_HELP } from './init.mjs';
 import {
   LEAGUE_ID_KEYS,
   loadConfig,
+  loadDiskAssets,
   loadProspectBoard,
   PACKAGE_ROOT,
   describePromptOverrides,
   rankEmoji,
+  rankEmojiOf,
   resolveRankingWeights,
   resolveWorkspaceRoot,
   WORKSPACE_ENV_VAR,
@@ -27,58 +29,75 @@ import {
   workspaceIsPackage,
 } from './config.mjs';
 import { copyLeagueWorkspace, isLeagueWorkspace, requireLeagueWorkspace } from './workspace.mjs';
-import {
-  describeFormat,
-  hasFutureDraftCapital,
-  refuseEditionWithoutCapability,
-  UNDETECTABLE_FORMAT_TYPES,
-} from './format.mjs';
+import { describeFormat, hasFutureDraftCapital, UNDETECTABLE_FORMAT_TYPES } from './format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './scoringReport.mjs';
 import { describeEliminationLedger } from './eliminationReport.mjs';
 import { describeDraftOrder } from './rookieDraft.mjs';
 import { describeProspectBoard } from './prospectBoard.mjs';
-import {
-  openLeague,
-  resolveWeek,
-  captureWeek,
-  importSavedFiles,
-  readEliminationLedger,
-  readByeExposure,
-  readTransactions,
-  readMarketValues,
-  readPickCapital,
-  readRosterWindow,
-} from './pipeline.mjs';
-import { FUTURE_STOCK_TASK, refuseFutureStock } from './futureStock.mjs';
-import { normalizeFutureDraftCapital } from './league/draftCapital.mjs';
-import {
-  TASKS,
-  RANKING_TASKS,
-  ELIMINATION_ONLY_TASKS,
-  FORWARD_LOOKING_TASKS,
-  TRANSACTION_TASKS,
-  buildContext,
-  buildPrompt,
-  systemPromptOnly,
-  taskPromptOnly,
-  describePlayer,
-} from './promptContext.mjs';
+import { resolveWeek, captureWeek, importSavedFiles, readEliminationLedger } from './pipeline.mjs';
+import { FUTURE_STOCK_TASK } from './futureStock.mjs';
+import { describeInspection, inspectLeague } from './inspect.mjs';
+import { PACKAGE_NAME, PACKAGE_VERSION } from './version.mjs';
+import { systemPromptOnly, taskPromptOnly } from './promptContext.mjs';
 import { generate, describeProvider, detectProvider } from './generate.mjs';
-import { checkPosts, extractJsonBlock, stripJsonBlock } from './validate.mjs';
-import { gradePredictions, withMovement, movementLabel } from './store.mjs';
+import { checkPosts, looksCollapsed, stripJsonBlock } from './validate.mjs';
+import { gradePredictions } from './rankingGrades.mjs';
+import { createStore } from './store.mjs';
 import {
-  createTeamIdentity,
-  attachRosterIds,
-  presentPreviousRankings,
-  describeUnresolved,
-} from './teamIdentity.mjs';
+  leagueFileFromWorkspace,
+  leagueFileName,
+  parseLeagueFile,
+  serializeLeagueFile,
+  workspaceFromLeagueFile,
+} from './leagueFile.mjs';
+import { readLeagueFolder, writeLeagueFolder } from './leagueFolder.mjs';
+import { LEAGUE_JSON_LIMITS } from './lib/safeInput.mjs';
 import {
-  TANK_WATCH_EARLY_FLAG,
-  TANK_WATCH_TASK,
-  refuseTankWatch,
-  resolveTankWatchStartWeek,
-} from './tankWatch.mjs';
+  EDITIONS,
+  OPTIONS,
+  RECORDABLE_TASKS,
+  editionForCommand,
+  editionNamed,
+  editionOptions,
+  optionUsage,
+  parseArgs,
+} from './options.mjs';
+import {
+  openLeagueOnSurface,
+  prepareEdition,
+  recordEdition,
+  refuseMultiWeekMatchup,
+  refuseOrdinaryEditionInGuillotineLeague as refuseOrdinaryEditionFor,
+  refuseSurvivalEditionWithoutEliminations as refuseSurvivalEditionFor,
+  describeMultiWeekMatchup,
+  teamIdentityFor,
+} from './edition.mjs';
+
+// The edition steps live in src/edition.mjs, shared with the website. These
+// stay importable from here, where they used to be defined.
+export {
+  describeMultiWeekMatchup,
+  describeQuietTransactionWeek,
+  recordBlock,
+  refuseEditionForProvider,
+  refuseMultiWeekMatchup,
+  summarizeTransactionWeek,
+} from './edition.mjs';
+export { parseArgs };
+import { TANK_WATCH_TASK } from './tankWatch.mjs';
 import { banner, cliCommand, displayPath, gettingStarted, weeklyRoutine } from './welcome.mjs';
+
+/** The league folder's file store: the CLI's history lives under its data/. */
+const fileStore = (config) => createStore({ dataDir: config.dataDir });
+// The shipped prompts and defaults, read from disk; a workspace's own prompts shadow them.
+const diskAssets = (config) => loadDiskAssets({ promptsDir: config.promptsDir });
+/**
+ * Opens the league with the folder's store and the shipped assets (prompts and
+ * the bye-week table). Every command opens through this, so none can open a
+ * league without the table that captureWeek needs.
+ */
+const openFolderLeague = (config, options = {}) =>
+  openLeagueOnSurface(config, { surface: 'cli', store: fileStore(config), assets: diskAssets(config), ...options });
 
 /**
  * This CLI as a command typed from the current folder: the installed
@@ -89,13 +108,80 @@ import { banner, cliCommand, displayPath, gettingStarted, weeklyRoutine } from '
 const CLI_COMMAND = cliCommand({ packageRoot: PACKAGE_ROOT });
 const INIT_COMMAND = `${CLI_COMMAND} init`;
 
+/** Who files a reply from this command line, as a league file names its writer. */
+const CLI_WRITTEN_BY = Object.freeze({ package: PACKAGE_NAME, version: PACKAGE_VERSION, surface: 'cli' });
+
 /**
  * The same command typed from inside a league folder, for the getting-started
  * steps, which `cd` there before running anything.
  */
 const LEAGUE_FOLDER_COMMAND = cliCommand({ packageRoot: PACKAGE_ROOT, from: join(homedir(), 'leagues', 'my-league') });
 
-function helpText(cli = CLI_COMMAND) {
+/**
+ * The commands that build no edition, as `--help` lists them: the setup
+ * commands before the editions, the rest after. Every edition's own line comes
+ * from EDITIONS (src/options.mjs).
+ */
+const SETUP_COMMANDS = [
+  ['init', 'Set up a league folder (run this first)'],
+  ['doctor', 'Check that everything is configured and reachable'],
+  ['migrate <folder>', 'Copy this league into a new folder; nothing is removed'],
+  ['export-league [file]', "Save this league's history and settings as one league file"],
+  ['import-league <file>', 'Turn a league file into a league folder'],
+];
+const OTHER_COMMANDS = [
+  [
+    'record <file>',
+    "File a finished edition you pasted back from a chat (copy it with the chat's copy button, not by highlighting)",
+  ],
+  ['grade', "Score last week's predictions against what happened"],
+  ['check <file>', "Check a file of finished posts against the league's post length limit"],
+  ['fetch', 'Download and save a week of league data'],
+  [
+    'import-espn [--week <n>] <files>',
+    [
+      'ESPN leagues: import pages you saved from ESPN in your browser',
+      '(run it with no files to see the addresses to save)',
+    ],
+  ],
+];
+
+/** The groups of editions `--help` lists, in order, each its own block. */
+const EDITION_GROUPS = ['weekly', 'dynasty', 'guillotine'];
+
+const HELP_COLUMN = 30;
+
+/** One `--help` row: the usage, then its text in the column, on later lines when the usage is too long. */
+function helpRow(usage, text) {
+  const [first, ...more] = Array.isArray(text) ? text : [text];
+  const indent = ' '.repeat(HELP_COLUMN + 2);
+  const lines =
+    usage.length < HELP_COLUMN ? [`  ${usage.padEnd(HELP_COLUMN)}${first}`] : [`  ${usage}`, `${indent}${first}`];
+  return [...lines, ...more.map((line) => `${indent}${line}`)];
+}
+
+/** `--help`'s Commands block: the setup commands, every edition with a command, then the rest. */
+export function describeCommands() {
+  const blocks = [SETUP_COMMANDS.flatMap(([usage, text]) => helpRow(usage, text))];
+  for (const group of EDITION_GROUPS) {
+    blocks.push(
+      EDITIONS.filter((edition) => edition.command && edition.group === group).flatMap((edition) =>
+        helpRow(edition.command, edition.summary),
+      ),
+    );
+  }
+  blocks.push(OTHER_COMMANDS.flatMap(([usage, text]) => helpRow(usage, text)));
+  return blocks.map((block) => block.join('\n')).join('\n\n');
+}
+
+/** `--help`'s Options block: every option OPTIONS gives a flag, in its order. */
+export function describeOptions() {
+  return OPTIONS.filter((option) => option.flag)
+    .flatMap((option) => helpRow(optionUsage(option), option.help))
+    .join('\n');
+}
+
+export function helpText(cli = CLI_COMMAND) {
   return `
 Fantasy Pressbox — AI league coverage from your Sleeper data
 
@@ -112,42 +198,10 @@ Every week, from the league folder
 ${weeklyRoutine(LEAGUE_FOLDER_COMMAND).join('\n')}
 
 Commands
-  init                          Set up a league folder (run this first)
-  doctor                        Check that everything is configured and reachable
-  migrate <folder>              Copy this league into a new folder; nothing is removed
-
-  preview                       Build the weekly matchup previews
-  recap                         Build the weekly recap and awards
-  rankings                      Build the weekly power rankings
-  transactions                  Grade the week's trades (quiet weeks are skipped)
-  preseason-rankings            Build preseason rankings (ignores all results)
-
-  tank-watch                    Build the rookie draft tank watch (dynasty leagues, second half)
-  future-stock                  Rank teams on the next three seasons: age, production, picks (dynasty leagues)
-
-  survival-preview              Build the weekly survival preview (guillotine leagues)
-  chop-recap                    Build the weekly chop recap and awards (guillotine leagues)
-  survival-rankings             Build the weekly survival rankings (guillotine leagues)
-
-  record <file>                 File a finished edition you pasted back from a chat
-  grade                         Score last week's predictions against what happened
-  check <file>                  Check a file of finished posts against the length limit
-  fetch                         Download and save a week of league data
-  import-espn [--week <n>] <files>
-                                ESPN leagues: import pages you saved from ESPN in your browser
-                                (run it with no files to see the addresses to save)
+${describeCommands()}
 
 Options
-  --week <n>                    Which week to work on (default: worked out from Sleeper)
-  --format <sleeper|imessage>   Who the output is for (default: sleeper)
-  --task <name>                 Which edition a recorded file is (used with record)
-  --generate                    Call the AI provider in .env and write finished posts
-  --refresh-players             Re-download the NFL player list instead of using the cache
-  --refresh-market              Fetch trade values again instead of reusing the week's saved ones
-  --early                       Run the tank watch before its start week
-  --workspace <folder>          The league folder: its .env, config, data and output
-                                (default: $${WORKSPACE_ENV_VAR}, else the current folder)
-  --help                        Show this message
+${describeOptions()}
 
 Examples
   ${cli} doctor --workspace ~/leagues/my-league
@@ -186,28 +240,6 @@ function welcomeText(workspaceRoot) {
   return lines.join('\n');
 }
 
-function parseArgs(argv) {
-  const args = { _: [] };
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i];
-    if (token === '--help' || token === '-h') args.help = true;
-    else if (token === '--generate') args.generate = true;
-    else if (token === '--refresh-players') args.refreshPlayers = true;
-    else if (token === '--refresh-market') args.refreshMarket = true;
-    else if (token === TANK_WATCH_EARLY_FLAG) args.early = true;
-    else if (token === '--week') args.week = Number.parseInt(argv[++i], 10);
-    else if (token === '--format') args.format = argv[++i];
-    else if (token === '--task') args.task = argv[++i];
-    else if (token === '--workspace') {
-      const folder = argv[++i];
-      if (!folder || folder.startsWith('--')) throw new Error('--workspace needs a folder, e.g. --workspace ~/leagues/my-league');
-      args.workspace = folder;
-    } else if (token.startsWith('--')) throw new Error(`Unknown option "${token}". Try --help.`);
-    else args._.push(token);
-  }
-  return args;
-}
-
 const say = (...parts) => console.log(...parts);
 const warn = (...parts) => console.warn(...parts);
 const bold = (text) => (process.stdout.isTTY ? `\x1b[1m${text}\x1b[0m` : text);
@@ -232,164 +264,17 @@ function requireLeague(config) {
   );
 }
 
-/**
- * What replaces each ordinary edition for a guillotine league.
- *
- * These ship one at a time, so the refusal below asks TASKS whether the
- * replacement it is about to name actually exists rather than carrying its own
- * claim about it. That way the message corrects itself the week a replacement
- * lands, instead of going stale and sending someone to a command that is not
- * there — or, worse, telling them to paste a prompt that has already shipped.
- */
-const GUILLOTINE_EDITION_FOR = {
-  preview: 'survival-preview',
-  recap: 'chop-recap',
-  rankings: 'survival-rankings',
-};
+/** How a refusal names a command to run instead: this CLI, then the command. */
+const cliCommandFor = (name) => `${CLI_COMMAND} ${name}`;
 
 /**
- * Every ordinary edition a guillotine league cannot run, and why not.
- *
- * This map is the list — a task named here is refused, a task not named here
- * is allowed — and GUILLOTINE_EDITION_FOR above says which of them has a
- * guillotine replacement to be sent to. Keeping the reason and the membership
- * in one place is what stops a task being refused with no explanation, or
- * explained and never refused.
- *
- * The reasons are genuinely different and a single message covering all of
- * them would be vague about every one. `preview`/`recap` are about a game
- * nobody played. The three ranking editions each assume a field that does not
- * shrink — and the last two of those used to be refused for free, because
- * `resolveRankingWeights` threw for a format with no weight set and every
- * ranking edition asks for one. Shipping `weights.guillotine` turned that loud
- * failure into a silent success for them, so they are named here instead: the
- * refusal is now a decision rather than a side effect of a missing config key.
+ * The guillotine refusals (src/edition.mjs), naming this CLI's commands.
+ * prepareEdition runs them before any work begins; exported for the tests.
  */
-const GUILLOTINE_REFUSAL_BECAUSE = {
-  preview:
-    'there are no head-to-head matchups, so there is nothing to preview — every team just ' +
-    'scores on its own each week and the lowest is eliminated',
-  recap:
-    'there are no head-to-head matchups, so there is nothing to recap — every team just ' +
-    'scores on its own each week and the lowest is eliminated',
-  rankings:
-    'a power ranking here is a ranking of the teams still alive, judged on the floor that ' +
-    'keeps them alive — not on the asset quality the ordinary edition weighs',
-  'preseason-rankings':
-    'this format is ranked on a weekly floor, bye exposure and FAAB ammunition, none of which ' +
-    'exists before a single week has been played',
-  postseason:
-    'there is no postseason in this format — the season ends the week one team is left, and ' +
-    'the last survival ranking is the final word',
-};
-
-/**
- * The other direction: which ordinary edition a guillotine-only one replaces.
- *
- * Derived from GUILLOTINE_EDITION_FOR rather than written out a second time,
- * so the two guards below can never name different commands for the same
- * pair — `refuseOrdinaryEditionInGuillotineLeague` sends a guillotine league
- * one way, `refuseSurvivalEditionWithoutEliminations` sends everyone else back.
- */
-const ORDINARY_EDITION_FOR = Object.fromEntries(
-  Object.entries(GUILLOTINE_EDITION_FOR).map(([ordinary, guillotine]) => [guillotine, ordinary]),
-);
-
-/**
- * Refuses an ordinary edition before any work begins, for a guillotine league.
- *
- * Guillotine can only ever be DECLARED — Sleeper has no field that reveals it
- * (see UNDETECTABLE_FORMAT_TYPES in src/format.mjs) — so `config.leagueFormat`
- * already answers the question with no Sleeper call needed. This is the first
- * line of defence; buildPrompt in src/promptContext.mjs carries a second check
- * against the resolved format, in case some other caller reaches it without
- * going through here.
- */
-export function refuseOrdinaryEditionInGuillotineLeague(config, task) {
-  if (config.leagueFormat !== 'guillotine') return;
-
-  const because = GUILLOTINE_REFUSAL_BECAUSE[task];
-  if (!because) return;
-
-  // A refused edition either has a guillotine replacement to be sent to, or it
-  // has none at all. The only ones with none are ranking editions, so the
-  // ranking this format does have is what they point at — read off the map
-  // rather than written out, so renaming the command renames the advice.
-  const replacement = GUILLOTINE_EDITION_FOR[task];
-
-  throw new Error(
-    `This is a guillotine league: ${because}.\n\n` +
-      (!replacement
-        ? `There is no guillotine \`${task}\` edition. The ranking this format does have is ` +
-          `\`${GUILLOTINE_EDITION_FOR.rankings}\`, written about a week that has been played: ` +
-          `${CLI_COMMAND} ${GUILLOTINE_EDITION_FOR.rankings}`
-        : TASKS.includes(replacement)
-          ? `Run \`${replacement}\` instead: ${CLI_COMMAND} ${replacement}`
-          : `Guillotine leagues get a \`${replacement}\` edition instead of \`${task}\`, but it has not ` +
-            'shipped yet. Track it in the PRD under "Guillotine chopped league coverage" → "Guillotine editions".'),
-  );
-}
-
-/**
- * Refuses an elimination-shaped edition in a league where nobody is eliminated.
- *
- * The mirror of the guard above, and sound for the same reason: guillotine is
- * the only format anyone is chopped out of, and it can only ever be declared.
- * So an undeclared league is definitively not one, `config.leagueFormat`
- * settles it outright, and no Sleeper call is needed to find out.
- *
- * Covers every edition ELIMINATION_ONLY_TASKS names — the forward-looking
- * survival preview, the backward-looking chop recap and the survival
- * rankings — with one message, naming whichever ordinary edition
- * (ORDINARY_EDITION_FOR) actually replaces the one that was asked for.
- */
-export function refuseSurvivalEditionWithoutEliminations(config, task) {
-  if (!ELIMINATION_ONLY_TASKS.includes(task) || config.leagueFormat === 'guillotine') return;
-  const replacement = ORDINARY_EDITION_FOR[task] ?? 'preview';
-  throw new Error(
-    `\`${task}\` is a guillotine edition: nobody is eliminated during the season in this league ` +
-      '— every team plays all the way to the end.\n\n' +
-      `Run \`${replacement}\` instead: ${CLI_COMMAND} ${replacement}\n\n` +
-      'If this really is a guillotine league, say so with LEAGUE_FORMAT=guillotine in .env. ' +
-      'Sleeper cannot report that format, so it has to be declared.',
-  );
-}
-
-/** "4 and 5", "4, 5 and 6". */
-function listWeeks(weeks) {
-  return weeks.length > 1 ? `${weeks.slice(0, -1).join(', ')} and ${weeks.at(-1)}` : String(weeks[0]);
-}
-
-/**
- * Why a week inside a matchup period of more than one NFL week has no score
- * to report, or null for any other week. `captured` is captureWeek output,
- * which carries `multiWeekMatchup` only for such a week (ESPN only).
- */
-export function describeMultiWeekMatchup(captured, week) {
-  const period = captured?.multiWeekMatchup;
-  if (!period) return null;
-  return (
-    `Week ${week} is part of ESPN matchup period ${period.matchupPeriod}, which covers NFL weeks ` +
-    `${listWeeks(period.weeks)}. Its matchups are scored across more than one NFL week, so no single ` +
-    "week's score exists, and none is made up by splitting or summing the period."
-  );
-}
-
-/**
- * Refuses an edition that reads the captured week's analysis — its scores,
- * pairings and awards — for a week with no single week's score. captureWeek
- * saves no analysis for such a week rather than one of zeros
- * (docs/plans/espn-football.md, decision 12).
- */
-export function refuseMultiWeekMatchup(captured, { week, edition }) {
-  const reason = describeMultiWeekMatchup(captured, week);
-  if (!reason) return;
-  throw new Error(
-    `${reason}\n\n` +
-      `\`${edition}\` needs that week's scores, so nothing was built. Matchup periods over more than ` +
-      'one NFL week are not covered in this version.',
-  );
-}
+export const refuseOrdinaryEditionInGuillotineLeague = (config, task) =>
+  refuseOrdinaryEditionFor(config, task, { commandFor: cliCommandFor });
+export const refuseSurvivalEditionWithoutEliminations = (config, task) =>
+  refuseSurvivalEditionFor(config, task, { commandFor: cliCommandFor });
 
 function writeOutput(config, name, body) {
   mkdirSync(config.outputDir, { recursive: true });
@@ -477,7 +362,7 @@ async function commandDoctor(config) {
   let week;
   let source;
   try {
-    ctx = await openLeague(config, { allowStaleLeague: true });
+    ctx = await openFolderLeague(config, { allowStaleLeague: true });
     ({ week, source } = await resolveWeek({ client: ctx.client, league: ctx.league, config }));
   } catch (error) {
     // Nothing imported yet on the import route: the same addresses and notes a
@@ -508,8 +393,26 @@ async function commandDoctor(config) {
   }
   for (const line of describeScoringSummary(league.format.scoring)) say(`  ${line}`);
   for (const line of describeUnmodelledScoring(league.format.scoring, { provider: providerDisplayName(league.provider) })) say(`  ${line}`);
-  say(`  Current week       ${week} (from ${source})`);
+  // The status report (src/inspect.mjs). The import route has no live state:
+  // its week comes from the saved pages and is reported as such, never as live.
+  const report = inspectLeague({
+    // The fetch route's context holds no store: read the folder's own.
+    store: ctx.store ?? fileStore(config),
+    provider: league.provider,
+    leagueId: config.leagueId,
+    season: league.season,
+    declaredFormat: config.leagueFormat ?? null,
+    displayName: config.leagueDisplayName ?? null,
+    weekOverride: config.week ?? null,
+    espnRoute: league.provider === 'espn' ? config.league.route : null,
+    live: espnRoute.imported ? null : { league, week, source },
+  });
+  const status = describeInspection(report);
+  for (const line of status.week) say(line);
   const staleLeaguePage = reportSavedPages(ctx);
+  for (const line of [...status.coverage, ...status.next]) say(line);
+  const mismatch = report.problems.find((problem) => problem.code === 'league-mismatch');
+  if (mismatch) say(`  League ID          ✗ ${mismatch.message}`);
   if (espnRoute.imported) for (const line of describeImportToSave(config, { season: league.season, weeks: savedWeeks(ctx) })) say(line);
 
   // Who is still in the league, for the formats where that changes. Built from
@@ -551,6 +454,7 @@ async function commandDoctor(config) {
     say(`\nThe league page is out of date.\n${staleLeaguePage}`);
     return 1;
   }
+  if (mismatch) return 1;
 
   say(
     `\nEverything looks good. Try: ${CLI_COMMAND} preview` +
@@ -666,13 +570,13 @@ function reportSavedPages(ctx) {
  * table against the real number of teams in the league.
  */
 function reportRankEmoji(config, teamCount) {
-  if (!config.editorial.output.include_emoji) {
-    say('\n  Rank emoji         off (INCLUDE_EMOJI is false)');
+  const { mode, table } = rankEmojiOf(config);
+  if (mode === 'none') {
+    say('\n  Rank emoji         none (INCLUDE_EMOJI is false)');
     say('                     Turn them on in config/editorial.yml or .env');
     return;
   }
 
-  const table = config.editorial.ranking_emoji || {};
   const defined = Object.keys(table)
     .map(Number)
     .filter(Number.isFinite)
@@ -684,7 +588,7 @@ function reportRankEmoji(config, teamCount) {
     return `${rank}${rankEmoji(config, rank)}`;
   }).join('  ');
 
-  say(`\n  Rank emoji         ${line}`);
+  say(`\n  Rank emoji         ${mode}: ${line}`);
   say('                     Edit these in config/editorial.yml');
 
   if (highest < teamCount) {
@@ -697,7 +601,7 @@ function reportRankEmoji(config, teamCount) {
 
 async function commandFetch(config, args) {
   requireLeague(config);
-  const ctx = await openLeague(config, { refreshPlayers: args.refreshPlayers });
+  const ctx = await openFolderLeague(config, { refreshPlayers: args.refreshPlayers });
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week });
   const result = await captureWeek({ ...ctx, week });
   reportCapture(result, week, ctx);
@@ -803,7 +707,7 @@ async function commandImportEspn(config, args) {
   }
 
   const files = paths.map((path) => readSavedFile(path, { maxBytes: espn.importMaxBytes, workspaceRoot: config.workspaceRoot }));
-  const imported = importSavedFiles(config, { files, week });
+  const imported = importSavedFiles(config, { store: fileStore(config), files, week });
   say('Imported from pages you saved (nothing was requested from ESPN):');
   for (const [kind, file] of Object.entries(imported.files)) say(`  ${kind.padEnd(13)}${file}`);
   if (imported.leaguePath) say(`  league saved ${imported.leaguePath}`);
@@ -811,7 +715,7 @@ async function commandImportEspn(config, args) {
   // Opened even when the league page is now behind the week pages, only to
   // say so: nothing is captured from it then (a settled snapshot is kept as
   // it is, so stale standings must never reach one).
-  const ctx = await openLeague(config, { allowStaleLeague: true });
+  const ctx = await openFolderLeague(config, { allowStaleLeague: true });
   say(`\n${ctx.league.name}: ${ctx.teams.length} teams, current week ${ctx.league.currentWeek ?? 'unknown'} (the latest saved page).`);
   const stale = ctx.provider.staleLeagueNotice?.({ week: imported.week }) ?? null;
   if (stale) {
@@ -830,382 +734,34 @@ async function commandImportEspn(config, args) {
 }
 
 /**
- * Previews, recaps and rankings differ only in which week they are about and
- * which history they need, so they share one path.
+ * Previews, recaps, rankings and every other edition: the shared steps
+ * (src/edition.mjs#prepareEdition) build the prompt, and the CLI writes it
+ * out, then optionally has it written and files what comes back.
  */
-/**
- * What a week's transactions hold, section by section.
- *
- * The transactions command is one command for every kind of transaction
- * coverage rather than one per kind, so the edition has to know which sections
- * have something in them. Today only trades have an edition; `pickups` is
- * counted anyway so a quiet week and a trade-less week are told apart.
- *
- * `trades` counts only the trades that can be graded. A trade the provider
- * sent without its contents (ESPN, `contentsUnknown`) is counted apart, in
- * `tradesWithoutContents`: it was made, but there is nothing in it to grade.
- *
- * `enriched` is src/pipeline.mjs#readTransactions output.
- */
-export function summarizeTransactionWeek(enriched) {
-  const list = enriched ?? [];
-  const allTrades = list.filter((transaction) => transaction.type === 'trade');
-  const tradesWithoutContents = allTrades.filter((trade) => trade.contentsUnknown).length;
-  return {
-    trades: allTrades.length - tradesWithoutContents,
-    tradesWithoutContents,
-    pickups: list.length - allTrades.length,
-    total: list.length,
-  };
-}
-
-/**
- * The line printed when a transaction edition has nothing to be about, or null
- * when it does. A quiet week is a result, not an error: the command exits zero
- * and writes nothing, because a model handed an edition about nothing grades
- * something it made up. A week whose only trades arrived without their
- * contents is one of these too: the trades were made, but nothing in them can
- * be graded. `providerName` names who sent them that way.
- */
-export function describeQuietTransactionWeek(summary, week, { providerName = 'The provider' } = {}) {
-  if (summary.total === 0) {
-    return `Week ${week} has no completed transactions, so there is nothing to write about. No edition was built.`;
-  }
-  const withoutContents = summary.tradesWithoutContents ?? 0;
-  if (summary.trades === 0 && withoutContents > 0) {
-    const one = withoutContents === 1;
-    return (
-      `Week ${week} has ${one ? 'one completed trade' : `${withoutContents} completed trades`}, but ` +
-      `${providerName} sent ${one ? 'the trade without its' : 'the trades without their'} contents ` +
-      "(it often sends a trade's items only to the account that made it), so there is nothing to grade. " +
-      'No edition was built.'
-    );
-  }
-  if (summary.trades === 0) {
-    return (
-      `Week ${week} has ${summary.pickups} waiver or free-agent move(s) but no trades, and ` +
-      'only trades have an edition so far. No edition was built.'
-    );
-  }
-  return null;
-}
-
-/**
- * Refuses an edition the league's provider cannot support, before it is
- * contacted: the configured provider and the declared format are enough
- * (src/format.mjs#refuseEditionWithoutCapability). Runs ahead of the format
- * guards, so an ESPN league asked for a guillotine edition hears that ESPN
- * cannot run one, not that it should declare LEAGUE_FORMAT=guillotine.
- */
-export function refuseEditionForProvider(config, task) {
-  const provider = getProvider(config.league.provider);
-  refuseEditionWithoutCapability(task, {
-    capabilities: provider.capabilities,
-    provider: provider.displayName,
-    formatType: config.leagueFormat,
-  });
-}
-
 async function commandEdition(config, args, task) {
   requireLeague(config);
-  refuseEditionForProvider(config, task);
-  refuseOrdinaryEditionInGuillotineLeague(config, task);
-  refuseSurvivalEditionWithoutEliminations(config, task);
-  const isTankWatch = task === TANK_WATCH_TASK;
-  // The declared format and rule are enough to refuse a tank watch before
-  // Sleeper is contacted. The resolved format and the week are checked again
-  // once the league is open.
-  if (isTankWatch) refuseTankWatch({ formatType: config.leagueFormat, rule: config.rookieDraft.order });
-  const isFutureStock = task === FUTURE_STOCK_TASK;
-  // Same two-step as the tank watch: the declared format refuses before
-  // Sleeper is contacted, the resolved one once the league is open.
-  if (isFutureStock) refuseFutureStock({ formatType: config.leagueFormat });
-  const format = args.format || 'sleeper';
-  if (!['sleeper', 'imessage'].includes(format)) {
-    throw new Error(`--format must be "sleeper" or "imessage", got "${format}".`);
-  }
-
-  const ctx = await openLeague(config, { refreshPlayers: args.refreshPlayers });
-  const { league, teams, players, store, client } = ctx;
-  // Again with the opened league: its provider and its resolved format.
-  const leagueProvider = providerOf(league);
-  refuseEditionWithoutCapability(task, {
-    capabilities: leagueProvider.capabilities,
-    provider: leagueProvider.displayName,
-    formatType: league.format.type,
-  });
-  // Null for a provider with no traded future picks (ESPN); every use is gated on that capability.
-  const tradedPicks = ctx.draftCapital?.tradedPicks ?? [];
-  const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]));
-
-  // Not computed for a format without future picks: Sleeper can still report
-  // picks traded for a redraft league's own upcoming draft, so the data being
-  // present says nothing about whether the concept exists. Nor for a provider
-  // whose traded picks are not read: every team would appear to hold only its
-  // own picks, which nothing on file says.
-  const futureDraftCapital = hasFutureDraftCapital(league.format, leagueProvider.capabilities)
-    ? normalizeFutureDraftCapital({
-        tradedPicks,
-        league,
-        teamsByRosterId,
-        roundsPerDraft: league.draftRounds,
-      })
-    : null;
-
-  // A preview looks at the week about to be played; a recap and its rankings
-  // look at the week that just finished.
-  const offset = FORWARD_LOOKING_TASKS.includes(task) ? 0 : -1;
-  const { week, source } = await resolveWeek({ client, league, config, requested: args.week, offset });
-  const isTransactionEdition = TRANSACTION_TASKS.includes(task);
-  if (isTankWatch) {
-    refuseTankWatch({
-      formatType: league.format.type,
-      rule: config.rookieDraft.order,
-      week,
-      // --early skips the start week entirely, including working one out.
-      startWeek: args.early
-        ? null
-        : resolveTankWatchStartWeek({ declared: config.rookieDraft.tankWatch.startWeek, league }),
-    });
-  }
-  if (isFutureStock) refuseFutureStock({ formatType: league.format.type });
-  say(`Building ${task} for week ${week} (week chosen from ${source}).`);
-
-  let weekAnalysis = null;
-  let upcomingAnalysis = null;
-  let priorWeekAnalysis = null;
-  let transactions = null;
-  let transactionsUnavailable = false;
-  let gradedPredictions = null;
-  // Who is still alive, for the formats where that changes. Not built for
-  // preseason-rankings — the season has not started, so nobody has been
-  // chopped and captureWeek is never called to compute it.
-  let eliminationLedger = null;
-  let faabMarket = null;
-  let dangerBoard = null;
-  let byeExposure = null;
-  let enrichedTransactions = null;
-  let marketValues = null;
-  let draftOrder = null;
-  let previousTankWatch = null;
-  let prospectBoard = null;
-  let rosterWindow = null;
-  let pickCapital = null;
-
-  if (task === 'preseason-rankings') {
-    say('Preseason edition: regular-season results are deliberately excluded.');
-  } else {
-    const captured = await captureWeek({ ...ctx, week });
-    eliminationLedger = captured.elimination ?? null;
-    faabMarket = captured.faab ?? null;
-    // Already normalized by captureWeek, with the same lines describePlayer writes.
-    transactions = captured.transactions;
-    transactionsUnavailable = Boolean(captured.transactionsUnavailable);
-
-    if (isTransactionEdition && transactionsUnavailable) {
-      // Unknown is not quiet: grading an empty list would call the week quiet.
-      const provider = getProvider(league.provider);
-      throw new Error(
-        `Week ${week}'s transactions are not on file: the week was imported without its transactions page, ` +
-          'so there is nothing to grade.' +
-          (provider.importInstructions
-            ? `\n\n${provider.importInstructions({ leagueId: config.league.id, season: config.league.season, week })}`
-            : ''),
-      );
-    }
-
-    if (isTransactionEdition) {
-      // Everything a transaction edition reads is a raw bundle captureWeek has
-      // just saved. A quiet week is settled before the market is fetched, so
-      // a week with nothing in it costs no network call and writes no file.
-      enrichedTransactions = readTransactions({ store, league, teams, players, describePlayer, week });
-      const quiet = describeQuietTransactionWeek(summarizeTransactionWeek(enrichedTransactions), week, {
-        providerName: getProvider(league.provider).displayName,
-      });
-      if (quiet) {
-        say(quiet);
-        return 0;
-      }
-      marketValues = await readMarketValues({ store, league, teams, week, refresh: args.refreshMarket });
-      if (marketValues.unavailable) {
-        warn(`Trade values could not be fetched (${marketValues.unavailable}). Grades will not quote a market.`);
-      }
-      if (task === 'trade-report') {
-        // Traded picks are valued at their projected slot when the league
-        // declares its draft order; without one they keep the refusal to name
-        // a slot, and the edition still runs.
-        draftOrder = captured.draftOrder ?? null;
-        prospectBoard = draftOrder ? loadLeagueProspectBoard(config, draftOrder.draftSeason) : null;
-        if (draftOrder) {
-          say(
-            `Traded ${draftOrder.draftSeason} picks are valued at their projected slot` +
-              (prospectBoard ? ', with the prospect board around it.' : '. No prospect board is declared for that class.'),
-          );
-        }
-      }
-    } else if (isTankWatch) {
-      // The refusals above leave one way for the projection to be missing: a
-      // league that does not report its number of playoff teams.
-      draftOrder = captured.draftOrder ?? null;
-      if (!draftOrder) {
-        throw new Error(
-          'The rookie draft order could not be projected: the league does not report how many teams make the playoffs.',
-        );
-      }
-      // Sleeper reports standings only as they are now, so an earlier --week
-      // still gets today's order.
-      if (Number.isInteger(league.lastScoredWeek) && week !== league.lastScoredWeek) {
-        warn(
-          `Note: the draft order is projected from the standings after week ${league.lastScoredWeek}, ` +
-            `not week ${week}. Sleeper only reports the current standings.`,
-        );
-      }
-      previousTankWatch = store.loadPreviousTankWatch(league.season, week);
-      say(
-        previousTankWatch
-          ? `Measuring movement against the week ${previousTankWatch.week} tank watch.`
-          : 'No earlier tank watch this season: no movement to report.',
-      );
-      prospectBoard = loadLeagueProspectBoard(config, draftOrder.draftSeason);
-    } else if (isFutureStock) {
-      // Everything the edition reads is already on disk or one market fetch
-      // away. A market that cannot be fetched degrades to unpriced picks
-      // (pickCapital.marketUnavailable) rather than stopping the edition.
-      marketValues = await readMarketValues({ store, league, teams, week, refresh: args.refreshMarket });
-      if (marketValues.unavailable) {
-        warn(`Pick values could not be fetched (${marketValues.unavailable}). Picks will be counted, not priced.`);
-      }
-      rosterWindow = readRosterWindow({ store, league, teams, players, throughWeek: week });
-      pickCapital = readPickCapital({ league, teams, tradedPicks, market: marketValues, config });
-      // Optional: without a declared draft rule the picks simply carry no slot.
-      draftOrder = captured.draftOrder ?? null;
-      prospectBoard = draftOrder ? loadLeagueProspectBoard(config, draftOrder.draftSeason) : null;
-      if (!rosterWindow.weeksCovered.length) {
-        warn(`Week ${week} has no completed week on disk: production by age cannot be reported yet.`);
-      }
-    } else if (task === 'preview') {
-      // The week has not been played, so the preview gets the pairings plus
-      // last week's results — never this week's partial scores.
-      refuseMultiWeekMatchup(captured, { week, edition: task });
-      upcomingAnalysis = captured.analysis;
-      if (captured.played) {
-        warn(`Note: week ${week} already has scores. A preview may read strangely.`);
-      }
-      if (week > 1) {
-        const prior = await captureWeek({ ...ctx, week: week - 1 });
-        // Last week's results are context, not the subject: a week with no
-        // single score leaves them out, and says so.
-        const priorMultiWeek = describeMultiWeekMatchup(prior, week - 1);
-        if (priorMultiWeek) warn(`${priorMultiWeek} Last week's results are left out of this preview.`);
-        priorWeekAnalysis = prior.analysis;
-      }
-    } else if (task === 'survival-preview') {
-      // No pairings to fetch and no prior week to fetch either: everything a
-      // survival preview is built on — every completed week's chop line, each
-      // roster's floor, who is still alive, what they have left to spend —
-      // captureWeek has already assembled from the weeks on disk. The upcoming
-      // week's own scores are deliberately not used: dangerBoardView drops
-      // them, because a chop line drawn under a week in progress is a wrong
-      // fact, not an early one.
-      dangerBoard = captured.danger ?? null;
-      byeExposure = captured.byeExposure ?? null;
-      if (captured.played) {
-        warn(`Note: week ${week} already has scores. This week's chop line is not final and is not used.`);
-      }
-    } else {
-      // recap, rankings, postseason share this path with chop-recap and
-      // survival-rankings. The only difference is that the two guillotine
-      // editions also read the danger board — the chop line and survival
-      // margin for the week that just finished, which a plain recap has no
-      // format-fact to report. buildContext's dangerBoardView shifts
-      // `beforeWeek` by one for a backward-looking task, so the same captured
-      // danger board describes this week's own chop rather than the one
-      // before it.
-      refuseMultiWeekMatchup(captured, { week, edition: task });
-      if (!captured.played) {
-        warn(`Week ${week} has no scores yet. Re-run once the games are final.`);
-      }
-      weekAnalysis = captured.analysis;
-      if (task === 'chop-recap') dangerBoard = captured.danger ?? null;
-      if (task === 'survival-rankings') {
-        dangerBoard = captured.danger ?? null;
-        // Bye exposure is a weighted factor in this format, so the ranking
-        // needs it — but reading `captured.byeExposure` would be wrong here.
-        // captureWeek computes exposure from the week it captured, which for a
-        // backward-looking edition is a week already played: its byes are
-        // history, and they would push a genuinely upcoming week off the end
-        // of the report. The risk this edition ranks on starts the week after
-        // the one it is about, so it is rebuilt from that week instead. Reads
-        // only what is already on disk and fetches nothing.
-        byeExposure = readByeExposure({ ...ctx, throughWeek: week, fromWeek: week + 1 });
-      }
-      const saved = store.loadPredictions(league.season, week);
-      gradedPredictions = gradePredictions(saved?.predictions, captured.analysis, {
-        eliminationLedger,
-        identity: teamIdentityFor(ctx),
-      });
-      if (gradedPredictions) {
-        say(`Grading week ${week} predictions: ${gradedPredictions.correct}/${gradedPredictions.total} correct.`);
-      }
-    }
-  }
-
-  // Shown to the model under the names teams go by now, with the published
-  // name kept as `formerly`, so a rename reads as a rename and not as a team
-  // that appeared from nowhere while another vanished.
-  const previousRankings =
-    task === 'preseason-rankings' || isTransactionEdition || isTankWatch || isFutureStock
-      ? null
-      : presentPreviousRankings(store.loadPreviousRankings(league.season, week), teamIdentityFor(ctx));
-  if (previousRankings) {
-    say(`Measuring movement against "${previousRankings.label ?? 'previous'}" rankings.`);
-    for (const { from, to } of previousRankings.renamed) say(`  Renamed since then: ${from} → ${to}`);
-    if (previousRankings.unresolved.length) {
-      say(`  Could not match to any current team: ${previousRankings.unresolved.join(', ')}`);
-    }
-  }
-
-  const context = buildContext({
+  const assets = diskAssets(config);
+  const prepared = await prepareEdition({
     task,
-    config,
-    league,
-    teams,
-    players,
-    week,
-    weekAnalysis,
-    upcomingAnalysis,
-    priorWeekAnalysis,
-    previousRankings,
-    gradedPredictions,
-    transactions,
-    transactionsUnavailable,
-    enrichedTransactions,
-    marketValues,
-    futureDraftCapital,
-    eliminationLedger,
-    faabMarket,
-    dangerBoard,
-    byeExposure,
-    draftOrder,
-    previousTankWatch,
-    prospectBoard,
-    rosterWindow,
-    pickCapital,
-    format,
+    week: args.week,
+    options: editionOptions(task, args),
+    settings: config,
+    store: fileStore(config),
+    assets,
+    prospectBoardFor: (draftYear) => loadLeagueProspectBoard(config, draftYear),
+    surface: 'cli',
+    commandFor: cliCommandFor,
+    log: { say, warn },
   });
+  if (!prepared.built) {
+    say(prepared.message);
+    return 0;
+  }
+  const { week, format, prompt, context, fileStem, league, teams, store, previousRankings, tankWatchPath } = prepared;
 
-  const prompt = buildPrompt({ task, context, promptsDir: config.promptsDir });
-  const base =
-    task === 'preseason-rankings'
-      ? `${league.season}-preseason-rankings`
-      : `${league.season}-week${String(week).padStart(2, '0')}-${task}`;
-  const promptPath = writeOutput(config, `${base}-prompt.md`, prompt);
+  const promptPath = writeOutput(config, `${fileStem}-prompt.md`, prompt);
   say(`\nPrompt written to ${promptPath}`);
-
-  // Saved when the prompt is built, not when posts come back, so the next
-  // tank watch measures movement from this one in the paste-into-a-chat
-  // workflow too. A re-run for the same week replaces it.
-  if (isTankWatch) say(`Projection saved for the next tank watch → ${store.saveTankWatch(league.season, week, draftOrder)}`);
+  if (tankWatchPath) say(`Projection saved for the next tank watch → ${tankWatchPath}`);
 
   if (!args.generate) {
     if (!detectProvider(config.ai)) {
@@ -1227,109 +783,20 @@ async function commandEdition(config, args, task) {
   say(`Generating with ${describeProvider(config.ai)}...`);
   const result = await generate({
     ai: config.ai,
-    system: systemPromptOnly(context.league.format?.type, { promptsDir: config.promptsDir }),
-    user: [taskPromptOnly(task, context.league.format?.type, { promptsDir: config.promptsDir }), '', '# LEAGUE CONTEXT', '', '```json', JSON.stringify(context, null, 2), '```'].join('\n'),
+    system: systemPromptOnly(context.league.format?.type, { assets }),
+    user: [taskPromptOnly(task, context.league.format?.type, { assets }), '', '# LEAGUE CONTEXT', '', '```json', JSON.stringify(context, null, 2), '```'].join('\n'),
   });
 
   const body = stripJsonBlock(result.text);
-  const outPath = writeOutput(config, `${base}-${format}.txt`, body);
+  const outPath = writeOutput(config, `${fileStem}-${format}.txt`, body);
   say(`Posts written to ${outPath}`);
 
-  // A transaction edition and a tank watch end with no machine-readable block:
-  // there is no prediction to grade and no ranking to carry movement from.
-  if (isTransactionEdition || isTankWatch || isFutureStock) {
-    reportLengths(body, config, format, context);
-    return 0;
+  if (prepared.recordsBlock) {
+    recordEdition({ task, week, text: result.text, store, league, teams, previousRankings, from: 'generated', writtenBy: CLI_WRITTEN_BY, log: { say, warn } });
   }
-
-  const block = extractJsonBlock(result.text);
-  recordBlock({ store, league, week, task, block, previousRankings, say, teams });
 
   reportLengths(body, config, format, context);
   return 0;
-}
-
-/**
- * Files the machine-readable tail of an edition.
- *
- * Previews end with their predictions and ranking editions end with their
- * order. Saving them is what lets a later edition grade a prediction or print
- * "↑2" without anyone re-typing anything.
- *
- * Exported so a test can watch what it writes without a real store on disk.
- */
-export function recordBlock({ store, league, week, task, block, previousRankings, say, teams = null }) {
-  if (!Array.isArray(block) || block.length === 0) {
-    say('No machine-readable block found in the output — nothing recorded for next week.');
-    return false;
-  }
-
-  // With the league's teams to hand, every name in the block is pinned to a
-  // roster id before anything is saved, because team names change mid-season
-  // and roster ids do not. A name that matches no team is refused outright:
-  // filing it would silently turn a typo into a "new" team with no history.
-  // Without teams (a bare call, as in some tests) names are filed as written.
-  const identity = teams ? teamIdentityFor({ teams, store, league }) : null;
-
-  // Both previews make a called shot and both file it the same way. What is
-  // being called differs — a winner where games are played, the week's chop
-  // where they are not — but that is a difference gradePredictions reads off
-  // the record's own fields, so the storage path does not need to know.
-  if (task === 'preview' || task === 'survival-preview') {
-    const filed = identity ? pinPredictionsToRosters(block, identity) : block;
-    const path = store.savePredictions(league.season, week, filed);
-    say(`Recorded ${block.length} predictions → ${path}`);
-    say(
-      task === 'survival-preview'
-        ? `Run \`grade --week ${week}\` once the chop is settled to score them.`
-        : "Next week's recap will grade them.",
-    );
-    return true;
-  }
-
-  // Every edition that ranks files the same way, so a new one cannot be
-  // publishable and unrecordable at the same time. A survival ranking is
-  // filed under the same `week-N` label an ordinary one uses, which is what
-  // lets the next week's edition measure movement against it.
-  if (RANKING_TASKS.includes(task)) {
-    const seasonLong = task === 'preseason-rankings' || task === 'postseason';
-    const label =
-      task === 'preseason-rankings' ? 'preseason' : task === 'postseason' ? 'final' : `week-${week}`;
-    let ordered = block
-      .filter((entry) => entry && entry.team)
-      .map((entry, index) => ({ rank: Number(entry.rank) || index + 1, team: String(entry.team) }))
-      .sort((a, b) => a.rank - b.rank);
-    let previous = previousRankings ?? store.loadPreviousRankings(league.season, week);
-    if (identity) {
-      const pinned = attachRosterIds(ordered, identity);
-      if (pinned.unresolved.length) throw new Error(describeUnresolved(pinned.unresolved, identity));
-      ordered = pinned.entries;
-      // Last week's file is read as published; its names are resolved as they
-      // were meant that week, so a team renamed since still lines up.
-      if (previous) {
-        previous = {
-          ...previous,
-          rankings: attachRosterIds(previous.rankings, identity, { week: previous.week ?? null }).entries,
-        };
-      }
-    }
-    const ranked = withMovement(ordered, previous);
-    const path = store.saveRankings(league.season, label, {
-      season: String(league.season),
-      label,
-      week: seasonLong ? null : week,
-      publishedAt: new Date().toISOString(),
-      rankings: ranked,
-    });
-    say(`Recorded ${ranked.length} rankings → ${path}`);
-    for (const entry of ranked) {
-      say(`  ${String(entry.rank).padStart(2)}. ${entry.team} ${movementLabel(entry.movement)}`);
-    }
-    return true;
-  }
-
-  say(`Nothing to record for a ${task} edition.`);
-  return false;
 }
 
 function reportLengths(body, config, format, context = null) {
@@ -1337,6 +804,10 @@ function reportLengths(body, config, format, context = null) {
   const max = config.editorial.output.sleeper_max_chars;
   const report = checkPosts(body, { maxChars: max, context });
   say(`\n${report.count} post(s), limit ${max} characters.`);
+  if (looksCollapsed(report.posts)) {
+    warn('These posts have no blank lines, which usually means the reply was highlighted and copied.');
+    warn("Copy the reply with the chat's copy button instead, and the blank lines come through.");
+  }
   if (report.allOk) {
     say('All posts are within the limit.');
     return;
@@ -1362,45 +833,6 @@ function reportLengths(body, config, format, context = null) {
  * Without this, the copy-and-paste workflow has no memory: rankings would
  * never show movement and predictions would never be graded.
  */
-/** Resolves published team names to rosters for this league and season. */
-function teamIdentityFor({ teams, store, league }) {
-  return createTeamIdentity({
-    teams,
-    history: typeof store.loadTeamNameHistory === 'function' ? store.loadTeamNameHistory(league.season) : [],
-  });
-}
-
-/**
- * Adds the roster behind every team a prediction names.
- *
- * The names stay exactly as published — they are what the recap quotes back —
- * and the roster ids ride alongside so the grade does not depend on nobody
- * renaming their team before the result is in.
- */
-function pinPredictionsToRosters(predictions, identity) {
-  const unresolved = [];
-  const roster = (name) => {
-    if (name === undefined || name === null) return undefined;
-    const id = identity.rosterIdFor(name);
-    if (id === null) unresolved.push(name);
-    return id;
-  };
-  const pinned = predictions.map((prediction) => {
-    if (!prediction || typeof prediction !== 'object') return prediction;
-    const extra = {};
-    if (prediction.predicted_chop !== undefined) {
-      extra.predicted_chop_roster = roster(prediction.predicted_chop);
-    } else {
-      extra.roster_a = roster(prediction.team_a);
-      extra.roster_b = roster(prediction.team_b);
-      extra.predicted_winner_roster = roster(prediction.predicted_winner);
-    }
-    return { ...prediction, ...extra };
-  });
-  if (unresolved.length) throw new Error(describeUnresolved([...new Set(unresolved)], identity));
-  return pinned;
-}
-
 async function commandRecord(config, args) {
   requireLeague(config);
   const file = args._[1];
@@ -1408,34 +840,25 @@ async function commandRecord(config, args) {
   if (!existsSync(file)) throw new Error(`No such file: ${file}`);
 
   const task = args.task;
-  const recordable = ['preview', 'survival-preview', ...RANKING_TASKS];
-  if (!recordable.includes(task ?? '')) {
-    throw new Error(`Pass --task followed by one of: ${recordable.join(', ')}.`);
+  if (!RECORDABLE_TASKS.includes(task ?? '')) {
+    throw new Error(`Pass --task followed by one of: ${RECORDABLE_TASKS.join(', ')}.`);
   }
 
-  const ctx = await openLeague(config);
-  const offset = FORWARD_LOOKING_TASKS.includes(task) ? 0 : -1;
+  const ctx = await openFolderLeague(config);
+  const offset = editionNamed(task).forwardLooking ? 0 : -1;
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week, offset });
 
   const text = readFileSync(file, 'utf8');
-  const block = extractJsonBlock(text);
-  if (!block) {
-    throw new Error(
-      'No ```json block found at the end of that file.\n' +
-        'Copy the whole reply from the chat, including the JSON block after the last %%%.',
-    );
-  }
-
-  say(`Recording ${task} for week ${week}.`);
-  const recorded = recordBlock({
+  const recorded = recordEdition({
+    task,
+    week,
+    text,
     store: ctx.store,
     league: ctx.league,
-    week,
-    task,
-    block,
-    previousRankings: null,
-    say,
     teams: ctx.teams,
+    from: 'pasted',
+    writtenBy: CLI_WRITTEN_BY,
+    log: { say, warn },
   });
   reportLengths(stripJsonBlock(text), config, 'sleeper');
   return recorded ? 0 : 1;
@@ -1452,7 +875,7 @@ function commandCheck(config, args) {
 
 async function commandGrade(config, args) {
   requireLeague(config);
-  const ctx = await openLeague(config);
+  const ctx = await openFolderLeague(config);
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week, offset: -1 });
   const captured = await captureWeek({ ...ctx, week });
   refuseMultiWeekMatchup(captured, { week, edition: 'grade' });
@@ -1543,6 +966,98 @@ function commandMigrate(config, args) {
   return 0;
 }
 
+/**
+ * Writes this league as one league file (src/leagueFile.mjs): its history
+ * under data/ and its settings from .env and config/, through the same
+ * mapping the website uses. An AI key, the ESPN cookies and the other .env
+ * lines a league file never holds are dropped as the .env is read.
+ */
+function commandExportLeague(config, args) {
+  requireLeague(config);
+  const { entries, unread } = readLeagueFolder({
+    workspaceRoot: config.workspaceRoot,
+    dataDir: config.dataDir,
+    fromPackage: workspaceIsPackage(config.workspaceRoot),
+  });
+  const { leagueFile, skipped, ignoredEnvKeys } = leagueFileFromWorkspace(entries, { surface: 'cli' });
+  const text = serializeLeagueFile(leagueFile);
+
+  const target = resolve(args._[1] ?? join(config.outputDir, leagueFileName(leagueFile)));
+  if (isInsideFolder(resolve(config.dataDir), target)) {
+    throw new Error(`${target} is inside the league's data folder, which holds only its history. Choose another place.`);
+  }
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, text);
+
+  say(`League file written to ${target} (${formatBytes(Buffer.byteLength(text))}).`);
+  for (const [season, kinds] of Object.entries(leagueFile.seasons)) {
+    const counts = Object.entries(kinds)
+      .filter(([, files]) => Object.keys(files).length)
+      .map(([kind, files]) => `${kind} ${Object.keys(files).length}`);
+    say(`  ${season}: ${counts.join(', ') || 'no history'}`);
+  }
+  if (ignoredEnvKeys.length) {
+    say(`Left out of the file from .env: ${ignoredEnvKeys.join(', ')}. A league file never holds a key or a cookie.`);
+  }
+  const notRead = [...new Set([...unread, ...skipped])];
+  if (notRead.length) say(`Not read: ${notRead.join(', ')}`);
+  return 0;
+}
+
+/**
+ * Turns a league file into a league folder: the workspace (--workspace,
+ * PRESSBOX_WORKSPACE or this folder) gets the .env, config files and data/
+ * the file describes. Refused when the folder already holds a league, or any
+ * file the import would write.
+ */
+function commandImportLeague(args) {
+  const file = args._[1];
+  if (!file) {
+    throw new Error(
+      `Usage: ${CLI_COMMAND} import-league <file> [--workspace <folder>]\n` +
+        'Writes the league in <file> into a new league folder (this folder, or the one --workspace names).',
+    );
+  }
+  const workspaceRoot = resolveWorkspaceRoot({ flag: args.workspace, create: true });
+  if (isInsideFolder(realpathSync(PACKAGE_ROOT), realpathSync(workspaceRoot))) {
+    throw new Error(
+      `${workspaceRoot} is inside the Fantasy Pressbox package folder (${PACKAGE_ROOT}). ` +
+        'A league lives in its own folder: name one with --workspace <folder>.',
+    );
+  }
+  if (isLeagueWorkspace(workspaceRoot)) {
+    throw new Error(
+      `${workspaceRoot} is already a league folder (it has a .env). ` +
+        'Import into a new or empty folder with --workspace <folder>, so no two histories are mixed.',
+    );
+  }
+
+  const path = resolve(file);
+  if (!existsSync(path)) throw new Error(`${file} does not exist.`);
+  const stats = statSync(path);
+  if (!stats.isFile()) throw new Error(`${file} is not a file.`);
+  if (stats.size > LEAGUE_JSON_LIMITS.maxBytes) {
+    throw new Error(`${file} is larger than ${formatBytes(LEAGUE_JSON_LIMITS.maxBytes)}, the most a league file may be, so it was not read.`);
+  }
+  const leagueFile = parseLeagueFile(readFileSync(path, 'utf8'), { name: file });
+  const written = writeLeagueFolder({ workspaceRoot, entries: workspaceFromLeagueFile(leagueFile) });
+
+  const { writtenBy, writtenAt, league } = leagueFile;
+  say(`Imported the ${providerDisplayName(league.provider)} league ${league.leagueId ?? '(no league ID yet)'} into ${workspaceRoot}`);
+  say(`  written by ${writtenBy.package} ${writtenBy.version} (${writtenBy.surface}) at ${writtenAt}; ${written.length} file(s).`);
+  if (!league.leagueId) say(`Add the league ID to ${join(workspaceRoot, '.env')} before running anything.`);
+  say(`\nCheck it with: ${CLI_COMMAND} doctor --workspace ${workspaceRoot}`);
+  say('A league file never holds an AI key: add yours to .env again if you use --generate.');
+  return 0;
+}
+
+/** A byte count as people read it: 812 bytes, 41.3 KB, 2.4 MB. */
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /* -------------------------------------------------------------------- main */
 
 async function main() {
@@ -1558,40 +1073,37 @@ async function main() {
     return 0;
   }
 
-  // Before any config is read: the folder init sets up may not exist yet.
+  // Before any config is read: the folder init sets up may not exist yet, and
+  // neither may the one a league file is imported into.
   if (command === 'init') return commandInit(args);
+  if (command === 'import-league') return commandImportLeague(args);
 
   const config = loadConfig({ workspaceRoot: resolveWorkspaceRoot({ flag: args.workspace }) });
 
   switch (command) {
     case 'migrate':
       return commandMigrate(config, args);
+    case 'export-league':
+      return commandExportLeague(config, args);
     case 'doctor':
       return commandDoctor(config);
     case 'fetch':
       return commandFetch(config, args);
     case 'import-espn':
       return commandImportEspn(config, args);
+    // Every command EDITIONS names (src/options.mjs); tests/options.test.mjs
+    // checks this list and that one agree.
     case 'preview':
-      return commandEdition(config, args, 'preview');
     case 'survival-preview':
-      return commandEdition(config, args, 'survival-preview');
     case 'recap':
-      return commandEdition(config, args, 'recap');
     case 'chop-recap':
-      return commandEdition(config, args, 'chop-recap');
     case 'rankings':
-      return commandEdition(config, args, 'rankings');
     case 'survival-rankings':
-      return commandEdition(config, args, 'survival-rankings');
     case 'preseason-rankings':
-      return commandEdition(config, args, 'preseason-rankings');
     case 'transactions':
-      return commandEdition(config, args, 'trade-report');
     case TANK_WATCH_TASK:
-      return commandEdition(config, args, TANK_WATCH_TASK);
     case FUTURE_STOCK_TASK:
-      return commandEdition(config, args, FUTURE_STOCK_TASK);
+      return commandEdition(config, args, editionForCommand(command).name);
     case 'record':
       return commandRecord(config, args);
     case 'check':

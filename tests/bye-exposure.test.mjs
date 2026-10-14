@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -12,10 +12,11 @@ import {
   upcomingByeExposure,
 } from '../src/analysis/byeExposure.mjs';
 import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
-import { loadByeWeekTable } from '../src/config.mjs';
+import { loadAssets } from '../src/assets.mjs';
 import { captureWeek, readByeExposure } from '../src/pipeline.mjs';
 import { createStore } from '../src/store.mjs';
 import { normalizePlayers } from '../src/sleeper/normalize.mjs';
+import { assets } from './fixtures/assets.mjs';
 
 /**
  * A bye is not a Sleeper field — src/analysis/byeExposure.mjs reads the
@@ -283,12 +284,14 @@ test('a lookahead window is clipped at week 18 rather than running past the seas
   assert.deepEqual(entry.weeks.map((w) => w.week), [17, 18]);
 });
 
-/* ------------------------------------------------------- config.mjs loader */
+/* ---------------------------------------------------- assets.mjs bye table */
 
-test('loadByeWeekTable refuses a missing season table, naming the generator that produces it', () => {
-  const configDir = mkdtempSync(join(tmpdir(), 'pressbox-bye-config-'));
+/** Assets over an in-memory map of package path -> text: no disk, as the browser has none. */
+const assetsOver = (files) => loadAssets((path) => files[path]);
+
+test('byeWeekTable refuses a missing season table, naming the generator that produces it', () => {
   assert.throws(
-    () => loadByeWeekTable({ season: 2099, configDir }),
+    () => assetsOver({}).byeWeekTable(2099),
     (error) => {
       assert.match(error.message, /No bye-week table for season 2099/);
       assert.match(error.message, /config\/bye-weeks\.2099\.yml/);
@@ -298,22 +301,18 @@ test('loadByeWeekTable refuses a missing season table, naming the generator that
   );
 });
 
-test('loadByeWeekTable refuses a malformed season table', () => {
-  const configDir = mkdtempSync(join(tmpdir(), 'pressbox-bye-config-'));
-  mkdirSync(configDir, { recursive: true });
-  writeFileSync(join(configDir, 'bye-weeks.2099.yml'), 'season: 2099\nbye_weeks:\n  T01: 1\n');
-  assert.throws(() => loadByeWeekTable({ season: 2099, configDir }), /lists 1 team, expected 32/);
+test('byeWeekTable refuses a malformed season table', () => {
+  const loaded = assetsOver({ 'config/bye-weeks.2099.yml': 'season: 2099\nbye_weeks:\n  T01: 1\n' });
+  assert.throws(() => loaded.byeWeekTable(2099), /lists 1 team, expected 32/);
 });
 
-test('loadByeWeekTable reads and resolves a valid season table', () => {
-  const configDir = mkdtempSync(join(tmpdir(), 'pressbox-bye-config-'));
+test('byeWeekTable reads and resolves a valid season table', () => {
   const table = validTable({ season: 2099 });
-  writeFileSync(
-    join(configDir, 'bye-weeks.2099.yml'),
-    renderYaml({ season: 2099, byeWeeks: table.bye_weeks, aliases: table.aliases }),
-  );
+  const loaded = assetsOver({
+    'config/bye-weeks.2099.yml': renderYaml({ season: 2099, byeWeeks: table.bye_weeks, aliases: table.aliases }),
+  });
 
-  const resolved = loadByeWeekTable({ season: 2099, configDir });
+  const resolved = loaded.byeWeekTable(2099);
   assert.equal(resolved.get('T01'), 1);
   assert.equal(resolved.get('OAK'), resolved.get('T01'));
 });
@@ -362,6 +361,7 @@ test('captureWeek records bye exposure in a guillotine snapshot, using the real 
   const result = await captureWeek({
     client: fakeClient(),
     store,
+    assets,
     league: leagueOf('guillotine'),
     teams: guillotineTeams(),
     players: PLAYERS,
@@ -384,6 +384,7 @@ test('a format with no eliminations gets no byeExposure key at all, rather than 
   const result = await captureWeek({
     client: fakeClient(),
     store,
+    assets,
     league: leagueOf('dynasty'),
     teams: guillotineTeams(),
     players: PLAYERS,
@@ -401,9 +402,9 @@ test('readByeExposure rebuilds the report from weeks already on disk, fetching n
   const config = { guillotine: { eliminations: [] } };
   const teams = guillotineTeams();
 
-  await captureWeek({ client: fakeClient(), store, league, teams, players: PLAYERS, week: 7, config });
+  await captureWeek({ client: fakeClient(), store, assets, league, teams, players: PLAYERS, week: 7, config });
 
-  const report = readByeExposure({ store, league, teams, players: PLAYERS, config, throughWeek: 7 });
+  const report = readByeExposure({ store, assets, league, teams, players: PLAYERS, config, throughWeek: 7 });
   const team1 = report.find((entry) => entry.rosterId === 1);
   assert.equal(team1.weeks.find((w) => w.week === 7).startersOnBye, 1);
 });

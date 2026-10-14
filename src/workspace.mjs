@@ -73,7 +73,13 @@ function leagueConfigFiles(configDir, { fromPackage }) {
       if (TEMPLATE_FILES.includes(file)) {
         // The package ships these as empty templates. Copied from there, one
         // that declares nothing is the template, not the league's setting.
-        return !fromPackage || declaresAnything(parseYaml(readFileSync(join(configDir, file), 'utf8')));
+        if (!fromPackage) return true;
+        const path = join(configDir, file);
+        try {
+          return declaresAnything(parseYaml(readFileSync(path, 'utf8')));
+        } catch (error) {
+          throw new Error(`Could not read ${path}: ${error.message}`, { cause: error });
+        }
       }
       return /^prospects\.\d{4}\.yml$/.test(file) || overrides.includes(file);
     })

@@ -29,6 +29,7 @@ import { buildContext, buildPrompt, TASKS } from '../src/promptContext.mjs';
 import { buildRosterWindow } from '../src/analysis/rosterWindow.mjs';
 import { readDraftOrder, readPickCapital } from '../src/pipeline.mjs';
 import { normalizePlayers } from '../src/sleeper/normalize.mjs';
+import { assets } from './fixtures/assets.mjs';
 import {
   RULE,
   TEAMS_AFTER_WEEK_4,
@@ -191,13 +192,13 @@ test('buildPrompt refuses a redraft or guillotine context too, for a caller that
   for (const type of ['redraft', 'guillotine']) {
     const ctx = context({ league: { ...LEAGUE, format: { type, source: 'declared' } } });
     assert.equal(ctx.rosterWindow, undefined, `${type}: no window reaches the context`);
-    assert.throws(() => buildPrompt({ task: FUTURE_STOCK_TASK, context: ctx }), new RegExp(type));
+    assert.throws(() => buildPrompt({ task: FUTURE_STOCK_TASK, context: ctx, assets }), new RegExp(type));
   }
 });
 
 test('buildPrompt refuses a dynasty context built without the window and the capital', () => {
   assert.throws(
-    () => buildPrompt({ task: FUTURE_STOCK_TASK, context: context({ withWindow: false }) }),
+    () => buildPrompt({ task: FUTURE_STOCK_TASK, context: context({ withWindow: false }), assets }),
     /roster window and the draft capital/,
   );
 });
@@ -326,7 +327,7 @@ test('no standings table, no transaction colour, no movement', () => {
 /* ------------------------------------------------- the judgement the prompt carries */
 
 test('the prompt ranks on three seasons and carries the guard against over-projection', () => {
-  const prompt = buildPrompt({ task: FUTURE_STOCK_TASK, context: context() });
+  const prompt = buildPrompt({ task: FUTURE_STOCK_TASK, context: context(), assets });
   const guards = [
     /next three seasons/,
     /An old contender with no picks ranks low/,
@@ -349,7 +350,7 @@ test('the prompt ranks on three seasons and carries the guard against over-proje
 test('the edition is handed its own weight set, not the dynasty one', () => {
   const ctx = context();
   assert.deepEqual(ctx.editorial.rankingWeights, FUTURE_STOCK_WEIGHTS);
-  assert.match(buildPrompt({ task: FUTURE_STOCK_TASK, context: ctx }), /editorial\.rankingWeights/);
+  assert.match(buildPrompt({ task: FUTURE_STOCK_TASK, context: ctx, assets }), /editorial\.rankingWeights/);
 });
 
 test('a config with no future_stock set is refused rather than ranked on the dynasty weights', () => {

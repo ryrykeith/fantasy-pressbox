@@ -31,12 +31,22 @@ import {
   guardTransactions,
 } from './shape.mjs';
 import { espnImportLinks } from './urls.mjs';
+import { UnsafeInputError, parseJsonSafely } from '../lib/safeInput.mjs';
 
-/** The largest saved file read, in bytes. A week with every lineup is well under it. */
-export const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
+/**
+ * The safe-input limits for a saved page (src/lib/safeInput.mjs). A week with
+ * every lineup is a few hundred kilobytes; ESPN's deepest field (a roster
+ * entry's player's stats) nests about a dozen levels; its longest strings are
+ * names and image addresses.
+ */
+export const ESPN_IMPORT_LIMITS = Object.freeze({
+  maxBytes: 20 * 1024 * 1024,
+  maxDepth: 32,
+  maxStringLength: 20_000,
+});
 
-/** Keys that could reach an object's prototype if anything merged the parsed file. */
-const HOSTILE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+/** The largest saved file read, in bytes. */
+export const MAX_IMPORT_BYTES = ESPN_IMPORT_LIMITS.maxBytes;
 
 /** What each saved file is: the three addresses espnImportLinks lists. */
 export const IMPORT_KINDS = Object.freeze({
@@ -54,63 +64,41 @@ export class EspnImportError extends Error {
   }
 }
 
-class HostileKeyError extends Error {
-  constructor(key) {
-    super(key);
-    this.key = key;
-  }
-}
-
 const typeOf = (value) => (value === null ? 'null' : Array.isArray(value) ? 'a list' : typeof value);
 
-/** UTF-8 length without allocating the encoded text. */
-function utf8Length(text) {
-  let bytes = 0;
-  for (let i = 0; i < text.length; i += 1) {
-    const code = text.charCodeAt(i);
-    if (code < 0x80) bytes += 1;
-    else if (code < 0x800) bytes += 2;
-    else if (code >= 0xd800 && code <= 0xdbff) {
-      bytes += 4;
-      i += 1;
-    } else bytes += 3;
-  }
-  return bytes;
-}
+/** What to do about each kind of safe-input refusal, said after the shared message. */
+const IMPORT_ADVICE = {
+  size: 'A saved ESPN league or week is far smaller: check that this is the right file.',
+  key: 'No ESPN response has that key. Save the page from ESPN again.',
+  depth: 'No ESPN response nests that deep. Save the page from ESPN again.',
+  string: 'No ESPN response has a text that long. Save the page from ESPN again.',
+};
 
 /**
  * One saved file's text as a JSON object. `file` is how the file is named in
  * a refusal (its path).
+ *
+ * The text goes through core's safe JSON reader (parseJsonSafely in
+ * src/lib/safeInput.mjs) at ESPN_IMPORT_LIMITS, so a saved page is held to
+ * the same rules as every other file core parses.
  */
 export function parseSavedFile(text, { file }) {
   if (typeof text !== 'string') throw new TypeError('parseSavedFile needs the file text');
-  if (text.length > MAX_IMPORT_BYTES || utf8Length(text) > MAX_IMPORT_BYTES) {
-    throw new EspnImportError(
-      `${file} is larger than ${MAX_IMPORT_BYTES / (1024 * 1024)} MB, so it was not read. ` +
-        'A saved ESPN league or week is far smaller: check that this is the right file.',
-      { file },
-    );
-  }
   let body;
   try {
-    // A browser may save a byte order mark ahead of the JSON.
-    body = JSON.parse(text.replace(/^﻿/, ''), (key, value) => {
-      if (HOSTILE_KEYS.has(key)) throw new HostileKeyError(key);
-      return value;
-    });
+    body = parseJsonSafely(text, { file, limits: ESPN_IMPORT_LIMITS });
   } catch (error) {
-    if (error instanceof HostileKeyError) {
+    if (error instanceof UnsafeInputError) {
+      throw new EspnImportError(`${error.message} ${IMPORT_ADVICE[error.reason]}`, { file, cause: error });
+    }
+    if (error instanceof SyntaxError) {
       throw new EspnImportError(
-        `${file} holds a key named "${error.key}", which no ESPN response has. ` +
-          'It was refused as unsafe to read. Save the page from ESPN again.',
+        `${file} is not JSON. Open the ESPN address in your browser and save the page as it is shown ` +
+          '(the raw JSON text), not as a web page around it.',
         { file },
       );
     }
-    throw new EspnImportError(
-      `${file} is not JSON. Open the ESPN address in your browser and save the page as it is shown ` +
-        '(the raw JSON text), not as a web page around it.',
-      { file },
-    );
+    throw error;
   }
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
     throw new EspnImportError(`${file} must hold a JSON object, the way ESPN's league addresses answer; it holds ${typeOf(body)}.`, {
@@ -342,6 +330,61 @@ export function leaguePageFreshness({ league = null, bundles = [], seen = null }
   if (latestFrom === null && latestPeriod !== null && latestPeriod !== leaguePeriod) latestFrom = { kind: 'league' };
   const stale = leaguePeriod !== null && latestPeriod !== null && leaguePeriod < latestPeriod;
   return { leaguePeriod, latestPeriod, stale, latestFrom: stale ? latestFrom : null };
+}
+
+/** The week bundles an ESPN import saved, oldest first: one per imported week, with its matchups. */
+export function savedEspnBundles({ store, season }) {
+  return store
+    .loadRawThrough(season, Number.POSITIVE_INFINITY)
+    .filter((bundle) => bundle?.provider === 'espn' && bundle.matchups);
+}
+
+/**
+ * The scoring period each saved page is from, read from the store alone:
+ * → { league: { period, importedAt, leagueId } | null, weeks: [{ week, matchupsPeriod,
+ *   transactionsPeriod }], latestPeriod, stale, latestFrom }.
+ * `transactionsPeriod` is null when that week's transactions page was not imported.
+ * doctor (through the provider's savedPages) and inspectLeague (src/inspect.mjs) both read this.
+ */
+export function savedPagesReport({ store, season }) {
+  const saved = store.loadImportedLeague(season);
+  const bundles = savedEspnBundles({ store, season });
+  const periodOf = (body) => (Number.isInteger(body?.scoringPeriodId) ? body.scoringPeriodId : null);
+  const freshness = saved?.body
+    ? leaguePageFreshness({ league: saved.body, bundles, seen: saved.seenScoringPeriod ?? null })
+    : { leaguePeriod: null, latestPeriod: latestScoringPeriod({ bundles }), stale: false, latestFrom: null };
+  return {
+    league: saved?.body
+      ? { period: periodOf(saved.body), importedAt: saved.importedAt ?? null, leagueId: saved.leagueId ?? null }
+      : null,
+    weeks: bundles.map((bundle) => ({
+      week: bundle.week,
+      matchupsPeriod: periodOf(bundle.matchups),
+      transactionsPeriod: periodOf(bundle.transactions),
+    })),
+    latestPeriod: freshness.latestPeriod,
+    stale: freshness.stale,
+    latestFrom: freshness.latestFrom,
+  };
+}
+
+/**
+ * The week the saved pages put the league in: the latest scoring period any
+ * saved page shows, capped at the season's final period. Null when nothing is
+ * imported. The import route has no live state, so this is the whole answer to
+ * "what week is it" there, and a caller must never present it as live.
+ */
+export function savedPagesWeek({ store, season }) {
+  const record = store.loadImportedLeague(season);
+  const saved = record?.body ?? null;
+  const latest = latestScoringPeriod({
+    league: saved,
+    bundles: savedEspnBundles({ store, season }),
+    seen: record?.seenScoringPeriod ?? null,
+  });
+  if (latest === null) return null;
+  const final = saved?.status?.finalScoringPeriod;
+  return Number.isInteger(final) ? Math.min(latest, final) : latest;
 }
 
 /** The sentence that says how far behind the league page is. */

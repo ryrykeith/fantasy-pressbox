@@ -81,7 +81,9 @@ same environment name in the npm trusted-publisher form.
    npm version patch --no-git-tag-version
    ```
 
-   Use `minor` or `major` instead when the change calls for it.
+   Use `minor` or `major` instead when the change calls for it. Set the same
+   version in `src/version.mjs`, which names it to the browser (a league
+   file's `writtenBy`); `npm test` fails until the two agree.
 
 2. Add a `## <version>` section at the top of `CHANGELOG.md` describing what
    changed for someone running the tool.
