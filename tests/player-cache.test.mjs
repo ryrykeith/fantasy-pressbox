@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, readFileSync, utimesSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -14,6 +14,9 @@ import {
   createMemoryPlayerCache,
 } from '../src/playerCache.mjs';
 import { createDiskPlayerCache } from '../src/diskPlayerCache.mjs';
+import { loadConfig } from '../src/config.mjs';
+import { sleeperProvider } from '../src/sleeper/provider.mjs';
+import { espnProvider } from '../src/espn/provider.mjs';
 
 const LEAGUE_ID = '000000000000000000';
 const DAY = PLAYER_CACHE_MAX_AGE_MS;
@@ -130,6 +133,39 @@ test('the disk cache keeps today\'s path and age rule', async () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('the CLI config carries the disk cache, and the Sleeper provider hands it to its client', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pressbox-player-cache-config-'));
+  try {
+    writeFileSync(join(root, '.env'), `SLEEPER_LEAGUE_ID=${LEAGUE_ID}\n`);
+    const config = loadConfig({ workspaceRoot: root });
+    const { state, fetchImpl } = fakeSleeper();
+    const client = sleeperProvider.fromConfig(config).client;
+    await withFetch(fetchImpl, async () => {
+      await client.players();
+      await client.players();
+    });
+    assert.equal(state.calls, 1, 'the second call is answered from the disk cache');
+    assert.ok(existsSync(join(config.dataDir, 'cache', 'players-nfl.json')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the ESPN fetch route hands config.playerCache to its client', async () => {
+  const asked = [];
+  const sentinel = new Error('cache consulted');
+  const playerCache = {
+    async get(key) {
+      asked.push(key);
+      throw sentinel;
+    },
+    async set() {},
+  };
+  const config = { league: { provider: 'espn', id: LEAGUE_ID, season: 2026, route: 'fetch' }, playerCache };
+  await assert.rejects(espnProvider.fromConfig(config).client.players(), (error) => error === sentinel);
+  assert.deepEqual(asked, ['players-espn-2026']);
 });
 
 test('neither client imports from node:', () => {
