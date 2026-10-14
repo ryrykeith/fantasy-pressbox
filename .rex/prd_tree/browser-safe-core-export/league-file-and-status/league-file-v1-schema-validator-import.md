@@ -2,8 +2,13 @@
 id: "345d826c-9537-43d1-94d7-79358d650f81"
 level: "task"
 title: "League file v1: schema, validator, import and export"
-status: "pending"
+status: "completed"
 priority: "high"
+startedAt: "2026-10-14T19:42:21.620Z"
+completedAt: "2026-10-14T20:03:32.357Z"
+endedAt: "2026-10-14T20:03:32.357Z"
+resolutionType: "code-change"
+resolutionDetail: "League file v1 (src/leagueFile.mjs), export-league/import-league, record saves whole reply; commit 224b14a; npm test 1111 pass, check-pack pass"
 acceptanceCriteria:
   - "Exporting a league folder and importing it again gives identical data/ files (round-trip test with the invented cast)"
   - "parseLeagueFile refuses unknown keys, a newer schemaVersion and malformed history, with errors naming the field"
@@ -12,6 +17,6 @@ acceptanceCriteria:
   - "The size of a full invented season, with and without raw, is written in the task's log"
 run: {"tier":"heavy","models":{"claude":"claude-opus-5-5"}}
 description: "READ FIRST (2026-10-13, after ESPN merged to main as #8): Owner decisions 2026-10-13: core supports ESPN on the IMPORT route only (the cookie fetch stays CLI-only, like --generate); a league file STRIPS member IDs, owners[] and first/last names from saved ESPN pages.\n- ALLOWLIST: add ESPN_ROUTE (non-secret; named in PR #8), LEAGUE_SEASON and POST_MAX_LENGTH to the .env keys read. ESPN_S2 and ESPN_SWID are never read, on either route.\n- HISTORY KINDS: the store has a new kind, `import` (data/import/<season>/league.json: the saved ESPN league page, as { provider, importedAt, leagueId, body }). The league file's seasons must carry it, or an imported ESPN league cannot be rebuilt.\n- STRIP ON EXPORT (owner decision): a saved ESPN league page lists members[] and teams[].owners[]. Member IDs are in the same braced form as the SWID cookie and are probably the same value; the page may also carry real first and last names. When writing a league file, remove member IDs, owners[] and every first/last name from saved ESPN pages and raw bundles. Nothing the code reads is lost: managers are already unavailable on ESPN. A league folder rebuilt from the file must still build the same editions; if a shape guard requires a stripped field, adjust it for that path and say so in docs/espn-data.md.\n- Add to acceptance: a test exports an invented ESPN league whose saved page holds members with braced IDs and first/last names, and asserts none of those values, nor any {XXXXXXXX-XXXX-...}-shaped string, reaches the file; the rebuilt folder builds the same recap.\n\nOne JSON file holding a league's history. Its seasons mirror the store one to one.\n\nSHAPE\n- schemaVersion: 1\n- kind: 'fantasy-pressbox.league'\n- writtenBy: { package, version, surface }, and writtenAt\n- league: { provider, leagueId }\n- settings: { displayName, format, tone, roastIntensity, postFormat, maxChars, rankEmoji, declared: { eliminations, rookieDraft, prospects } }\n- seasons: { <season>: { raw, snapshots, rankings, predictions, market, tankWatch, editions } }\n\nRULES\n- The file never holds an API key, ESPN_S2, ESPN_SWID, AI_PROVIDER, AI_MODEL, DATA_DIR, OUTPUT_DIR or DEBUG.\n- An unknown top-level key, kind or kind of history is refused. A newer schemaVersion is refused with \"update the package\" in plain words; an older one is migrated.\n- editions is new. record now saves the whole reply text, keyed week-<n>-<task>, in the file store too.\n\nFOLDER MAPPING\nleagueFileFromWorkspace(entries) maps a list of { path, text } pairs from a league folder. It reads an allowlist only:\n- from .env, only LEAGUE_PROVIDER, SLEEPER_LEAGUE_ID, ESPN_LEAGUE_ID, LEAGUE_FORMAT, LEAGUE_DISPLAY_NAME, PRESSBOX_TONE, SLEEPER_POST_MAX_LENGTH, INCLUDE_EMOJI, SLEEPER_SEASON and FANTASY_WEEK, plus the ESPN epic's non-secret keys once it merges. API key lines are dropped as they are read;\n- config/editorial.yml, rankings.yml, rookie-draft.yml, guillotine.yml and prospects.<YYYY>.yml;\n- data/<kind>/<YYYY>/*.json.\ndata/cache/ is skipped.\n\nCLI\nAdd export-league [file] and import-league <file>.\n\nSIZE\nMeasure a full invented season with and without the raw bundles. The FAAB market reads raw, so record the numbers and whether raw stays in."
-lastModified: "2026-10-14T00:04:40.000Z"
+lastModified: "2026-10-14T20:03:32.384Z"
 lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 ---
