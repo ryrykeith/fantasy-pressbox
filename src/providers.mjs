@@ -36,9 +36,13 @@ export function providerOf(league) {
   return getProvider(league?.provider ?? DEFAULT_PROVIDER);
 }
 
-/** A fetching instance for the league `config` describes (`config.league.provider`). */
-export function openProvider(config) {
-  return getProvider(config?.league?.provider ?? DEFAULT_PROVIDER).fromConfig(config);
+/**
+ * An instance for the league `config` describes (`config.league.provider`).
+ * `store` is where a provider with an import route reads saved pages from;
+ * the caller owns it.
+ */
+export function openProvider(config, { store = null } = {}) {
+  return getProvider(config?.league?.provider ?? DEFAULT_PROVIDER).fromConfig(config, { store });
 }
 
 /**

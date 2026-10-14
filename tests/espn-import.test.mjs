@@ -14,6 +14,9 @@ import { NAME_UNAVAILABLE } from '../src/league/players.mjs';
 import { captureWeek, importSavedFiles, openLeague } from '../src/pipeline.mjs';
 import { buildContext } from '../src/promptContext.mjs';
 import { createStore } from '../src/store.mjs';
+
+/** The file store for a league folder's config, as the CLI makes it. */
+const storeOf = (config) => createStore({ dataDir: config.dataDir });
 import { createFakeEspnFetch } from './fixtures/fake-espn-fetch.mjs';
 import {
   FIXTURE_COOKIES,
@@ -221,9 +224,9 @@ test('importing the saved league and week pages gives the same snapshot as the f
       const pages = savePages(root, await savedPages(leagueId));
       const config = configFor(root);
       assert.equal(config.league.route, 'import');
-      const imported = importSavedFiles(config, { files: asFiles(pages), week: SCORED_WEEK });
+      const imported = importSavedFiles(config, { store: storeOf(config), files: asFiles(pages), week: SCORED_WEEK });
       assert.equal(imported.transactionsUnavailable, false);
-      const ctx = await openLeague(config);
+      const ctx = await openLeague(config, { store: storeOf(config) });
       const result = await captureWeek({ ...ctx, week: SCORED_WEEK });
       assert.equal(result.kept, false);
       assert.deepEqual(calls, []);
@@ -255,7 +258,7 @@ test('under ESPN_ROUTE=import, openLeague, fetchWeek, currentWeek and a capture 
     const pages = savePages(root, await savedPages());
     const calls = forbidFetch(t);
     const config = configFor(root);
-    const provider = espnProvider.fromConfig(config);
+    const provider = espnProvider.fromConfig(config, { store: storeOf(config) });
 
     // Before anything is imported: refusals that name the import, never a request.
     await assert.rejects(provider.openLeague(), (e) => e instanceof EspnImportError && /import-espn/.test(e.message));
@@ -288,7 +291,7 @@ test('under ESPN_ROUTE=import, openLeague, fetchWeek, currentWeek and a capture 
       source: 'ESPN (the latest saved page)',
     });
 
-    const ctx = await openLeague(config);
+    const ctx = await openLeague(config, { store: storeOf(config) });
     await captureWeek({ ...ctx, week: SCORED_WEEK });
     assert.deepEqual(calls, []);
   } finally {
@@ -315,8 +318,8 @@ test('import works with no cookies set, and never reads cookies left in .env', a
       const calls = forbidFetch(t);
       const config = configFor(root);
       assert.deepEqual(config.league.secrets, {});
-      importSavedFiles(config, { files: asFiles(pages), week: SCORED_WEEK });
-      const ctx = await openLeague(config);
+      importSavedFiles(config, { store: storeOf(config), files: asFiles(pages), week: SCORED_WEEK });
+      const ctx = await openLeague(config, { store: storeOf(config) });
       const result = await captureWeek({ ...ctx, week: SCORED_WEEK });
       assert.equal(result.analysis.games.length, 6);
       assert.deepEqual(calls, []);
@@ -332,7 +335,7 @@ test('a file for another league, a non-object, a prototype key, a wrong shape or
   const root = leagueFolder();
   try {
     const config = configFor(root);
-    const provider = espnProvider.fromConfig(config);
+    const provider = espnProvider.fromConfig(config, { store: storeOf(config) });
     const pages = await savedPages();
     const refuses = (name, text, pattern, week = SCORED_WEEK) => {
       const file = join(root, name);
@@ -387,7 +390,7 @@ test('a file for another league, a non-object, a prototype key, a wrong shape or
 test('the week comes from the operator, and the saved page must agree with it', async () => {
   const root = leagueFolder();
   try {
-    const provider = espnProvider.fromConfig(configFor(root));
+    const provider = espnProvider.fromConfig(configFor(root), { store: storeOf(configFor(root)) });
     const pages = await savedPages();
     const files = (week, kinds = ['league', 'matchups']) =>
       kinds.map((kind) => ({ file: join(root, `${kind}.json`), text: pages[kind] }));
@@ -420,7 +423,7 @@ test('a week imported without its transactions page has transactions unavailable
     const pages = await savedPages();
     forbidFetch(t);
     const config = configFor(root);
-    const imported = importSavedFiles(config, {
+    const imported = importSavedFiles(config, { store: storeOf(config),
       files: [
         { file: 'league.json', text: pages.league },
         { file: 'matchups.json', text: pages.matchups },
@@ -428,7 +431,7 @@ test('a week imported without its transactions page has transactions unavailable
       week: SCORED_WEEK,
     });
     assert.equal(imported.transactionsUnavailable, true);
-    const ctx = await openLeague(config);
+    const ctx = await openLeague(config, { store: storeOf(config) });
     const captured = await captureWeek({ ...ctx, week: SCORED_WEEK });
     assert.equal(captured.transactionsUnavailable, true);
     assert.deepEqual(captured.transactions, []);
@@ -452,8 +455,8 @@ test('a week imported without its transactions page has transactions unavailable
     assert.ok(!context.unavailable.some((u) => /No completed transactions were found/.test(u.why)));
 
     // Importing the transactions page later fills them in, keeping the saved matchups.
-    importSavedFiles(config, { files: [{ file: 'transactions.json', text: pages.transactions }], week: SCORED_WEEK });
-    const again = await captureWeek({ ...(await openLeague(config)), week: SCORED_WEEK });
+    importSavedFiles(config, { store: storeOf(config), files: [{ file: 'transactions.json', text: pages.transactions }], week: SCORED_WEEK });
+    const again = await captureWeek({ ...(await openLeague(config, { store: storeOf(config) })), week: SCORED_WEEK });
     assert.equal(again.transactionsUnavailable, undefined);
     assert.equal(again.transactions.length, 4);
   } finally {
@@ -466,11 +469,11 @@ test("a player met only in a transaction has his name unavailable, never his ESP
   try {
     const pages = await savedPages();
     const config = configFor(root);
-    importSavedFiles(config, {
+    importSavedFiles(config, { store: storeOf(config),
       files: Object.entries(pages).map(([kind, text]) => ({ file: `${kind}.json`, text })),
       week: SCORED_WEEK,
     });
-    const ctx = await openLeague(config);
+    const ctx = await openLeague(config, { store: storeOf(config) });
     const captured = await captureWeek({ ...ctx, week: SCORED_WEEK });
 
     // The fixture's free agents (9001111, 9001112) are named only in its transactions.
@@ -515,7 +518,7 @@ test('a week saved while still being played stays unsettled until a later save s
     const during = (text) => JSON.stringify({ ...JSON.parse(text), scoringPeriodId: SCORED_WEEK });
     forbidFetch(t);
     const config = configFor(root);
-    importSavedFiles(config, {
+    importSavedFiles(config, { store: storeOf(config),
       files: [
         { file: 'league.json', text: during(pages.league) },
         { file: 'matchups.json', text: during(pages.matchups) },
@@ -523,15 +526,15 @@ test('a week saved while still being played stays unsettled until a later save s
       ],
       week: SCORED_WEEK,
     });
-    let ctx = await openLeague(config);
+    let ctx = await openLeague(config, { store: storeOf(config) });
     assert.equal(ctx.league.currentWeek, SCORED_WEEK);
     assert.equal(ctx.league.lastScoredWeek, SCORED_WEEK - 1);
     await captureWeek({ ...ctx, week: SCORED_WEEK });
     assert.equal(ctx.store.loadSnapshot(String(SEASON), SCORED_WEEK).settled, false);
 
     // A later save of the league page shows period 5: week 4 is now settled.
-    importSavedFiles(config, { files: [{ file: 'league.json', text: pages.league }] });
-    ctx = await openLeague(config);
+    importSavedFiles(config, { store: storeOf(config), files: [{ file: 'league.json', text: pages.league }] });
+    ctx = await openLeague(config, { store: storeOf(config) });
     assert.equal(ctx.league.lastScoredWeek, SCORED_WEEK);
     const result = await captureWeek({ ...ctx, week: SCORED_WEEK });
     assert.equal(result.kept, false);
@@ -540,9 +543,9 @@ test('a week saved while still being played stays unsettled until a later save s
     // Re-importing an older page never un-settles it. That page is now behind
     // what an earlier save showed, so editions refuse it; opened to report on
     // it, the season has still not moved backwards.
-    importSavedFiles(config, { files: [{ file: 'league.json', text: during(pages.league) }] });
-    await assert.rejects(openLeague(config), /an earlier save of the league page showed scoring period 5/);
-    ctx = await openLeague(config, { allowStaleLeague: true });
+    importSavedFiles(config, { store: storeOf(config), files: [{ file: 'league.json', text: during(pages.league) }] });
+    await assert.rejects(openLeague(config, { store: storeOf(config) }), /an earlier save of the league page showed scoring period 5/);
+    ctx = await openLeague(config, { store: storeOf(config), allowStaleLeague: true });
     assert.equal(ctx.league.lastScoredWeek, SCORED_WEEK);
   } finally {
     rmSync(root, { recursive: true, force: true });

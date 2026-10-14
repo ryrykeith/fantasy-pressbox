@@ -9,6 +9,10 @@ import { loadConfig, PACKAGE_ROOT, WORKSPACE_ENV_VAR } from '../src/config.mjs';
 import { EspnStaleLeagueError, leaguePageFreshness } from '../src/espn/import.mjs';
 import { espnImportLinks } from '../src/espn/urls.mjs';
 import { importSavedFiles, openLeague } from '../src/pipeline.mjs';
+import { createStore } from '../src/store.mjs';
+
+/** The file store for a league folder's config, as the CLI makes it. */
+const storeOf = (config) => createStore({ dataDir: config.dataDir });
 import { createFakeEspnFetch } from './fixtures/fake-espn-fetch.mjs';
 import { PUBLIC_LEAGUE_ID, SCORED_WEEK, SEASON } from './fixtures/mock-espn-league.mjs';
 
@@ -171,7 +175,7 @@ test('on the import route every edition refuses a league page older than the lat
       assert.ok(!out.includes('fetch was called'), command);
     }
     // In process, the refusal is its own error.
-    await assert.rejects(openLeague(configFor(root)), EspnStaleLeagueError);
+    await assert.rejects(openLeague(configFor(root), { store: storeOf(configFor(root)) }), EspnStaleLeagueError);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -231,7 +235,7 @@ test('saving the league page again clears the refusal', async () => {
     const recap = runCli(root, ['recap', '--week', String(WEEK)]);
     assert.equal(recap.status, 0, `${recap.stdout}\n${recap.stderr}`);
     assert.ok(!`${recap.stdout}${recap.stderr}`.includes('fetch was called'));
-    const ctx = await openLeague(configFor(root));
+    const ctx = await openLeague(configFor(root), { store: storeOf(configFor(root)) });
     assert.equal(ctx.league.lastScoredWeek, WEEK);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -243,15 +247,15 @@ test('the fetch route is unaffected: it reads the league live, whatever was impo
   try {
     const pages = await fixturePages();
     const config = configFor(root);
-    importSavedFiles(config, { files: [{ file: 'league.json', text: pages.staleLeague }] });
-    importSavedFiles(config, {
+    importSavedFiles(config, { store: storeOf(config), files: [{ file: 'league.json', text: pages.staleLeague }] });
+    importSavedFiles(config, { store: storeOf(config),
       files: [
         { file: 'matchups.json', text: pages.matchups },
         { file: 'transactions.json', text: pages.transactions },
       ],
       week: WEEK,
     });
-    await assert.rejects(openLeague(config), EspnStaleLeagueError);
+    await assert.rejects(openLeague(config, { store: storeOf(config) }), EspnStaleLeagueError);
 
     writeEnv(root, ['ESPN_ROUTE=fetch']);
     const real = globalThis.fetch;
@@ -259,7 +263,7 @@ test('the fetch route is unaffected: it reads the league live, whatever was impo
     t.after(() => {
       globalThis.fetch = real;
     });
-    const ctx = await openLeague(configFor(root));
+    const ctx = await openLeague(configFor(root), { store: storeOf(configFor(root)) });
     assert.equal(ctx.league.currentWeek, SCORED_WEEK + 1);
     assert.equal(ctx.provider.savedPages, undefined);
   } finally {

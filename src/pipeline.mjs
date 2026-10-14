@@ -26,7 +26,6 @@ import {
   snapshotIdSpace,
 } from './fantasycalc/client.mjs';
 import { hasEliminations, hasFutureDraftCapital } from './format.mjs';
-import { createStore } from './store.mjs';
 import { loadByeWeekTable } from './config.mjs';
 
 /** Are teams knocked out of this league, by its format and its provider's capabilities? */
@@ -41,12 +40,15 @@ const holdsFutureDraftCapital = (league) => hasFutureDraftCapital(league.format,
  * ESPN_ROUTE=import), so no edition is built from stale standings and rosters.
  * `allowStaleLeague` opens it anyway, for the commands that only report on it
  * (doctor, import-espn); no edition passes it.
+ *
+ * `store` is where this league's history lives (src/storeCore.mjs). The caller
+ * makes it: the CLI passes the file store, the browser a memory store.
  */
-export async function openLeague(config, { refreshPlayers = false, allowStaleLeague = false } = {}) {
+export async function openLeague(config, { store, refreshPlayers = false, allowStaleLeague = false } = {}) {
+  if (!store) throw new Error('openLeague needs a store: pass the file store or a memory store (src/storeCore.mjs).');
   // The league's provider (src/providers.mjs), bound to this league. Nothing
   // past it reads a provider's own field names.
-  const provider = openProvider(config);
-  const store = createStore({ dataDir: config.dataDir });
+  const provider = openProvider(config, { store });
   const { league, teams, players, draftCapital } = await provider.openLeague({ refreshPlayers, allowStaleLeague });
 
   return {
@@ -76,8 +78,8 @@ export async function openLeague(config, { refreshPlayers = false, allowStaleLea
  *
  * → the provider's summary: `{ leaguePath, rawPath, week, transactionsUnavailable, files }`
  */
-export function importSavedFiles(config, { files, week = null }) {
-  const provider = openProvider(config);
+export function importSavedFiles(config, { store, files, week = null }) {
+  const provider = openProvider(config, { store });
   if (typeof provider.importFiles !== 'function') {
     throw new Error(`${provider.displayName} has no import route: its league data is fetched.`);
   }

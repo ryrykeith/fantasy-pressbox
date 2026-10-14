@@ -161,7 +161,9 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/futureStock.mjs` | The future-stock edition: its refusal (dynasty only) and each team's age, production-by-age and priced pick capital, with held picks placed at their projected slot |
 | `src/fantasycalc/client.mjs` | FantasyCalc trade values: query from the league's format and scoring, fetch, normalize. FantasyCalc field names stop here, as Sleeper's stop at `src/sleeper/` |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
-| `src/store.mjs` | Snapshots, rankings, predictions, market values, movement, grading |
+| `src/storeCore.mjs` | The store's methods (raw, snapshots, rankings, predictions, market values, tank watch, imported league) over a back end, and `createMemoryStore`. No `node:` imports |
+| `src/store.mjs` | The file back end: `createStore({ dataDir })`, data/<kind>/<season>/<file>.json. The CLI makes it and passes it to `openLeague`; the pipeline never makes a store |
+| `src/rankingGrades.mjs` | Ranking movement and prediction grading. Pure, no `node:` imports |
 | `src/teamIdentity.mjs` | Which roster a published team name means, across renames |
 | `src/promptContext.mjs` | Assembles the model's facts and instructions |
 | `src/generate.mjs` | Optional Anthropic / OpenAI call |
@@ -484,7 +486,7 @@ model-facing number in this project already is.
 
 **Grading reuses the survival preview's own mechanism.** A chop recap's
 `previousPredictions` comes from the identical `gradePredictions` call a plain
-recap already makes — `gradeChopPrediction` (`src/store.mjs`) tells a called
+recap already makes — `gradeChopPrediction` (`src/rankingGrades.mjs`) tells a called
 chop apart from a called game by its own fields, not by the caller's task, so
 nothing here needed to change for the called shot a survival preview makes the
 week before to come back gradeable the week after.
@@ -705,7 +707,7 @@ ordinary league sees. `src/analysis/faab.mjs` answers two questions:
   reconstructed by diffing today's now-empty roster against anything. What
   *does* survive is that week's own matchup entry — Sleeper scores a week
   against the roster as it stood when the week was played, before a
-  commissioner force-drops it afterward — and its players (`src/store.mjs`'s
+  commissioner force-drops it afterward — and its players (`src/storeCore.mjs`'s
   raw bundle, saved the moment the week was fetched, read back as a WeekData
   roster) are the full squad, bench included. A week whose raw bundle was never saved reports
   the gap explicitly (`note`), rather than an empty pool that would look the

@@ -21,7 +21,6 @@
  *
  * The pipeline never imports this file: src/providers.mjs is the only door.
  */
-import { createStore } from '../store.mjs';
 import { createClient, EspnError } from './client.mjs';
 import {
   EspnImportError,
@@ -114,8 +113,11 @@ function instance(client, { config = null, league = null } = {}) {
  * the store. It stands where a client would (`instance.client`), so a caller
  * that wraps "the client" again (providerInstance) gets the import instance
  * back, never a fetching one. It has no fetch and no cookies.
+ *
+ * The store is the caller's: the CLI passes the file store, and anything
+ * without a disk passes a memory store (src/storeCore.mjs).
  */
-export function createImportSource({ leagueId, season, dataDir, store = null }) {
+export function createImportSource({ leagueId, season, store }) {
   if (!leagueId) throw new EspnError('No ESPN league ID configured. Set ESPN_LEAGUE_ID in .env.');
   if (!/^\d{4}$/.test(String(season ?? ''))) {
     throw new EspnError('No ESPN season configured. Set LEAGUE_SEASON in .env (a four-digit year).');
@@ -125,7 +127,7 @@ export function createImportSource({ leagueId, season, dataDir, store = null }) 
     leagueId: String(leagueId),
     seasonId: Number(season),
     season: String(season),
-    store: store ?? createStore({ dataDir }),
+    store,
   });
 }
 
@@ -383,18 +385,18 @@ export const espnProvider = Object.freeze({
   /**
    * An instance for the league in `config.league`: `{ id, season, route,
    * secrets }`. The route decides which: import (the default, also when
-   * absent) reads only saved files; fetch asks ESPN with the cookies.
+   * absent) reads only saved files, through `store`, which it requires; fetch
+   * asks ESPN with the cookies.
    */
-  fromConfig(config) {
+  fromConfig(config, { store = null } = {}) {
     const id = config?.league?.id ?? '';
     if (!id) {
       throw new EspnError("No ESPN league ID configured. Set ESPN_LEAGUE_ID in the league folder's .env, or run init.");
     }
     if ((config.league.route ?? DEFAULT_ROUTE) === 'import') {
       // Never reads config.league.secrets: the import route needs no cookies.
-      return importInstance(createImportSource({ leagueId: id, season: seasonOf(config), dataDir: config.dataDir }), {
-        config,
-      });
+      if (!store) throw new EspnError('The ESPN import route reads saved pages through a store, and none was given.');
+      return importInstance(createImportSource({ leagueId: id, season: seasonOf(config), store }), { config });
     }
     return instance(
       createClient({

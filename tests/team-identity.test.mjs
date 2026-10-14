@@ -16,7 +16,7 @@ import {
   attachRosterIds,
   presentPreviousRankings,
 } from '../src/teamIdentity.mjs';
-import { withMovement, gradePredictions } from '../src/store.mjs';
+import { withMovement, gradePredictions } from '../src/rankingGrades.mjs';
 import { recordBlock } from '../src/cli.mjs';
 import { buildContext } from '../src/promptContext.mjs';
 import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';

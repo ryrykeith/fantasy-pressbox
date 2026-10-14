@@ -418,7 +418,7 @@ for (const route of ['import', 'fetch']) {
     });
 
     const config = configFor(root);
-    const ctx = await openLeague(config);
+    const ctx = await openLeague(config, { store: createStore({ dataDir: config.dataDir }) });
     const captured = await captureWeek({ ...ctx, week: SCORED_WEEK });
     assert.equal(captured.kept, true, 'week 4 is settled and read back');
     const enriched = readTransactions({ ...ctx, describePlayer, week: SCORED_WEEK });

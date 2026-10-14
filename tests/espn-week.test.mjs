@@ -22,6 +22,7 @@ import { buildContext } from '../src/promptContext.mjs';
 import { getProvider } from '../src/providers.mjs';
 import { normalizeBids as sleeperBids, normalizeTransactions as sleeperTransactions } from '../src/sleeper/normalize.mjs';
 import { createStore } from '../src/store.mjs';
+import { createMemoryStore } from '../src/storeCore.mjs';
 import { createFakeEspnFetch } from './fixtures/fake-espn-fetch.mjs';
 import {
   FIXTURE_COOKIES,
@@ -465,11 +466,13 @@ test('lookupLeague reads a private league with its season and cookies', async (t
 
 test('fromConfig refuses a missing league ID, naming the key', () => {
   assert.throws(() => espnProvider.fromConfig({ league: { provider: 'espn', id: '' }, dataDir: tmpdir() }), /ESPN_LEAGUE_ID/);
-  const made = espnProvider.fromConfig({
+  const config = {
     league: { provider: 'espn', id: PUBLIC_LEAGUE_ID, season: '2026', secrets: {} },
     dataDir: tmpdir(),
-  });
+  };
+  const made = espnProvider.fromConfig(config, { store: createMemoryStore() });
   assert.equal(made.client.leagueId, PUBLIC_LEAGUE_ID);
+  assert.throws(() => espnProvider.fromConfig(config), /through a store/, 'the import route needs a store passed in');
 });
 
 // --- IR players (operator decision, 2026-10-13) ------------------------------

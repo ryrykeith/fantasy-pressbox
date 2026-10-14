@@ -13,6 +13,7 @@
 import { resolve } from 'node:path';
 import { loadConfig } from '../src/config.mjs';
 import { openLeague, savedWeeks } from '../src/pipeline.mjs';
+import { createStore } from '../src/store.mjs';
 import { checkSleeperReserve, formatReport } from './sleeperReserveCheck.mjs';
 
 const folder = process.argv[2];
@@ -23,7 +24,9 @@ if (!folder) {
 
 try {
   const config = loadConfig({ workspaceRoot: resolve(folder) });
-  const { store, league, teams, players } = await openLeague(config);
+  const { store, league, teams, players } = await openLeague(config, {
+    store: createStore({ dataDir: config.dataDir }),
+  });
   if ((league.provider ?? 'sleeper') !== 'sleeper') {
     console.error('This check is for Sleeper leagues.');
     process.exit(2);

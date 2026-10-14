@@ -65,7 +65,11 @@ import {
 } from './promptContext.mjs';
 import { generate, describeProvider, detectProvider } from './generate.mjs';
 import { checkPosts, extractJsonBlock, stripJsonBlock } from './validate.mjs';
-import { gradePredictions, withMovement, movementLabel } from './store.mjs';
+import { gradePredictions, withMovement, movementLabel } from './rankingGrades.mjs';
+import { createStore } from './store.mjs';
+
+/** The league folder's file store: the CLI's history lives under its data/. */
+const fileStore = (config) => createStore({ dataDir: config.dataDir });
 import {
   createTeamIdentity,
   attachRosterIds,
@@ -477,7 +481,7 @@ async function commandDoctor(config) {
   let week;
   let source;
   try {
-    ctx = await openLeague(config, { allowStaleLeague: true });
+    ctx = await openLeague(config, { store: fileStore(config), allowStaleLeague: true });
     ({ week, source } = await resolveWeek({ client: ctx.client, league: ctx.league, config }));
   } catch (error) {
     // Nothing imported yet on the import route: the same addresses and notes a
@@ -697,8 +701,8 @@ function reportRankEmoji(config, teamCount) {
 
 async function commandFetch(config, args) {
   requireLeague(config);
-  const ctx = await openLeague(config, { refreshPlayers: args.refreshPlayers });
-  const { week } = await resolveWeek({ ...ctx, config, requested: args.week });
+  const ctx = await openLeague(config, { store: fileStore(config), refreshPlayers: args.refreshPlayers });
+  const { week } =await resolveWeek({ ...ctx, config, requested: args.week });
   const result = await captureWeek({ ...ctx, week });
   reportCapture(result, week, ctx);
   return 0;
@@ -803,7 +807,7 @@ async function commandImportEspn(config, args) {
   }
 
   const files = paths.map((path) => readSavedFile(path, { maxBytes: espn.importMaxBytes, workspaceRoot: config.workspaceRoot }));
-  const imported = importSavedFiles(config, { files, week });
+  const imported = importSavedFiles(config, { store: fileStore(config), files, week });
   say('Imported from pages you saved (nothing was requested from ESPN):');
   for (const [kind, file] of Object.entries(imported.files)) say(`  ${kind.padEnd(13)}${file}`);
   if (imported.leaguePath) say(`  league saved ${imported.leaguePath}`);
@@ -811,7 +815,7 @@ async function commandImportEspn(config, args) {
   // Opened even when the league page is now behind the week pages, only to
   // say so: nothing is captured from it then (a settled snapshot is kept as
   // it is, so stale standings must never reach one).
-  const ctx = await openLeague(config, { allowStaleLeague: true });
+  const ctx = await openLeague(config, { store: fileStore(config), allowStaleLeague: true });
   say(`\n${ctx.league.name}: ${ctx.teams.length} teams, current week ${ctx.league.currentWeek ?? 'unknown'} (the latest saved page).`);
   const stale = ctx.provider.staleLeagueNotice?.({ week: imported.week }) ?? null;
   if (stale) {
@@ -925,7 +929,7 @@ async function commandEdition(config, args, task) {
     throw new Error(`--format must be "sleeper" or "imessage", got "${format}".`);
   }
 
-  const ctx = await openLeague(config, { refreshPlayers: args.refreshPlayers });
+  const ctx = await openLeague(config, { store: fileStore(config), refreshPlayers: args.refreshPlayers });
   const { league, teams, players, store, client } = ctx;
   // Again with the opened league: its provider and its resolved format.
   const leagueProvider = providerOf(league);
@@ -1413,8 +1417,8 @@ async function commandRecord(config, args) {
     throw new Error(`Pass --task followed by one of: ${recordable.join(', ')}.`);
   }
 
-  const ctx = await openLeague(config);
-  const offset = FORWARD_LOOKING_TASKS.includes(task) ? 0 : -1;
+  const ctx = await openLeague(config, { store: fileStore(config) });
+  const offset =FORWARD_LOOKING_TASKS.includes(task) ? 0 : -1;
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week, offset });
 
   const text = readFileSync(file, 'utf8');
@@ -1452,7 +1456,7 @@ function commandCheck(config, args) {
 
 async function commandGrade(config, args) {
   requireLeague(config);
-  const ctx = await openLeague(config);
+  const ctx = await openLeague(config, { store: fileStore(config) });
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week, offset: -1 });
   const captured = await captureWeek({ ...ctx, week });
   refuseMultiWeekMatchup(captured, { week, edition: 'grade' });

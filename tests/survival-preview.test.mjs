@@ -16,7 +16,7 @@ import {
 } from '../src/promptContext.mjs';
 import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { buildDangerBoard } from '../src/analysis/danger.mjs';
-import { gradePredictions } from '../src/store.mjs';
+import { gradePredictions } from '../src/rankingGrades.mjs';
 import { deriveScoringProfile, normalizePlayers } from '../src/sleeper/normalize.mjs';
 import { PACKAGE_ROOT } from '../src/config.mjs';
 
