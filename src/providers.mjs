@@ -8,6 +8,22 @@
 import { espnProvider } from './espn/provider.mjs';
 import { sleeperProvider } from './sleeper/provider.mjs';
 
+// The ESPN import route's public API (saved pages only; nothing here fetches).
+// src/core/index.mjs re-exports these, and reaches them through this door so
+// the provider boundary holds.
+export {
+  readSavedFiles,
+  classifySaved,
+  parseSavedFile,
+  importedWeekBundle,
+  leaguePageFreshness,
+  staleLeagueNotice,
+  EspnImportError,
+  EspnStaleLeagueError,
+} from './espn/import.mjs';
+export { EspnShapeError } from './espn/shape.mjs';
+export { espnImportLinks } from './espn/urls.mjs';
+
 const PROVIDERS = Object.freeze({
   [sleeperProvider.name]: sleeperProvider,
   [espnProvider.name]: espnProvider,

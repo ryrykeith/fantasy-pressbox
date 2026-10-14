@@ -3,6 +3,18 @@
 Every published version of `fantasy-pressbox`, newest first. Each release is
 also tagged `v<version>` with a GitHub release.
 
+## Unreleased
+
+- **Browser-safe core entry**: `fantasy-pressbox/core` exports the league
+  file, settings, edition preparation, prompt building, reply checks, status
+  report and ESPN saved-page import, with no `node:` imports and no AI call.
+  A guard test keeps it that way. The ESPN cookie fetch stays CLI-only.
+- **`exports` field**: `package.json` now declares `exports`, with only
+  `fantasy-pressbox/core` and `fantasy-pressbox/package.json`. Importing the
+  package's internal files (`fantasy-pressbox/src/...`) is no longer
+  supported and now fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`. The
+  `fantasy-pressbox` command is unaffected.
+
 ## 0.1.0
 
 The first public release.

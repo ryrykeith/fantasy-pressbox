@@ -41,6 +41,16 @@ if (paths.length === 0) {
   process.exit(1);
 }
 
+// The other direction: paths the package must ship. `exports` points
+// `fantasy-pressbox/core` at src/core/index.mjs, so a pack without it would
+// publish an entry that cannot be imported.
+const REQUIRED_PREFIXES = ['src/core/'];
+const missing = REQUIRED_PREFIXES.filter((prefix) => !paths.some((p) => p.startsWith(prefix)));
+if (missing.length > 0) {
+  console.error(`The package would not ship required path(s): ${missing.join(', ')}`);
+  process.exit(1);
+}
+
 const violations = paths.flatMap((path) =>
   FORBIDDEN.filter(({ test }) => test(path)).map(({ rule }) => ({ path, rule })));
 

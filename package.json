@@ -25,6 +25,10 @@
   "bin": {
     "fantasy-pressbox": "src/cli.mjs"
   },
+  "exports": {
+    "./core": "./src/core/index.mjs",
+    "./package.json": "./package.json"
+  },
   "files": [
     "src/",
     "prompts/",
