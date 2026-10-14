@@ -418,7 +418,30 @@ export function parseLeagueProvider(value, { source = `${LEAGUE_PROVIDER_KEY} in
   );
 }
 
-/** `config.league`: `{ provider, id, season, secrets }`, from .env. */
+/** The .env key that picks how an ESPN league's data arrives. */
+export const ESPN_ROUTE_KEY = 'ESPN_ROUTE';
+
+/** The ESPN routes: a manual import (the default) or the opt-in cookie fetch. */
+export const ESPN_ROUTES = ['import', 'fetch'];
+export const DEFAULT_ESPN_ROUTE = 'import';
+
+/**
+ * Reads ESPN_ROUTE, or refuses it. Absent or empty means import. A
+ * misspelling stops the command, listing the valid values, like
+ * LEAGUE_PROVIDER.
+ */
+export function parseEspnRoute(value, { source = `${ESPN_ROUTE_KEY} in .env` } = {}) {
+  const text = value === undefined || value === null ? '' : String(value).trim().toLowerCase();
+  if (text === '') return DEFAULT_ESPN_ROUTE;
+  if (ESPN_ROUTES.includes(text)) return text;
+  throw new Error(
+    `${source} is "${String(value).trim()}", which is not an ESPN route.\n\n` +
+      `Set ${ESPN_ROUTE_KEY} to one of: ${ESPN_ROUTES.join(', ')}.\n\n` +
+      `Or remove the line, and the route is ${DEFAULT_ESPN_ROUTE}.`,
+  );
+}
+
+/** `config.league`: `{ provider, id, season, route, secrets }`, from .env. */
 function readLeagueSettings(env) {
   const declared = parseLeagueProvider(env[LEAGUE_PROVIDER_KEY]);
   const named = Object.entries(LEAGUE_ID_KEYS).filter(([, key]) => firstSet(env, [key]));
@@ -431,12 +454,32 @@ function readLeagueSettings(env) {
     );
   }
   const provider = declared ?? DEFAULT_PROVIDER;
+  // ESPN_ROUTE only means something to ESPN; a Sleeper folder's stray line is ignored.
+  const route = provider === 'espn' ? parseEspnRoute(env[ESPN_ROUTE_KEY]) : null;
+  // Sleeper's API is public: there is nothing secret to hold. ESPN's cookies
+  // are read only on the fetch route: under import they are never read, even
+  // when set. They live here and are never copied into process.env.
+  const secrets = {};
+  if (provider === 'espn' && route === 'fetch') {
+    const s2 = firstSet(env, ['ESPN_S2']);
+    const swid = firstSet(env, ['ESPN_SWID']);
+    if ((s2 === null) !== (swid === null)) {
+      throw new Error(
+        `ESPN_ROUTE=fetch needs both cookies or neither, and ${s2 === null ? 'ESPN_S2' : 'ESPN_SWID'} is missing. ` +
+          'Add it to .env for a private league, or remove the other for a public one.',
+      );
+    }
+    if (s2 !== null) {
+      secrets.ESPN_S2 = s2;
+      secrets.ESPN_SWID = swid;
+    }
+  }
   return {
     provider,
     id: firstSet(env, [LEAGUE_ID_KEYS[provider]]) ?? '',
     season: firstSet(env, ['LEAGUE_SEASON', 'SLEEPER_SEASON']),
-    // Sleeper's API is public: there is nothing secret to hold.
-    secrets: {},
+    route,
+    secrets,
   };
 }
 
@@ -540,7 +583,7 @@ export function loadConfig({
     },
     // The workspace prompts folder, or null when there is none to consult.
     promptsDir,
-    // { provider, id, season, secrets }. Secrets stay here: nothing copies
+    // { provider, id, season, route, secrets }. Secrets stay here: nothing copies
     // them into process.env.
     league,
     // Aliases of config.league, until every reader has moved to it.
@@ -550,7 +593,7 @@ export function loadConfig({
     leagueDisplayName: env.LEAGUE_DISPLAY_NAME || null,
     // What kind of league this is, if the operator said. Null means "work it
     // out from Sleeper"; a misspelling throws here, before any command runs.
-    leagueFormat: parseDeclaredFormatType(env.LEAGUE_FORMAT),
+    leagueFormat: parseDeclaredFormatType(env.LEAGUE_FORMAT, { provider: providerDisplayName(league.provider) }),
     ai: {
       provider: (env.AI_PROVIDER || '').trim().toLowerCase() || null,
       anthropicKey: (env.ANTHROPIC_API_KEY || '').trim(),

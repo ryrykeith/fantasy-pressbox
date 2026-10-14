@@ -19,6 +19,24 @@ export function seededTeams(teams) {
 }
 
 /**
+ * The seeding rules this module's order stands for. A League that reports no
+ * rule (`playoffSeeding` absent: Sleeper's) is taken to use Sleeper's default,
+ * as it always has been. ESPN's head-to-head record rule seeds on record
+ * first; its tiebreak is taken to be points for (assumed: docs/espn-data.md).
+ */
+const SEEDING_BY_RECORD = ['head_to_head_record'];
+
+/**
+ * Does this league seed its playoffs by wins, then points for? False for any
+ * other rule, and for a rule the provider reported as unknown (null): a seed
+ * or a projected playoff field from this order would then be made up.
+ */
+export function seedsByWinsThenPointsFor(league) {
+  if (league?.playoffSeeding === undefined) return true;
+  return SEEDING_BY_RECORD.includes(league.playoffSeeding);
+}
+
+/**
  * @returns {Map<number, number>} roster id → current seed, 1 being the best
  */
 export function currentSeeds(teams) {

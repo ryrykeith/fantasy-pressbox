@@ -1,14 +1,16 @@
 /**
  * The league providers, keyed by name.
  *
- * This is the only module that imports a provider directory (src/sleeper/,
- * and later src/espn/). Everything else asks it for a provider and reads the
+ * This is the only module that imports a provider directory (src/sleeper/
+ * and src/espn/). Everything else asks it for a provider and reads the
  * shared shapes the provider hands back (docs/plans/espn-football.md §6).
  */
+import { espnProvider } from './espn/provider.mjs';
 import { sleeperProvider } from './sleeper/provider.mjs';
 
 const PROVIDERS = Object.freeze({
   [sleeperProvider.name]: sleeperProvider,
+  [espnProvider.name]: espnProvider,
 });
 
 /** What a league folder means when its .env names no provider. */

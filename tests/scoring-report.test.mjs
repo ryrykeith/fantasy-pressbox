@@ -67,6 +67,15 @@ test('a setting outside the modelled set is listed under a "not modelled" headin
   assert.match(text, /bonus_rec_first_down/);
 });
 
+test('the "not modelled" heading names the provider, Sleeper by default', () => {
+  const profile = deriveScoringProfile({ idp_tkl: 1 });
+  assert.equal(describeUnmodelledScoring(profile)[0], 'Not modelled       Sleeper settings this tool does not use:');
+  assert.equal(
+    describeUnmodelledScoring(profile, { provider: 'ESPN' })[0],
+    'Not modelled       ESPN settings this tool does not use:',
+  );
+});
+
 test('an unmodelled setting with a known default reports what it replaced', () => {
   const profile = deriveScoringProfile({ fum_lost: -1 });
   const text = describeUnmodelledScoring(profile).join('\n');

@@ -14,15 +14,44 @@ import { bestLineup, lineupEfficiency } from './lineup.mjs';
 /** How many bench performances to carry forward per team. */
 const BENCH_REPORT_LIMIT = 5;
 
-/** One WeekData roster's starters, in slot order, and its bench. A null starter id is an empty slot. */
+/**
+ * One player's points on a WeekData roster: a number, or null when the
+ * provider reported none for him (`noPointsIds`, ESPN). Null is never 0: a
+ * missing entry is unknown, not scoreless. A roster without the list
+ * (Sleeper's) reads a missing value as 0, as it always has.
+ */
+export function reportedPoints(roster, id) {
+  if ((roster.noPointsIds || []).includes(id)) return null;
+  return roster.playerPoints?.[id] ?? 0;
+}
+
+/** Whether the bye table says a player on a WeekData roster had no game that week (`byeIds`, ESPN). */
+export function reportedOnBye(roster, id) {
+  return (roster.byeIds || []).includes(id);
+}
+
+/**
+ * One WeekData roster's starters, in slot order, and its bench. A null starter id is an empty slot.
+ *
+ * A roster may list `noPointsIds`: players its provider reported no points for
+ * that week (ESPN). Their points are null, never 0, and those also in `byeIds`
+ * (their NFL team had no game, from the bye table) are flagged `onBye`. A
+ * roster without the list (Sleeper's) reads a missing value as 0, as it always
+ * has.
+ */
 function entriesFor(roster, players) {
   const playerPoints = roster.playerPoints || {};
   const starterIds = roster.starterIds || [];
   const starterPoints = roster.starterPoints || [];
+  const noPoints = new Set(roster.noPointsIds || []);
+  const onBye = new Set(roster.byeIds || []);
+  const unknown = (id) => ({ points: null, ...(onBye.has(id) ? { onBye: true } : {}) });
 
   const starters = starterIds.map((id, index) => ({
     id,
-    points: Number((starterPoints[index] ?? (id === null ? undefined : playerPoints[id]) ?? 0).toFixed(2)),
+    ...(id !== null && noPoints.has(id)
+      ? unknown(id)
+      : { points: Number((starterPoints[index] ?? (id === null ? undefined : playerPoints[id]) ?? 0).toFixed(2)) }),
     player: id === null ? emptySlotPlayer() : playerFor(players, id),
   }));
 
@@ -31,11 +60,30 @@ function entriesFor(roster, players) {
     .filter((id) => !starterIdSet.has(id))
     .map((id) => ({
       id,
-      points: Number((playerPoints[id] ?? 0).toFixed(2)),
+      ...(noPoints.has(id) ? unknown(id) : { points: Number((playerPoints[id] ?? 0).toFixed(2)) }),
       player: playerFor(players, id),
     }));
 
   return { starters, bench };
+}
+
+const hasPoints = (entry) => typeof entry.points === 'number';
+
+/**
+ * The best lineup a roster could have fielded, or null when it cannot be
+ * known. A player on his bye counts as 0, because a player whose team had no
+ * game cannot score. Any other player with no points makes the whole lineup
+ * unknowable for the week: it is not computed around the gap.
+ *
+ * So does a player whose position is not on file (one the player dictionary
+ * does not know): no slot can take him, so a lineup solved without him could
+ * fall below the points the team actually scored. An empty starting slot (a
+ * null id) is no player and does not count.
+ */
+function optimalLineup(slots, candidates) {
+  if (candidates.some((entry) => !hasPoints(entry) && !entry.onBye)) return null;
+  if (candidates.some((entry) => entry.id !== null && !entry.player?.position)) return null;
+  return bestLineup({ slots, candidates: candidates.map((entry) => (hasPoints(entry) ? entry : { ...entry, points: 0 })) });
 }
 
 /**
@@ -64,7 +112,15 @@ export function analyzeWeek({ league, teams, rosters, players, week }) {
   const buildSide = (side, opponentSide = null) => {
     const team = teamsByRosterId.get(side.rosterId);
     const { starters, bench } = entriesFor(side, players);
-    const optimal = bestLineup({ slots, candidates: [...starters, ...bench] });
+    // A roster that lists `reserveIds` (ESPN's IR slot) cannot start those
+    // players, so they are not lineup candidates. A roster without the list
+    // (Sleeper's) is read exactly as it always was.
+    const reserve = new Set(side.reserveIds || []);
+    const optimal = optimalLineup(
+      slots,
+      [...starters, ...bench].filter((entry) => !(side.reserveIds && reserve.has(entry.id))),
+    );
+    const unreported = [...starters, ...bench].filter((entry) => entry.id !== null && !hasPoints(entry));
     const scored = Number((side.points ?? 0).toFixed(2));
 
     const record = {
@@ -90,9 +146,11 @@ export function analyzeWeek({ league, teams, rosters, players, week }) {
         nflTeam: entry.player.team,
         injuryStatus: entry.player.injuryStatus,
         points: entry.points,
+        ...(entry.onBye ? { onBye: true } : {}),
       })),
+      // Only players with points: a bench player with none has no performance to report.
       benchHighlights: bench
-        .slice()
+        .filter(hasPoints)
         .sort((a, b) => b.points - a.points)
         .slice(0, BENCH_REPORT_LIMIT)
         .map((entry) => ({
@@ -101,13 +159,31 @@ export function analyzeWeek({ league, teams, rosters, players, week }) {
           nflTeam: entry.player.team,
           points: entry.points,
         })),
-      potentialPoints: optimal.total,
-      lineupEfficiency: lineupEfficiency(scored, optimal.total),
-      optimalLineup: optimal.lineup.map(({ slot, entry }) => ({
-        slot,
-        name: entry?.player.name ?? null,
-        points: entry?.points ?? 0,
-      })),
+      // Unknowable when a player other than one on his bye has no points:
+      // left out of the record, never computed around the gap.
+      ...(optimal
+        ? {
+            potentialPoints: optimal.total,
+            lineupEfficiency: lineupEfficiency(scored, optimal.total),
+            optimalLineup: optimal.lineup.map(({ slot, entry }) => ({
+              slot,
+              name: entry?.player.name ?? null,
+              points: entry?.points ?? 0,
+            })),
+          }
+        : {}),
+      // The players the provider reported no points for, so an edition can say why.
+      ...(unreported.length
+        ? {
+            pointsUnreported: unreported.map((entry) => ({
+              name: entry.player.name,
+              position: entry.player.position,
+              nflTeam: entry.player.team,
+              started: starters.includes(entry),
+              ...(entry.onBye ? { onBye: true } : {}),
+            })),
+          }
+        : {}),
     };
     teamWeeks.push(record);
     return record;
@@ -163,8 +239,10 @@ function computeAwardFacts(games, teamWeeks) {
   const byMargin = [...games].sort((a, b) => b.margin - a.margin);
   const losers = teamWeeks.filter((t) => t.result === 'L');
 
+  // A starter with no points (null) is in no comparison: his score is not known.
+  const scoredStarters = (t) => t.starters.filter((s) => typeof s.points === 'number');
   const allStarters = teamWeeks.flatMap((t) =>
-    t.starters.map((s) => ({ ...s, team: t.team })),
+    scoredStarters(t).map((s) => ({ ...s, team: t.team })),
   );
   const topStarter = allStarters.sort((a, b) => b.points - a.points)[0] ?? null;
 
@@ -172,7 +250,7 @@ function computeAwardFacts(games, teamWeeks) {
     .map((t) => {
       const best = t.benchHighlights[0];
       if (!best) return null;
-      const worstStarter = [...t.starters].sort((a, b) => a.points - b.points)[0];
+      const worstStarter = [...scoredStarters(t)].sort((a, b) => a.points - b.points)[0];
       if (!worstStarter || best.points <= worstStarter.points) return null;
       return { team: t.team, ...best, replacedStarter: worstStarter.name, replacedPoints: worstStarter.points };
     })

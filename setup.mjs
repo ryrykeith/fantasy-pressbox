@@ -29,12 +29,13 @@
  * rookie-draft.yml are backed up first.
  */
 import { createInterface } from 'node:readline';
-import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { loadEnvFile } from './src/lib/env.mjs';
 import {
+  LEAGUE_ID_KEYS,
   loadConfig,
   PACKAGE_ROOT,
   resolveWorkspaceRoot,
@@ -49,11 +50,18 @@ import { describeDraftOrder } from './src/rookieDraft.mjs';
 import { banner, cliCommand, displayPath, weeklyRoutine } from './src/welcome.mjs';
 import {
   DRAFT_ORDER_PRESETS,
+  ESPN_COOKIE_HELP,
+  ESPN_FETCH_NOTICE,
+  ESPN_FORMAT_TYPES,
+  ESPN_ROUTE_CHOICES,
+  PLATFORM_CHOICES,
   ROUND_ORDER_CHOICES,
   defaultFormatType,
   defaultLeagueFolder,
   describeOrderChoice,
+  espnFormatChoices,
   expandHome,
+  extractEspnLeague,
   extractLeagueId,
   formatChoices,
   parseStartWeekAnswer,
@@ -236,8 +244,11 @@ function isInside(parent, child) {
  * Asks for the league until Sleeper confirms one and the user recognises it.
  * Returns null when the user gives up. An ID Sleeper does not know, or a
  * Sleeper that cannot be reached, is reported here, at the point of entry.
+ *
+ * `lookup` is passed to the provider's lookupLeague beside the ID: ESPN needs
+ * `{ season, secrets }` for a private league; Sleeper ignores them.
  */
-async function askLeague(fallbackId, provider) {
+async function askLeague(fallbackId, provider, lookup = {}) {
   const name = provider.displayName;
   let leagueId = fallbackId;
   while (true) {
@@ -250,7 +261,7 @@ async function askLeague(fallbackId, provider) {
     say(dim(`  Checking with ${name}...`));
     let league;
     try {
-      league = await provider.lookupLeague({ id: candidate });
+      league = await provider.lookupLeague({ ...lookup, id: candidate });
     } catch (error) {
       say(red(`  ${error.message}`));
       if (!(await askYesNo('  Try a different ID?', true))) return null;
@@ -259,6 +270,171 @@ async function askLeague(fallbackId, provider) {
     say(green(`  ✓ Found "${league.name}" — ${league.teamCount ?? '?'} teams, ${league.season} season`));
     if (await askYesNo('  Is this your league?', true)) return { leagueId: candidate, league };
     leagueId = '';
+  }
+}
+
+/** The notice shown wherever an ESPN league is shown back. */
+const ESPN_EXPERIMENTAL_NOTICE =
+  'ESPN support is experimental: it is built from public descriptions of an unofficial API and has not been checked against a live league.';
+
+/** A saved page's path as typed: quotes (from drag and drop) dropped, ~ expanded. */
+const typedPath = (answer) => expandHome(answer.replace(/^(['"])(.*)\1$/, '$2'), homedir());
+
+/**
+ * Reads the league page the user saved, for the import route. Nothing here
+ * contacts ESPN: it reads one file from disk and hands its text to the
+ * provider. A file inside the package folder is refused, as import-espn does.
+ */
+function readSavedLeaguePage(provider, path, { leagueId, season }) {
+  const full = resolve(path);
+  if (!existsSync(full)) throw new Error(`${path} does not exist.`);
+  const real = realpathSync(full);
+  if (isInside(realpathSync(PACKAGE_ROOT), real)) {
+    throw new Error(
+      `${path} is inside the Fantasy Pressbox folder (${PACKAGE_ROOT}). A saved ESPN page is your league's ` +
+        'data: keep it in your league folder.',
+    );
+  }
+  const stats = statSync(real);
+  if (!stats.isFile()) throw new Error(`${path} is not a file.`);
+  if (stats.size > provider.importMaxBytes) {
+    throw new Error(`${path} is larger than ${provider.importMaxBytes / (1024 * 1024)} MB: check that this is the right file.`);
+  }
+  return provider.readImportedLeague({ file: path, text: readFileSync(real, 'utf8'), leagueId, season });
+}
+
+/** Asks for a four-digit season until one is given. */
+async function askSeason(fallback) {
+  while (true) {
+    const answer = await askWithDefault('Which season (a four-digit year, such as the current NFL season)', fallback);
+    if (/^\d{4}$/.test(answer)) return answer;
+    say(red('  That is not a four-digit year.'));
+    fallback = '';
+  }
+}
+
+/**
+ * Which way ESPN's data arrives. Import is the default. Fetch is shown a
+ * notice first and needs an explicit yes; declining it falls back to import.
+ */
+async function askEspnRoute(fallback) {
+  say('Fantasy Pressbox can get your ESPN league two ways.');
+  say('');
+  let route = await askChoice('How should it get your league?', ESPN_ROUTE_CHOICES, fallback);
+  if (route === 'fetch') {
+    say('');
+    for (const line of ESPN_FETCH_NOTICE) say(line);
+    say('');
+    if (!(await askYesNo('Do you understand, and choose Fetch anyway?', false))) {
+      say('  Understood: setup will use Import, which needs no cookies.');
+      route = 'import';
+    }
+  }
+  return route;
+}
+
+/**
+ * Asks for the ESPN league until it is confirmed and the user recognises it.
+ * Returns null when the user gives up.
+ *
+ * Import: the league address is printed for the user to open and save, and
+ * the saved file is read from disk. Nothing contacts ESPN and no cookie is
+ * asked for. Fetch: public or private, the cookies for a private league
+ * (typed hidden, shown masked), and the league is looked up with ESPN.
+ */
+async function askEspnLeague(provider, { existing, route }) {
+  let idDefault = existing.ESPN_LEAGUE_ID ?? '';
+  let seasonDefault = existing.LEAGUE_SEASON ?? '';
+  let s2 = existing.ESPN_S2 ?? '';
+  let swid = existing.ESPN_SWID ?? '';
+  let isPrivate = Boolean(s2 || swid);
+  say('Open your league on fantasy.espn.com and copy the address from the browser bar.');
+  say(dim('  It contains leagueId= followed by your league ID.'));
+  say('You can paste the whole address, or just the ID.');
+  say('');
+  while (true) {
+    const answer = await askWithDefault('ESPN league ID or address', idDefault);
+    const typed = extractEspnLeague(answer);
+    if (!typed.leagueId) {
+      say(red('  That has no league ID. Paste the address with leagueId= in it, or just the digits.'));
+      continue;
+    }
+    const leagueId = typed.leagueId;
+    const season = await askSeason(typed.season || seasonDefault);
+    let league;
+
+    if (route === 'import') {
+      const { league: leagueAddress } = provider.importLinks({ leagueId, season });
+      say('');
+      say('Setup does not contact ESPN. Open this address in a browser signed in to ESPN:');
+      say('');
+      say(`  ${leagueAddress}`);
+      say('');
+      say("Then save the page as it is shown (the raw JSON text) into your league's folder.");
+      say(dim('  If the folder does not exist yet, save it anywhere for now and keep the file.'));
+      say('');
+      const path = typedPath(await ask('Path to the saved file: '));
+      try {
+        if (!path) throw new Error('No file was given.');
+        league = readSavedLeaguePage(provider, path, { leagueId, season });
+      } catch (error) {
+        say(red(`  ${error.message}`));
+        if (!(await askYesNo('  Try again?', true))) return null;
+        idDefault = leagueId;
+        seasonDefault = season;
+        continue;
+      }
+    } else {
+      isPrivate = (await askChoice('Is your league public or private?', [
+        { value: false, label: 'Public — anyone with the link can view it' },
+        { value: true, label: 'Private — you must sign in to ESPN to view it' },
+      ], isPrivate)) === true;
+      if (isPrivate) {
+        say('');
+        for (const line of ESPN_COOKIE_HELP) say(line);
+        say('');
+        while (true) {
+          s2 = await askWithDefault('espn_s2 cookie', s2, { secret: true });
+          swid = await askWithDefault('SWID cookie', swid, { secret: true });
+          if (s2 && swid) break;
+          say(red('  A private league needs both cookies.'));
+        }
+      } else {
+        s2 = '';
+        swid = '';
+      }
+      say(dim('  Checking with ESPN...'));
+      try {
+        league = await provider.lookupLeague({
+          id: leagueId,
+          season,
+          secrets: isPrivate ? { ESPN_S2: s2, ESPN_SWID: swid } : {},
+        });
+      } catch (error) {
+        say(red(`  ${error.message}`));
+        if (/\b401\b/.test(error.message)) {
+          say('  A 401 means ESPN will not show this league without a login: either the league is');
+          say('  private, or the cookies are wrong or have expired. Copy fresh cookie values.');
+        }
+        if (!(await askYesNo('  Try again?', true))) return null;
+        idDefault = leagueId;
+        seasonDefault = season;
+        continue;
+      }
+    }
+
+    say(green(`  ✓ Found "${league.name}" — ${league.teamCount ?? '?'} teams, ${league.season} season`));
+    say(dim(`  ${ESPN_EXPERIMENTAL_NOTICE}`));
+    if (await askYesNo('  Is this your league?', true)) {
+      return {
+        leagueId,
+        league,
+        season,
+        secrets: route === 'fetch' && isPrivate ? { ESPN_S2: s2, ESPN_SWID: swid } : {},
+      };
+    }
+    idDefault = '';
+    seasonDefault = '';
   }
 }
 
@@ -376,16 +552,33 @@ async function main() {
     say(dim(`  Found an existing .env in ${workspaceRoot} — your current answers are the defaults.`));
   }
 
-  // Setup offers Sleeper only; ESPN arrives with its own provider.
-  const leagueProvider = getProvider('sleeper');
+  heading('Where your league is played');
+  const existingPlatform = existing.LEAGUE_PROVIDER?.trim().toLowerCase() === 'espn' ? 'espn' : 'sleeper';
+  const platform = await askChoice('Which platform is your league on?', PLATFORM_CHOICES, existingPlatform);
+  const leagueProvider = getProvider(platform);
+  const isEspn = platform === 'espn';
+
+  let route = null;
+  if (isEspn) {
+    heading('How to get your ESPN league');
+    say(ESPN_EXPERIMENTAL_NOTICE);
+    say('');
+    route = await askEspnRoute(existing.ESPN_ROUTE?.trim().toLowerCase() === 'fetch' ? 'fetch' : 'import');
+  }
+
   heading(`Your ${leagueProvider.displayName} league`);
-  say('Open your league on sleeper.com and copy the address from the browser bar.');
-  say(dim('  Example: https://sleeper.com/leagues/1234567890123456789/team'));
-  say('You can paste the whole address — the ID will be picked out of it.');
-  say('');
-  const found = await askLeague(existing.SLEEPER_LEAGUE_ID ?? '', leagueProvider);
+  let found;
+  if (isEspn) {
+    found = await askEspnLeague(leagueProvider, { existing, route });
+  } else {
+    say('Open your league on sleeper.com and copy the address from the browser bar.');
+    say(dim('  Example: https://sleeper.com/leagues/1234567890123456789/team'));
+    say('You can paste the whole address — the ID will be picked out of it.');
+    say('');
+    found = await askLeague(existing.SLEEPER_LEAGUE_ID ?? '', leagueProvider);
+  }
   if (!found) return 1;
-  const { leagueId, league } = found;
+  const { leagueId, league, season: espnSeason = '', secrets = {} } = found;
 
   if (startedInPackage) {
     heading('Your league folder');
@@ -398,9 +591,11 @@ async function main() {
   const envPath = join(workspaceRoot, '.env');
   const configDir = workspaceConfigDir(workspaceRoot);
 
-  if (existing.SLEEPER_LEAGUE_ID && existing.SLEEPER_LEAGUE_ID !== leagueId) {
+  const existingProvider = existing.LEAGUE_PROVIDER?.trim().toLowerCase() || 'sleeper';
+  const existingLeagueId = existing[LEAGUE_ID_KEYS[existingProvider]];
+  if (existingLeagueId && (existingProvider !== platform || existingLeagueId !== leagueId)) {
     say('');
-    say(red(`  ${workspaceRoot} already holds a different league (ID ${existing.SLEEPER_LEAGUE_ID}).`));
+    say(red(`  ${workspaceRoot} already holds a different league (${existingProvider} ID ${existingLeagueId}).`));
     say('  Each league needs a folder of its own, or their histories get mixed together.');
     if (!(await askYesNo('  Replace it with this league anyway?', false))) return 1;
   }
@@ -414,27 +609,36 @@ async function main() {
   heading('What kind of league it is');
   const detectedType = league.format.detectedType;
   say(`${leagueProvider.displayName}'s settings say this is a ${FORMAT_LABELS[detectedType].toLowerCase()} league.`);
-  say(`${leagueProvider.displayName} cannot tell a guillotine league from an ordinary one, because the`);
-  say('commissioner runs it by hand. If yours is one, choose it here.');
-  say('');
-  const formatType = await askChoice(
-    'Which kind of league is it?',
-    formatChoices({
-      detectedType,
-      currentType: existing.LEAGUE_FORMAT?.trim().toLowerCase() || null,
-      providerName: leagueProvider.displayName,
-    }),
-    defaultFormatType({ detectedType, existing: existing.LEAGUE_FORMAT }),
-  );
+  const currentType = existing.LEAGUE_FORMAT?.trim().toLowerCase() || null;
+  let formatType;
+  if (isEspn) {
+    // Guillotine is refused on ESPN in v1, so it is not offered.
+    say('A keeper league counts as redraft. Guillotine leagues are not supported on ESPN yet.');
+    say('');
+    formatType = await askChoice(
+      'Which kind of league is it?',
+      espnFormatChoices({ detectedType, currentType }),
+      defaultFormatType({ detectedType, existing: existing.LEAGUE_FORMAT, formats: ESPN_FORMAT_TYPES }),
+    );
+  } else {
+    say(`${leagueProvider.displayName} cannot tell a guillotine league from an ordinary one, because the`);
+    say('commissioner runs it by hand. If yours is one, choose it here.');
+    say('');
+    formatType = await askChoice(
+      'Which kind of league is it?',
+      formatChoices({ detectedType, currentType, providerName: leagueProvider.displayName }),
+      defaultFormatType({ detectedType, existing: existing.LEAGUE_FORMAT }),
+    );
+  }
 
   heading('How your league scores');
-  say('Every edition is written from these, read from your league in Sleeper:');
+  say(`Every edition is written from these, read from your league in ${leagueProvider.displayName}:`);
   for (const line of describeScoringSummary(league.format.scoring)) say(`  ${line}`);
   for (const line of describeUnmodelledScoring(league.format.scoring)) say(`  ${line}`);
   say('');
   if (!(await askYesNo('Does that match your league?', true))) {
     say('');
-    say('These come straight from the league\'s scoring settings in Sleeper. If they are');
+    say(`These come straight from the league's scoring settings in ${leagueProvider.displayName}. If they are`);
     say('wrong, the commissioner can correct them there, and `doctor` shows what');
     say('Fantasy Pressbox reads afterwards. Nothing here can override them.');
     if (!(await askYesNo('Carry on with setup anyway?', true))) return 1;
@@ -445,7 +649,11 @@ async function main() {
   let rookieDraftText = null;
   let writeGuillotine = false;
 
-  if (formatType === 'dynasty') {
+  if (isEspn && formatType === 'dynasty') {
+    say('');
+    say('Editions that need traded future picks (tank watch, future stock, pick capital) are');
+    say('not available for ESPN leagues, so there are no rookie draft questions.');
+  } else if (formatType === 'dynasty') {
     heading('Your rookie draft');
     rookieDraftText = await askRookieDraft({ draftPath, league, leagueName: displayName });
   } else if (formatType === 'guillotine') {
@@ -511,7 +719,7 @@ async function main() {
   );
 
   const maxChars = await askWithDefault(
-    `Longest single ${leagueProvider.displayName} post, in characters`,
+    isEspn ? 'Longest single post, in characters' : `Longest single ${leagueProvider.displayName} post, in characters`,
     existing.POST_MAX_LENGTH || existing.SLEEPER_POST_MAX_LENGTH || '900',
   );
 
@@ -522,7 +730,15 @@ async function main() {
   }
 
   const values = {
-    SLEEPER_LEAGUE_ID: leagueId,
+    // Absent means Sleeper; a folder switched from ESPN is cleared back to that.
+    LEAGUE_PROVIDER: isEspn ? 'espn' : '',
+    SLEEPER_LEAGUE_ID: isEspn ? '' : leagueId,
+    ESPN_LEAGUE_ID: isEspn ? leagueId : '',
+    ESPN_ROUTE: isEspn ? route : '',
+    // The cookies are written on the fetch route only, and only for a private league.
+    ESPN_S2: secrets.ESPN_S2 ?? '',
+    ESPN_SWID: secrets.ESPN_SWID ?? '',
+    ...(isEspn ? { LEAGUE_SEASON: espnSeason } : existing.LEAGUE_SEASON ? { LEAGUE_SEASON: existing.LEAGUE_SEASON } : {}),
     // Always declared, even when it agrees with Sleeper: the operator has now
     // said what the league is, and doctor reports it as told rather than guessed.
     LEAGUE_FORMAT: formatType,
@@ -581,7 +797,17 @@ async function main() {
   const cli = cliCommand({ packageRoot: PACKAGE_ROOT, from: workspaceRoot });
   say(`Your league folder is ${displayPath(workspaceRoot)}.`);
   say('');
-  say('First, check that everything works:');
+  if (isEspn && route === 'import') {
+    say('Your ESPN league arrives from pages you save. First import the league page:');
+    say('');
+    say(`  ${bold(`${cli} import-espn <the saved league file>`)}`);
+    say('');
+    say("Then each week, save that week's two pages (import-espn lists the addresses):");
+    say('');
+    say(`  ${bold(`${cli} import-espn --week <n> <the saved files>`)}`);
+    say('');
+  }
+  say('Then check that everything works:');
   say('');
   if (realpathSync(process.cwd()) !== realpathSync(workspaceRoot)) {
     say(`  ${bold(`cd ${displayPath(workspaceRoot)}`)}`);
@@ -594,7 +820,8 @@ async function main() {
   say('');
   say(`Output lands in ${displayPath(join(workspaceRoot, 'output'))}.`);
   if (provider) say(`Your API key is set, so ${bold('--generate')} works on any of those.`);
-  if (formatType === 'dynasty') {
+  // Not for ESPN: the prospect board is unavailable there (no traded future picks).
+  if (formatType === 'dynasty' && !isEspn) {
     // The rookie class that matters is next season's: this season's draft is done.
     const season = Number.parseInt(league.season, 10);
     const draftYear = Number.isInteger(season) ? String(season + 1) : '<draft year>';

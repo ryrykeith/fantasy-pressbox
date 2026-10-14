@@ -69,7 +69,16 @@ test('captureWeek saves the raw bundle exactly as fetched, tagged with its provi
   const store = createStore({ dataDir: mkdtempSync(join(tmpdir(), 'pressbox-week-data-')) });
   const client = { matchups: async () => WEEK_2_MATCHUPS, transactions: async () => WEEK_2_TRANSACTIONS };
   const league = { ...leagueOf('dynasty'), lastScoredWeek: 1 };
-  await captureWeek({ client, store, league, teams, players, week: 2 });
+  const captured = await captureWeek({ client, store, league, teams, players, week: 2 });
+
+  // Sleeper never marks a multi-week matchup, so its week is analyzed and
+  // saved exactly as before (tests/espn-multi-week.test.mjs has the ESPN case).
+  assert.ok(!('multiWeekMatchup' in captured));
+  assert.equal(captured.analysis.week, 2);
+  const snapshot = store.loadSnapshot('2026', 2);
+  assert.ok(!('multiWeekMatchup' in snapshot));
+  assert.equal(Object.keys(snapshot).at(-1), 'analysis');
+  assert.deepEqual(snapshot.analysis, JSON.parse(JSON.stringify(captured.analysis)));
 
   const saved = store.loadRaw('2026', 2);
   assert.deepEqual(Object.keys(saved), ['provider', 'fetchedAt', 'leagueId', 'week', 'matchups', 'transactions']);

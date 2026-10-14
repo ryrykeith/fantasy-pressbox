@@ -1,0 +1,6 @@
+game_id,season,game_type,week,gameday,weekday,gametime,away_team,away_score,home_team,home_score
+2026_01_SEA_LA,2026,REG,1,2026-09-13,Sunday,13:00,SEA,,LA,
+2026_02_LA_ARI,2026,REG,2,2026-09-20,Sunday,13:00,LA,,ARI,
+2026_19_SEA_LA,2026,WC,19,2027-01-10,Sunday,16:30,SEA,,LA,
+2026_22_KC_DEN,2026,SB,22,2027-02-14,Sunday,18:30,KC,,DEN,
+2025_01_DEN_KC,2025,REG,1,2025-09-07,Sunday,13:00,DEN,,KC,

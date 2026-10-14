@@ -309,6 +309,14 @@ add.
 The final version lives in `docs/espn-data.md` (task 5.3). Every row on ESPN
 depends on the §4 assumptions until task 2.2 verifies them.
 
+**Superseded (2026-10-13)** by the coverage matrix in `docs/espn-data.md`,
+which `tests/espn-coverage-matrix.test.mjs` keeps matching the code. This
+draft is kept as written. Where it differs from the code, the final matrix is
+right:
+- No command builds `postseason`: `rankings` builds the weekly edition.
+- Market values are `unavailable` on ESPN until task 6.1 adds the `espnId` join.
+- Manager names are `unavailable`, not `displayName` (open question 27).
+
 **Editions and commands**
 
 | Edition or command | ESPN |

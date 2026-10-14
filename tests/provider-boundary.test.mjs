@@ -13,12 +13,14 @@ import { PACKAGE_ROOT } from '../src/config.mjs';
 //
 //   1. Nothing outside the provider directories and the registry imports a
 //      provider directory.
-//   2. A raw Sleeper field name does not appear in code outside src/sleeper/.
-//      Comments that explain Sleeper are allowed.
+//   2. A raw Sleeper field name does not appear in code outside src/sleeper/,
+//      and a raw ESPN field name does not appear outside src/espn/.
+//      Comments that explain a platform are allowed.
 
 const SRC = join(PACKAGE_ROOT, 'src');
 const SLEEPER_DIR = join(SRC, 'sleeper');
-const PROVIDER_DIRS = [SLEEPER_DIR, join(SRC, 'espn')];
+const ESPN_DIR = join(SRC, 'espn');
+const PROVIDER_DIRS = [SLEEPER_DIR, ESPN_DIR];
 const REGISTRY = join(SRC, 'providers.mjs');
 
 /** Sleeper's own field names. They are one platform's storage details, not concepts. */
@@ -31,6 +33,32 @@ const RAW_SLEEPER_FIELDS = [
   'fpts_decimal',
   'waiver_bid',
   'last_scored_leg',
+];
+
+/**
+ * ESPN's own field names (docs/espn-data.md). Only names no shared concept
+ * uses: `totalPoints`, say, is also an ordinary variable name elsewhere.
+ */
+const RAW_ESPN_FIELDS = [
+  'rosterForCurrentScoringPeriod',
+  'playerPoolEntry',
+  'statSourceId',
+  'appliedTotal',
+  'lineupSlotId',
+  'lineupSlotCounts',
+  'scoringPeriodId',
+  'matchupPeriodId',
+  'proTeamId',
+  'eligibleSlots',
+  'defaultPositionId',
+  'fromTeamId',
+  'toTeamId',
+  'bidAmount',
+  'isUsingAcquisitionBudget',
+  'acquisitionBudgetSpent',
+  'scoringItems',
+  'pointsOverrides',
+  'draftDetail',
 ];
 
 const isInside = (dir, file) => file === dir || file.startsWith(dir + sep);
@@ -94,13 +122,13 @@ function importLeaks(files) {
 
 const usesField = (code, field) => new RegExp(`\\b${field}\\b`).test(code);
 
-/** The lines outside src/sleeper/ that use a raw Sleeper field name in code. */
-function fieldLeaks(files) {
+/** The lines outside `dir` that use one of `fields` in code (Sleeper's by default). */
+function fieldLeaks(files, { dir = SLEEPER_DIR, fields = RAW_SLEEPER_FIELDS } = {}) {
   const leaks = [];
   for (const file of files) {
-    if (isInside(SLEEPER_DIR, file)) continue;
+    if (isInside(dir, file)) continue;
     stripComments(readFileSync(file, 'utf8')).split('\n').forEach((line, index) => {
-      for (const field of RAW_SLEEPER_FIELDS) {
+      for (const field of fields) {
         if (usesField(line, field)) leaks.push(`${relative(PACKAGE_ROOT, file)}:${index + 1} uses ${field}`);
       }
     });
@@ -126,6 +154,21 @@ test('the registry does import the Sleeper provider', () => {
 
 test('no raw Sleeper field name appears in code outside src/sleeper/', () => {
   assert.deepEqual(fieldLeaks(ownedFiles()), []);
+});
+
+test('the registry does import the ESPN provider', () => {
+  assert.ok(importSpecifiers(readFileSync(REGISTRY, 'utf8')).includes('./espn/provider.mjs'));
+});
+
+test('no raw ESPN field name appears in code outside src/espn/', () => {
+  const files = ownedFiles();
+  assert.ok(files.some((file) => isInside(ESPN_DIR, file)));
+  assert.deepEqual(fieldLeaks(files, { dir: ESPN_DIR, fields: RAW_ESPN_FIELDS }), []);
+});
+
+test('the ESPN field list is in use: src/espn/ does read every one', () => {
+  const code = sourceFiles(ESPN_DIR).map((file) => stripComments(readFileSync(file, 'utf8'))).join('\n');
+  assert.deepEqual(RAW_ESPN_FIELDS.filter((field) => !usesField(code, field)), []);
 });
 
 // The guard has to be able to fail. These feed the helpers a planted leak.

@@ -79,6 +79,22 @@ test('printing a format says whether it was told or guessed', () => {
   assert.equal(describeFormat({ type: 'dynasty', source: 'detected' }), 'Dynasty (detected from Sleeper)');
 });
 
+test('a detected format names the league\'s own provider', () => {
+  const detected = { type: 'redraft', source: 'detected' };
+  assert.equal(describeFormat(detected, { provider: 'ESPN' }), 'Redraft (detected from ESPN)');
+  assert.equal(describeFormat(detected, { provider: 'Sleeper' }), describeFormat(detected));
+  // A declared format never names a platform.
+  assert.equal(describeFormat({ type: 'dynasty', source: 'declared' }, { provider: 'ESPN' }), 'Dynasty (declared)');
+});
+
+test('the misspelling error names the league\'s own provider, and Sleeper by default', () => {
+  assert.throws(() => parseDeclaredFormatType('keeper'), /work it out from Sleeper\. It can /);
+  assert.throws(
+    () => parseDeclaredFormatType('keeper', { provider: 'ESPN' }),
+    (error) => /work it out from ESPN\. It can /.test(error.message) && !/Sleeper/.test(error.message),
+  );
+});
+
 test('printing an absent format does not crash', () => {
   assert.equal(describeFormat(null), 'unknown');
   assert.equal(describeFormat({}), 'unknown');

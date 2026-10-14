@@ -56,6 +56,11 @@ week; those are reported as unpaired rather than dropped.
 
 Bench is `players` minus `starters`.
 
+**Checked 2026-10-13:** `players` includes reserve (IR) and taxi players, and
+Sleeper's `ppts` treats them as lineup candidates. The solver keeps them, so
+its potential points and lineup efficiency match the figure Sleeper shows
+managers. Method and counts are under [Verifying changes](#verifying-changes).
+
 `normalizeWeek` turns these into WeekData rosters (`docs/architecture.md`).
 The `"0"` empty-slot marker becomes null there, and in a team's `starterIds`.
 Nothing past `src/sleeper/` reads these field names.
@@ -138,3 +143,18 @@ Sleeper publishes `ppts` (season potential points), which is an independent
 check on the optimal-lineup solver: summing the solver's weekly optimums must
 reproduce it. That check was used to validate `analysis/lineup.mjs` and is the
 first thing to re-run if lineup logic changes.
+
+**Reserve and taxi check (2026-10-13).** The operator ran
+`scripts/check-sleeper-reserve.mjs` against their own league's saved weeks. It
+prints aggregate counts only.
+
+- In the latest saved week, 33 matchup `players` entries were in their
+  roster's reserve and 44 in its taxi squad (judged by today's lists), across
+  12 rosters. So `players` includes reserve and taxi players.
+- Over 4 saved scored weeks, 12 of 12 rosters matched Sleeper's `ppts` within
+  0.01 with the solver as it is, and 4 of 12 when today's reserve and taxi
+  players were left out.
+
+Sleeper's `ppts` therefore counts reserve and taxi players as candidates, and
+the solver reproduces it exactly. Decision (operator, 2026-10-13): keep
+matching Sleeper; no change to the Sleeper solver.
