@@ -6,7 +6,7 @@ status: "pending"
 priority: "high"
 acceptanceCriteria: []
 description: "The CLI and the website run the same edition steps from one option list, and every parser refuses hostile input."
-lastModified: "2026-10-13T02:35:17.370Z"
+lastModified: "2026-10-14T14:43:43.000Z"
 lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 ---
 
@@ -14,5 +14,6 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
+| [Fix grade in guillotine leagues: open every CLI league with the bye table](./fix-grade-in-guillotine-leagues-open-every.md) | pending |
 | [Move edition steps into core, with one option list](./move-edition-steps-into-core-with-one.md) | pending |
 | [Refuse hostile input in the parsers](./refuse-hostile-input-in-the-parsers.md) | pending |
