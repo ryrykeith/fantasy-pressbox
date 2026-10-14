@@ -34,6 +34,9 @@ import {
   parseSavedFile,
   leagueAsOf,
   readSavedFiles,
+  savedEspnBundles as savedBundlesOf,
+  savedPagesReport,
+  savedPagesWeek,
   staleLeagueError,
   staleLeagueNotice,
 } from './import.mjs';
@@ -133,9 +136,7 @@ export function createImportSource({ leagueId, season, store }) {
 
 /** Every saved ESPN week bundle for the season, oldest week first. */
 function savedEspnBundles(source) {
-  return source.store
-    .loadRawThrough(source.season, Number.POSITIVE_INFINITY)
-    .filter((bundle) => bundle?.provider === NAME && bundle.matchups);
+  return savedBundlesOf({ store: source.store, season: source.season });
 }
 
 /** The refusal for anything not yet imported: what to save, and the command. */
@@ -207,23 +208,7 @@ function importInstance(source, { config = null, league = null } = {}) {
      * `transactionsPeriod` is null when that week's transactions page was not imported.
      */
     savedPages() {
-      const saved = source.store.loadImportedLeague(source.season);
-      const bundles = savedEspnBundles(source);
-      const periodOf = (body) => (Number.isInteger(body?.scoringPeriodId) ? body.scoringPeriodId : null);
-      const freshness = saved?.body
-        ? leaguePageFreshness({ league: saved.body, bundles, seen: saved.seenScoringPeriod ?? null })
-        : { leaguePeriod: null, latestPeriod: latestScoringPeriod({ bundles }), stale: false, latestFrom: null };
-      return {
-        league: saved?.body ? { period: periodOf(saved.body), importedAt: saved.importedAt ?? null } : null,
-        weeks: bundles.map((bundle) => ({
-          week: bundle.week,
-          matchupsPeriod: periodOf(bundle.matchups),
-          transactionsPeriod: periodOf(bundle.transactions),
-        })),
-        latestPeriod: freshness.latestPeriod,
-        stale: freshness.stale,
-        latestFrom: freshness.latestFrom,
-      };
+      return savedPagesReport({ store: source.store, season: source.season });
     },
 
     /**
@@ -244,17 +229,7 @@ function importInstance(source, { config = null, league = null } = {}) {
     /** The League's current week, else the latest scoring period any saved page shows. */
     async currentWeek({ league: known = current } = {}) {
       let week = known?.currentWeek ?? null;
-      if (!week) {
-        const record = source.store.loadImportedLeague(source.season);
-        const saved = record?.body ?? null;
-        const latest = latestScoringPeriod({
-          league: saved,
-          bundles: savedEspnBundles(source),
-          seen: record?.seenScoringPeriod ?? null,
-        });
-        const final = saved?.status?.finalScoringPeriod;
-        week = latest === null ? null : Number.isInteger(final) ? Math.min(latest, final) : latest;
-      }
+      if (!week) week = savedPagesWeek({ store: source.store, season: source.season });
       if (!week) throw notImported(source, `The ESPN league (${source.leagueId}, ${source.season})`);
       return { week, source: `${DISPLAY_NAME} (the latest saved page)` };
     },
@@ -444,6 +419,20 @@ export const espnProvider = Object.freeze({
     }
     readSavedFiles([{ file, text }], { leagueId, season, declaredFormatType });
     return normalizeLeague({ mSettings: body, mDraftDetail: body }, { leagueId, declaredFormatType });
+  },
+
+  /**
+   * The scoring period each saved page is from, and whether the league page is
+   * stale, read from a store alone (no instance, no request). The import
+   * route's status report (src/inspect.mjs) reads it.
+   */
+  readSavedPages({ store, season }) {
+    return savedPagesReport({ store, season });
+  },
+
+  /** The week the saved pages put the league in, or null when nothing is imported. */
+  readSavedPagesWeek({ store, season }) {
+    return savedPagesWeek({ store, season });
   },
 
   /** A saved bundle as WeekData. Reads nothing but the bye table, and that only when a player has no points. */

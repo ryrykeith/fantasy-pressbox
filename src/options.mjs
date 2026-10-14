@@ -113,6 +113,25 @@ export const EDITIONS = Object.freeze(
   ),
 );
 
+/**
+ * The editions of a league's weekly routine, in the order they are run: the
+ * preview before the games, then the recap and the rankings after them. A
+ * guillotine league plays no matchups, so it gets its own three. `weeklyRoutine`
+ * (src/welcome.mjs) prints this order and inspectLeague (src/inspect.mjs)
+ * reports against it, so the two cannot disagree.
+ */
+export function weeklyEditions(formatType = null) {
+  const names =
+    formatType === 'guillotine'
+      ? ['survival-preview', 'chop-recap', 'survival-rankings']
+      : ['preview', 'recap', 'rankings'];
+  return names.map((task, index) => ({
+    task,
+    when: index === 0 ? 'before-games' : 'after-games',
+    recordable: RECORDABLE_TASKS.includes(task),
+  }));
+}
+
 /** The edition named `name`, or null. */
 export const editionNamed = (name) => EDITIONS.find((edition) => edition.name === name) ?? null;
 

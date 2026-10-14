@@ -36,6 +36,8 @@ import { describeDraftOrder } from './rookieDraft.mjs';
 import { describeProspectBoard } from './prospectBoard.mjs';
 import { openLeague, resolveWeek, captureWeek, importSavedFiles, readEliminationLedger } from './pipeline.mjs';
 import { FUTURE_STOCK_TASK } from './futureStock.mjs';
+import { describeInspection, inspectLeague } from './inspect.mjs';
+import { PACKAGE_NAME, PACKAGE_VERSION } from './version.mjs';
 import { systemPromptOnly, taskPromptOnly } from './promptContext.mjs';
 import { generate, describeProvider, detectProvider } from './generate.mjs';
 import { checkPosts, looksCollapsed, stripJsonBlock } from './validate.mjs';
@@ -104,6 +106,9 @@ const openFolderLeague = (config, options = {}) =>
  */
 const CLI_COMMAND = cliCommand({ packageRoot: PACKAGE_ROOT });
 const INIT_COMMAND = `${CLI_COMMAND} init`;
+
+/** Who files a reply from this command line, as a league file names its writer. */
+const CLI_WRITTEN_BY = Object.freeze({ package: PACKAGE_NAME, version: PACKAGE_VERSION, surface: 'cli' });
 
 /**
  * The same command typed from inside a league folder, for the getting-started
@@ -387,8 +392,26 @@ async function commandDoctor(config) {
   }
   for (const line of describeScoringSummary(league.format.scoring)) say(`  ${line}`);
   for (const line of describeUnmodelledScoring(league.format.scoring, { provider: providerDisplayName(league.provider) })) say(`  ${line}`);
-  say(`  Current week       ${week} (from ${source})`);
+  // The status report (src/inspect.mjs). The import route has no live state:
+  // its week comes from the saved pages and is reported as such, never as live.
+  const report = inspectLeague({
+    // The fetch route's context holds no store: read the folder's own.
+    store: ctx.store ?? fileStore(config),
+    provider: league.provider,
+    leagueId: config.leagueId,
+    season: league.season,
+    declaredFormat: config.leagueFormat ?? null,
+    displayName: config.leagueDisplayName ?? null,
+    weekOverride: config.week ?? null,
+    espnRoute: league.provider === 'espn' ? config.league.route : null,
+    live: espnRoute.imported ? null : { league, week, source },
+  });
+  const status = describeInspection(report);
+  for (const line of status.week) say(line);
   const staleLeaguePage = reportSavedPages(ctx);
+  for (const line of [...status.coverage, ...status.next]) say(line);
+  const mismatch = report.problems.find((problem) => problem.code === 'league-mismatch');
+  if (mismatch) say(`  League ID          ✗ ${mismatch.message}`);
   if (espnRoute.imported) for (const line of describeImportToSave(config, { season: league.season, weeks: savedWeeks(ctx) })) say(line);
 
   // Who is still in the league, for the formats where that changes. Built from
@@ -430,6 +453,7 @@ async function commandDoctor(config) {
     say(`\nThe league page is out of date.\n${staleLeaguePage}`);
     return 1;
   }
+  if (mismatch) return 1;
 
   say(
     `\nEverything looks good. Try: ${CLI_COMMAND} preview` +
@@ -767,7 +791,7 @@ async function commandEdition(config, args, task) {
   say(`Posts written to ${outPath}`);
 
   if (prepared.recordsBlock) {
-    recordEdition({ task, week, text: result.text, store, league, teams, previousRankings, from: 'generated', log: { say, warn } });
+    recordEdition({ task, week, text: result.text, store, league, teams, previousRankings, from: 'generated', writtenBy: CLI_WRITTEN_BY, log: { say, warn } });
   }
 
   reportLengths(body, config, format, context);
@@ -832,6 +856,7 @@ async function commandRecord(config, args) {
     league: ctx.league,
     teams: ctx.teams,
     from: 'pasted',
+    writtenBy: CLI_WRITTEN_BY,
     log: { say, warn },
   });
   reportLengths(stripJsonBlock(text), config, 'sleeper');

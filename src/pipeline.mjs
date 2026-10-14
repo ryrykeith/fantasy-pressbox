@@ -641,6 +641,9 @@ export async function captureWeek({
     season: league.season,
     played,
     settled,
+    // What the status report (src/inspect.mjs) names the league by offline:
+    // a snapshot is the only thing a league file carries that saw the league.
+    league: { name: league.name ?? null, detectedFormat: league.format?.detectedType ?? null },
     teams: teams.map((team) => ({
       rosterId: team.rosterId,
       name: team.name,

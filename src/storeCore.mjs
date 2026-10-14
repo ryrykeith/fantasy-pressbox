@@ -189,12 +189,14 @@ export function createStoreOver(backend) {
      * machine-readable tail. `from` is 'pasted' or 'generated'. Recording the
      * same edition again replaces it, as it replaces the rankings.
      */
-    saveEdition(season, week, task, { text, from }) {
+    saveEdition(season, week, task, { text, from, writtenBy = null }) {
       return write('editions', season, editionFile(week, task), {
         season: String(season),
         week,
         task,
         from,
+        // Who filed it, as a league file names its writer: { package, version, surface }.
+        ...(writtenBy ? { writtenBy } : {}),
         savedAt: new Date().toISOString(),
         text,
       });

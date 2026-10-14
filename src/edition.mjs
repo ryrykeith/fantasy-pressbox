@@ -693,7 +693,9 @@ export async function prepareEdition({
  * team name in the block is pinned to its roster before anything is saved.
  *
  * Once the block is filed, the whole reply is saved too
- * (store.saveEdition, editions/<season>/week-<n>-<task>.json).
+ * (store.saveEdition, editions/<season>/week-<n>-<task>.json), with
+ * `writtenBy` ({ package, version, surface }) when the caller says who filed
+ * it, so inspectLeague (src/inspect.mjs) can report it.
  *
  * → whether anything was recorded.
  */
@@ -706,6 +708,7 @@ export function recordEdition({
   teams,
   previousRankings = null,
   from = 'pasted',
+  writtenBy = null,
   log = SILENT,
 }) {
   // Required: without the roster, a typo'd or renamed team would be filed as
@@ -731,7 +734,7 @@ export function recordEdition({
   // The whole reply is kept beside its tail, so the edition can be read again
   // later; the rankings and predictions files hold only what the block said.
   if (recorded) {
-    const path = store.saveEdition(league.season, week, task, { text, from });
+    const path = store.saveEdition(league.season, week, task, { text, from, writtenBy });
     log.say(`Saved the whole reply → ${path}`);
   }
   return recorded;

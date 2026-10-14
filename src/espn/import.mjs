@@ -332,6 +332,61 @@ export function leaguePageFreshness({ league = null, bundles = [], seen = null }
   return { leaguePeriod, latestPeriod, stale, latestFrom: stale ? latestFrom : null };
 }
 
+/** The week bundles an ESPN import saved, oldest first: one per imported week, with its matchups. */
+export function savedEspnBundles({ store, season }) {
+  return store
+    .loadRawThrough(season, Number.POSITIVE_INFINITY)
+    .filter((bundle) => bundle?.provider === 'espn' && bundle.matchups);
+}
+
+/**
+ * The scoring period each saved page is from, read from the store alone:
+ * → { league: { period, importedAt, leagueId } | null, weeks: [{ week, matchupsPeriod,
+ *   transactionsPeriod }], latestPeriod, stale, latestFrom }.
+ * `transactionsPeriod` is null when that week's transactions page was not imported.
+ * doctor (through the provider's savedPages) and inspectLeague (src/inspect.mjs) both read this.
+ */
+export function savedPagesReport({ store, season }) {
+  const saved = store.loadImportedLeague(season);
+  const bundles = savedEspnBundles({ store, season });
+  const periodOf = (body) => (Number.isInteger(body?.scoringPeriodId) ? body.scoringPeriodId : null);
+  const freshness = saved?.body
+    ? leaguePageFreshness({ league: saved.body, bundles, seen: saved.seenScoringPeriod ?? null })
+    : { leaguePeriod: null, latestPeriod: latestScoringPeriod({ bundles }), stale: false, latestFrom: null };
+  return {
+    league: saved?.body
+      ? { period: periodOf(saved.body), importedAt: saved.importedAt ?? null, leagueId: saved.leagueId ?? null }
+      : null,
+    weeks: bundles.map((bundle) => ({
+      week: bundle.week,
+      matchupsPeriod: periodOf(bundle.matchups),
+      transactionsPeriod: periodOf(bundle.transactions),
+    })),
+    latestPeriod: freshness.latestPeriod,
+    stale: freshness.stale,
+    latestFrom: freshness.latestFrom,
+  };
+}
+
+/**
+ * The week the saved pages put the league in: the latest scoring period any
+ * saved page shows, capped at the season's final period. Null when nothing is
+ * imported. The import route has no live state, so this is the whole answer to
+ * "what week is it" there, and a caller must never present it as live.
+ */
+export function savedPagesWeek({ store, season }) {
+  const record = store.loadImportedLeague(season);
+  const saved = record?.body ?? null;
+  const latest = latestScoringPeriod({
+    league: saved,
+    bundles: savedEspnBundles({ store, season }),
+    seen: record?.seenScoringPeriod ?? null,
+  });
+  if (latest === null) return null;
+  const final = saved?.status?.finalScoringPeriod;
+  return Number.isInteger(final) ? Math.min(latest, final) : latest;
+}
+
 /** The sentence that says how far behind the league page is. */
 function stalenessSentence({ leaguePeriod, latestPeriod, latestFrom }) {
   const newer =

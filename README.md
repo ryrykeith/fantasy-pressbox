@@ -620,7 +620,7 @@ terminal). Only `init`, `import-league` and `check` work without one.
 | Command | What it does |
 |---|---|
 | `fantasy-pressbox init` | Set up a league folder. Run this first. With `--workspace <folder>` it creates that folder. |
-| `fantasy-pressbox doctor` | Check your settings, league config and connection. Run this when something is wrong. |
+| `fantasy-pressbox doctor` | Check your settings, league config and connection, and see where the league stands: the week, what was recorded for last week, whether its predictions can be graded, and what this week still needs. Run this when something is wrong. |
 | `fantasy-pressbox fetch` | Just download and save a week of league data. |
 | `fantasy-pressbox import-espn --week <n> <files>` | ESPN leagues (experimental): import pages you saved from ESPN yourself. Fantasy Pressbox never contacts ESPN on this route. Run it with no files to see the addresses to open in your signed-in browser; save each page into your league folder, never into the Fantasy Pressbox folder. Save the league page each week along with the week's two pages: a league page older than the newest week page is refused, because its standings and rosters would be out of date. This is your own manual, personal use of your league's pages. |
 | `fantasy-pressbox preview` | Build this week's matchup previews. |
