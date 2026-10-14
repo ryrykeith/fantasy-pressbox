@@ -29,6 +29,8 @@ Commands
 Options
   --week <n>                    Which week to work on (default: worked out from Sleeper)
   --format <sleeper|imessage>   Who the output is for (default: sleeper)
+  --emoji <default|none>        Rank emoji for this run: the shipped table or none
+                                (default: the league's setting)
   --task <name>                 Which edition a recorded file is (used with record)
   --generate                    Call the AI provider in .env and write finished posts
   --refresh-players             Re-download the NFL player list instead of using the cache

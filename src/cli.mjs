@@ -21,6 +21,7 @@ import {
   PACKAGE_ROOT,
   describePromptOverrides,
   rankEmoji,
+  rankEmojiOf,
   resolveRankingWeights,
   resolveWorkspaceRoot,
   WORKSPACE_ENV_VAR,
@@ -541,13 +542,13 @@ function reportSavedPages(ctx) {
  * table against the real number of teams in the league.
  */
 function reportRankEmoji(config, teamCount) {
-  if (!config.editorial.output.include_emoji) {
-    say('\n  Rank emoji         off (INCLUDE_EMOJI is false)');
+  const { mode, table } = rankEmojiOf(config);
+  if (mode === 'none') {
+    say('\n  Rank emoji         none (INCLUDE_EMOJI is false)');
     say('                     Turn them on in config/editorial.yml or .env');
     return;
   }
 
-  const table = config.editorial.ranking_emoji || {};
   const defined = Object.keys(table)
     .map(Number)
     .filter(Number.isFinite)
@@ -559,7 +560,7 @@ function reportRankEmoji(config, teamCount) {
     return `${rank}${rankEmoji(config, rank)}`;
   }).join('  ');
 
-  say(`\n  Rank emoji         ${line}`);
+  say(`\n  Rank emoji         ${mode}: ${line}`);
   say('                     Edit these in config/editorial.yml');
 
   if (highest < teamCount) {

@@ -13,7 +13,7 @@
  */
 import { FORMAT_TYPES } from './format.mjs';
 import { FORWARD_LOOKING_TASKS, RANKING_TASKS } from './promptContext.mjs';
-import { DEFAULT_ESPN_ROUTE, ESPN_ROUTE_KEY, ESPN_ROUTES } from './settings.mjs';
+import { DEFAULT_ESPN_ROUTE, ESPN_ROUTE_KEY, ESPN_ROUTES, RANK_EMOJI_RUN_MODES } from './settings.mjs';
 import { TANK_WATCH_EARLY_FLAG, TANK_WATCH_TASK } from './tankWatch.mjs';
 import { FUTURE_STOCK_TASK } from './futureStock.mjs';
 
@@ -161,6 +161,16 @@ const OPTION_LIST = [
     values: ['sleeper', 'imessage'],
     default: 'sleeper',
     help: 'Who the output is for (default: sleeper)',
+    editions: BUILT_EDITIONS,
+    commands: [],
+  },
+  {
+    name: 'emoji',
+    flag: '--emoji',
+    kind: 'text',
+    values: RANK_EMOJI_RUN_MODES,
+    default: null,
+    help: ["Rank emoji for this run: the shipped table or none", "(default: the league's setting)"],
     editions: BUILT_EDITIONS,
     commands: [],
   },

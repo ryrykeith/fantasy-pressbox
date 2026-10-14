@@ -646,6 +646,7 @@ Useful options:
 |---|---|
 | `--week 3` | Work on a specific week instead of the current one. |
 | `--format imessage` | One long message instead of Sleeper-sized posts (`sleeper` is the default). |
+| `--emoji none` | No rank emoji for this run (`default` puts the shipped table back). Your league's setting is not changed. |
 | `--generate` | Call the AI for you and write finished posts. |
 | `--task <name>` | Which edition a file is, for `record`. |
 | `--early` | Run the tank watch before its start week. |
@@ -784,7 +785,12 @@ It prints your finished table against your real number of teams:
 | Have an 18-team league | The default already runs to 18 — guillotine leagues usually start that big, so nothing repeats |
 | Have fewer teams than emoji | The extras are simply never used |
 | Write your own list | It **replaces** the default completely — no leftovers mixed in |
-| Want no emoji at all | Set `include_emoji: false` under `output:` and the whole scheme switches off |
+| Want no emoji at all | Set `include_emoji: false` under `output:` (or `INCLUDE_EMOJI=false` in `.env`) and the whole scheme switches off. For a single run, add `--emoji none` |
+| Put one that is not an emoji in the list | It is refused, naming the rank. Each entry must be exactly one emoji |
+
+`doctor`'s "Rank emoji" line shows which of the three modes is in force:
+`default` (the shipped table), `custom` (a `ranking_emoji` table of your own)
+or `none`.
 
 **A few ideas**
 

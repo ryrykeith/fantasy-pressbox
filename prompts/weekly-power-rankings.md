@@ -43,6 +43,10 @@ movement after its name:
 🥉 3. USER4817 —
 ```
 
+The emoji in this layout, and in the tier example below, are the default
+table's. Use `editorial.rankEmoji.table`; when `editorial.rankEmoji.mode` is
+`none`, print every line without one.
+
 One week is a tiny sample. Normally keep movement within
 `editorial.movementGuidance.max_normal_movement` spots. Move a team further
 only when the week genuinely demands it, and say out loud why you broke your

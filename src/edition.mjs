@@ -35,7 +35,7 @@ import { gradePredictions, withMovement, movementLabel } from './rankingGrades.m
 import { createTeamIdentity, attachRosterIds, presentPreviousRankings, describeUnresolved } from './teamIdentity.mjs';
 import { TANK_WATCH_TASK, refuseTankWatch, resolveTankWatchStartWeek } from './tankWatch.mjs';
 import { OPTIONS, editionNamed, optionNamed, quotedValues } from './options.mjs';
-import { ESPN_ROUTE_KEY } from './settings.mjs';
+import { ESPN_ROUTE_KEY, withRankEmojiMode } from './settings.mjs';
 
 /** How a refusal names a command to run instead. The CLI passes its own, with the program in front. */
 const bareCommand = (name) => name;
@@ -364,10 +364,11 @@ export async function prepareEdition({
   commandFor = bareCommand,
   log = SILENT,
 }) {
-  const config = settings;
-  const { say, warn } = log;
   const edition = editionNamed(task);
   if (!edition) throw new Error(`Unknown edition "${task}".`);
+  // --emoji changes this run only: the league's setting is left as it was.
+  const config = options.emoji === undefined ? settings : withRankEmojiMode(settings, options.emoji);
+  const { say, warn } = log;
   refuseCliOnly({ settings: config, options, surface });
   refuseEditionForProvider(config, task);
   refuseOrdinaryEditionInGuillotineLeague(config, task, { commandFor });

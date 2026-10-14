@@ -79,6 +79,10 @@ movement after its name:
 🥉 3. USER4817 —
 ```
 
+The emoji in this layout, and in the tier example below, are the default
+table's. Use `editorial.rankEmoji.table`; when `editorial.rankEmoji.mode` is
+`none`, print every line without one.
+
 A team that has since been chopped will appear in `previousRankings` and not in
 `teams`. It has not fallen; it has been removed. Do not print it, and do not
 count it when you work out how far anybody else moved — the teams below it all

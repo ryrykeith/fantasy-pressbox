@@ -59,6 +59,7 @@ export {
   parseEspnRoute,
   parseLeagueProvider,
   rankEmoji,
+  rankEmojiOf,
   resolveFutureStockWeights,
   resolveRankingWeights,
   resolveSettings,
@@ -340,6 +341,9 @@ export function loadConfig({
     outputDir: resolve(workspaceRoot, env.OUTPUT_DIR || 'output'),
     debug: bool(env.DEBUG, false),
     editorial: settings.editorial,
+    // { mode: 'default' | 'custom' | 'none', table }, and the shipped table `--emoji default` puts back.
+    rankEmoji: settings.rankEmoji,
+    defaultRankEmojiTable: settings.defaultRankEmojiTable,
     rankings: settings.rankings,
     // Settings that only mean anything in a guillotine league. Kept in their
     // own sub-object so nothing reaches for `config.eliminations` in a format

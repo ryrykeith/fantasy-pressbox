@@ -97,6 +97,9 @@ POWER RANKINGS • 1/14
    🔥 Lowered Expectations
    ```
 
+   These emoji are the default table's. Use `editorial.rankEmoji.table`; when
+   `editorial.rankEmoji.mode` is `none`, print the lines without one.
+
    Leave a blank line between tiers. Name each tier something you wrote this
    week for these teams, not a label you would reuse. Close by inviting the
    league to screenshot it.

@@ -58,8 +58,8 @@ test('a workspace editorial.yml layers over the shipped file, key by key', () =>
 
 test('a workspace ranking_emoji table replaces the shipped one rather than merging with it', () => {
   const workspace = tempWorkspace();
-  write(workspace, 'config/editorial.yml', 'ranking_emoji:\n  1: "A"\n  2: "B"\n');
-  assert.deepEqual(load(workspace).editorial.ranking_emoji, { 1: 'A', 2: 'B' });
+  write(workspace, 'config/editorial.yml', 'ranking_emoji:\n  1: "🔴"\n  2: "🟠"\n');
+  assert.deepEqual(load(workspace).editorial.ranking_emoji, { 1: '🔴', 2: '🟠' });
 });
 
 test('a workspace weight set replaces the shipped set, and is still checked to sum to 1.0', () => {

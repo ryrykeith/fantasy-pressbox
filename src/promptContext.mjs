@@ -10,7 +10,7 @@
  * business printing that number. Keeping facts in structured form rather than
  * prose is what makes that rule enforceable.
  */
-import { resolveFutureStockWeights, resolveRankingWeights } from './settings.mjs';
+import { rankEmojiOf, resolveFutureStockWeights, resolveRankingWeights } from './settings.mjs';
 import {
   capabilityGap,
   hasMatchups,
@@ -347,14 +347,30 @@ function awardsView(awards, headToHead) {
   );
 }
 
+/**
+ * The rank emoji as the model sees it: the mode, the table that applies and,
+ * when emoji are off, the rule in words. Without the rule an empty table is
+ * easy to read as "pick your own".
+ */
+function rankEmojiView(config) {
+  const { mode, table } = rankEmojiOf(config);
+  if (mode !== 'none') return { mode, table };
+  return {
+    mode,
+    table: {},
+    rule:
+      'Print no rank emoji anywhere: not beside a team in a ranking, not in a tier list, ' +
+      'and not beside a team in a standings line, a matchup header or a recap.',
+  };
+}
+
 function editorialView(config, format, task) {
   const formatType = format?.type;
   return {
     tone: config.editorial.tone,
     roastIntensity: config.editorial.roast_intensity,
-    rankingEmoji: config.editorial.ranking_emoji,
+    rankEmoji: rankEmojiView(config),
     sleeperMaxChars: config.editorial.output.sleeper_max_chars,
-    includeEmoji: config.editorial.output.include_emoji,
     // Weights are per-format: a redraft league is never judged on the dynasty
     // set's dynasty_value/future_draft_capital factors, and a guillotine
     // league is judged on a weekly floor neither of the others weighs at all.

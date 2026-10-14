@@ -63,6 +63,10 @@ Separate each post with a line containing only three percent signs:
 %%%
 ```
 
+When `editorial.rankEmoji.mode` is `none`, print no rank emoji anywhere, and
+use no emoji to stand in for one. Otherwise use the emoji in
+`editorial.rankEmoji.table`, by rank.
+
 Respect the character limit given in the context (`editorial.sleeperMaxChars`).
 Each post must fit on its own. Never let a post run over the limit, and never
 end a post mid-thought to make it fit — cut content instead.

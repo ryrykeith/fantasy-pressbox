@@ -153,6 +153,77 @@ export const RANKING_WEIGHT_REPLACE_KEYS = [
 /** The editorial tables: a layer that writes one out replaces it, never merges into it. */
 export const EDITORIAL_REPLACE_KEYS = ['ranking_emoji', 'awards', 'banned_phrases'];
 
+/**
+ * How rank and standing lines print their emoji: the shipped table
+ * (`default`), the league's own table (`custom`), or nothing (`none`).
+ */
+export const RANK_EMOJI_MODES = ['default', 'custom', 'none'];
+
+/** The modes one run can ask for with `--emoji`: a custom table is a league's, not a flag's. */
+export const RANK_EMOJI_RUN_MODES = ['default', 'none'];
+
+const SINGLE_EMOJI = /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[0-9#*]️?⃣)/u;
+
+/** True when `text` is exactly one grapheme and that grapheme is an emoji. */
+export function isSingleEmoji(text) {
+  if (typeof text !== 'string' || text === '') return false;
+  const graphemes = [...new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(text)];
+  return graphemes.length === 1 && SINGLE_EMOJI.test(text);
+}
+
+/**
+ * Refuses a custom rank emoji table unless every entry is a single emoji
+ * grapheme. `source` names where the table came from, for the message.
+ */
+export function validateRankEmojiTable(table, { source = 'ranking_emoji' } = {}) {
+  for (const [rank, emoji] of Object.entries(table)) {
+    if (!isSingleEmoji(emoji)) {
+      throw new Error(
+        `${source} entry ${rank} is ${JSON.stringify(emoji)}, which is not a single emoji. ` +
+          'Each rank needs exactly one emoji, e.g. 1: "🥇".',
+      );
+    }
+  }
+}
+
+const isTable = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * The rank emoji setting a config carries: `{ mode, table }`.
+ *
+ * A resolved config has it as `config.rankEmoji`. A config assembled by hand
+ * (a test, a caller of buildContext) has only the older editorial keys, which
+ * mean the same thing: `output.include_emoji: false` is `none`, otherwise the
+ * `ranking_emoji` table is the one in force.
+ */
+export function rankEmojiOf(config) {
+  if (config.rankEmoji) return config.rankEmoji;
+  const { output, ranking_emoji: table } = config.editorial;
+  if (output?.include_emoji === false) return { mode: 'none', table: {} };
+  return { mode: 'custom', table: isTable(table) ? table : {} };
+}
+
+/**
+ * A copy of `config` for one run with the rank emoji forced to `mode`
+ * (`--emoji`). `default` is the shipped table, ignoring the league's own.
+ * Nothing on disk or in `config` itself changes.
+ */
+export function withRankEmojiMode(config, mode) {
+  if (!RANK_EMOJI_RUN_MODES.includes(mode)) {
+    throw new Error(`--emoji is "${mode}", which is not a rank emoji mode. Use one of: ${RANK_EMOJI_RUN_MODES.join(', ')}.`);
+  }
+  const table = mode === 'none' ? {} : (config.defaultRankEmojiTable ?? DEFAULT_EDITORIAL.ranking_emoji);
+  return {
+    ...config,
+    rankEmoji: { mode, table },
+    editorial: {
+      ...config.editorial,
+      ranking_emoji: table,
+      output: { ...config.editorial.output, include_emoji: mode !== 'none' },
+    },
+  };
+}
+
 /** How far a weight set's sum may drift from 1.0 before it is treated as wrong, to absorb float rounding. */
 const WEIGHT_SUM_TOLERANCE = 1e-6;
 
@@ -370,12 +441,45 @@ export function resolveSettings({ defaults = {}, league = {}, overrides = {}, so
     source: `tank_watch.start_week in ${where}`,
   });
 
+  const { rankEmoji, defaultTable } = resolveRankEmoji({ editorial, defaults, league, overrides, sources });
+  editorial.ranking_emoji = rankEmoji.table;
+  editorial.output.include_emoji = rankEmoji.mode !== 'none';
+
   return {
     editorial,
+    rankEmoji,
+    defaultRankEmojiTable: defaultTable,
     rankings,
     guillotine: { eliminations },
     rookieDraft: { order, rounds, tankWatch: { startWeek } },
   };
+}
+
+/**
+ * One setting from the older editorial keys:
+ *
+ * - `none` when emoji are switched off (`output.include_emoji: false`, which
+ *   INCLUDE_EMOJI=false sets);
+ * - `custom` when the league (or the caller's overrides) wrote a
+ *   `ranking_emoji` table of its own, checked here;
+ * - `default` otherwise: the shipped table.
+ *
+ * `defaultTable` is the shipped table whatever the mode, which is what
+ * `withRankEmojiMode(config, 'default')` puts back.
+ */
+function resolveRankEmoji({ editorial, defaults, league, overrides, sources }) {
+  const shipped = foldLayers(DEFAULT_EDITORIAL, [{ layer: defaults.editorial, source: sources.defaults?.editorial }], {
+    replaceKeys: EDITORIAL_REPLACE_KEYS,
+  });
+  const defaultTable = shipped.ranking_emoji;
+  if (editorial.output.include_emoji === false) return { rankEmoji: { mode: 'none', table: {} }, defaultTable };
+  const own = [
+    [overrides.editorial?.ranking_emoji, sources.overrides?.editorial],
+    [league.editorial?.ranking_emoji, sources.league?.editorial],
+  ].find(([table]) => isTable(table) && Object.keys(table).length);
+  if (!own) return { rankEmoji: { mode: 'default', table: editorial.ranking_emoji }, defaultTable };
+  validateRankEmojiTable(own[0], { source: `ranking_emoji in ${own[1] ?? 'the league settings'}` });
+  return { rankEmoji: { mode: 'custom', table: own[0] }, defaultTable };
 }
 
 /** The first of `keys` set to a non-empty value in `env`, trimmed; null when none is. */
@@ -477,8 +581,8 @@ export function leagueSettingsFromEnv(env) {
 
 /** The emoji that precedes a team at a given rank, e.g. 1 -> 🥇. */
 export function rankEmoji(config, rank) {
-  if (!config.editorial.output.include_emoji) return '';
-  const table = config.editorial.ranking_emoji || {};
+  const { mode, table } = rankEmojiOf(config);
+  if (mode === 'none') return '';
   const exact = table[rank] ?? table[String(rank)];
   if (exact) return exact;
 

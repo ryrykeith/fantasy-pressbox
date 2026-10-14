@@ -45,7 +45,7 @@ import { parseDeclaredFormatType } from './format.mjs';
 import { EDITIONS, optionNamed } from './options.mjs';
 import { parseProspectBoard } from './prospectBoard.mjs';
 import { PROVIDER_NAMES, providerDisplayName } from './providers.mjs';
-import { ESPN_ROUTES, LEAGUE_ID_KEYS, firstSet, leagueSettingsFromEnv, resolveSettings } from './settings.mjs';
+import { ESPN_ROUTES, LEAGUE_ID_KEYS, firstSet, isSingleEmoji, leagueSettingsFromEnv, resolveSettings } from './settings.mjs';
 import { PACKAGE_NAME, PACKAGE_VERSION } from './version.mjs';
 
 export const LEAGUE_FILE_SCHEMA_VERSION = 1;
@@ -207,7 +207,7 @@ function checkRankEmoji(value) {
   if (!Object.keys(table).length) throw new LeagueFileError(`${field}.table`, 'must give at least one rank an emoji');
   for (const [rank, emoji] of Object.entries(table)) {
     if (!/^[1-9]\d{0,2}$/.test(rank)) throw new LeagueFileError(`${field}.table.${rank}`, 'is not a rank');
-    if (typeof emoji !== 'string' || emoji === '') throw new LeagueFileError(`${field}.table.${rank}`, 'must be an emoji');
+    if (!isSingleEmoji(emoji)) throw new LeagueFileError(`${field}.table.${rank}`, 'must be a single emoji');
   }
 }
 

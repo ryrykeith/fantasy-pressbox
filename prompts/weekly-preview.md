@@ -45,6 +45,9 @@ vs.
 🔥 #4 BENCH MOB (0-1)
 ```
 
+The emoji are the default table's. Use `editorial.rankEmoji.table`; when
+`editorial.rankEmoji.mode` is `none`, print both lines without one.
+
 Then, in prose and in this order:
 
 - What each team did last week, with real numbers from `previousWeek`

@@ -50,13 +50,13 @@ test('layers apply lowest first: defaults, then league, then overrides', () => {
 
 test('a ranking_emoji table is replaced, not merged, at every layer', () => {
   const settings = resolveSettings({
-    defaults: { editorial: { ranking_emoji: { 1: 'A', 2: 'B', 3: 'C' } } },
-    league: { editorial: { ranking_emoji: { 1: 'X', 2: 'Y' } } },
+    defaults: { editorial: { ranking_emoji: { 1: '🔴', 2: '🟠', 3: '🟡' } } },
+    league: { editorial: { ranking_emoji: { 1: '❌', 2: '✅' } } },
   });
-  assert.deepEqual(settings.editorial.ranking_emoji, { 1: 'X', 2: 'Y' });
+  assert.deepEqual(settings.editorial.ranking_emoji, { 1: '❌', 2: '✅' });
 
-  const shippedOnly = resolveSettings({ defaults: { editorial: { ranking_emoji: { 1: 'A' } } } });
-  assert.deepEqual(shippedOnly.editorial.ranking_emoji, { 1: 'A' }, 'a short table does not get the built-ins back');
+  const shippedOnly = resolveSettings({ defaults: { editorial: { ranking_emoji: { 1: '🔴' } } } });
+  assert.deepEqual(shippedOnly.editorial.ranking_emoji, { 1: '🔴' }, 'a short table does not get the built-ins back');
 });
 
 test('awards and banned_phrases are replaced, not merged', () => {
@@ -147,7 +147,14 @@ test('resolveSettings carries no secrets and no league identity', () => {
     league: { editorial: { tone: 'dry' } },
     overrides: { editorial: { tone: 'warm' } },
   });
-  assert.deepEqual(Object.keys(settings).sort(), ['editorial', 'guillotine', 'rankings', 'rookieDraft']);
+  assert.deepEqual(Object.keys(settings).sort(), [
+    'defaultRankEmojiTable',
+    'editorial',
+    'guillotine',
+    'rankEmoji',
+    'rankings',
+    'rookieDraft',
+  ]);
 });
 
 test('the league parsers moved here still behave', () => {
