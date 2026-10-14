@@ -281,6 +281,11 @@ export function refuseEditionForProvider(config, task) {
  * Refuses what only the command line offers, on any other surface: an option
  * OPTIONS marks `cliOnly` (--generate), and a setting value it marks in
  * `cliOnlyValues` (ESPN_ROUTE=fetch). Each refusal names the reason.
+ *
+ * An ESPN route that is not one of ESPN_ROUTES is refused too: the provider
+ * reads saved pages only on the import route (the default, when none is set)
+ * and builds the cookie client for any other value (src/espn/provider.mjs,
+ * fromConfig), so an unknown one would reach ESPN.
  */
 export function refuseCliOnly({ settings, options = {}, surface }) {
   if (surface === 'cli') return;
@@ -291,12 +296,18 @@ export function refuseCliOnly({ settings, options = {}, surface }) {
     throw new Error(`${option.flag} is only on the command line: ${option.cliOnly}.`);
   }
   const route = optionNamed('espnRoute');
-  const { provider, route: chosen } = settings.league ?? {};
-  const because = provider === 'espn' ? route.cliOnlyValues?.[chosen] : null;
+  const { provider, route: declared } = settings.league ?? {};
+  if (provider !== 'espn') return;
+  const chosen = declared ?? route.default;
+  const savedPagesOnly = `Here, editions are built from the pages you saved from ESPN (${ESPN_ROUTE_KEY}=import).`;
+  if (!route.values.includes(chosen)) {
+    throw new Error(`${ESPN_ROUTE_KEY} must be ${quotedValues(route.values)}, got "${chosen}". ${savedPagesOnly}`);
+  }
+  const because = route.cliOnlyValues?.[chosen];
   if (!because) return;
   throw new Error(
     `This ESPN league is read with ${ESPN_ROUTE_KEY}=${chosen}, which only the command line can build an edition from: ` +
-      `${because}. Here, editions are built from the pages you saved from ESPN (${ESPN_ROUTE_KEY}=import).`,
+      `${because}. ${savedPagesOnly}`,
   );
 }
 

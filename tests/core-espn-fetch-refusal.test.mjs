@@ -73,6 +73,33 @@ test("core's openLeague refuses an ESPN league file on the fetch route before an
   assert.deepEqual(calls, [], 'the fetch was never called');
 });
 
+test("core's openLeague refuses any ESPN route that is not import, since the provider fetches on all of them", async (t) => {
+  // src/espn/provider.mjs fromConfig reads saved pages only for route 'import'
+  // (or none) and builds the cookie client for anything else, so a guard that
+  // refused only the exact value 'fetch' would let these through to ESPN.
+  const calls = forbidFetch(t);
+  for (const route of ['FETCH', '', 'cookie']) {
+    const settings = { league: { provider: 'espn', id: PUBLIC_LEAGUE_ID, season: SEASON, route }, leagueFormat: null };
+    await assert.rejects(openLeague(settings, { store: createMemoryStore() }), (error) => {
+      assert.match(error.message, /ESPN_ROUTE must be "import" or "fetch"/);
+      assert.match(error.message, /Here, editions are built from the pages you saved from ESPN \(ESPN_ROUTE=import\)/);
+      return true;
+    });
+  }
+  assert.deepEqual(calls, [], 'the fetch was never called');
+});
+
+test("core's openLeague opens the import route, the default, off the command line", async (t) => {
+  const calls = forbidFetch(t);
+  for (const route of [undefined, null, 'import']) {
+    const settings = { league: { provider: 'espn', id: PUBLIC_LEAGUE_ID, season: SEASON, route }, leagueFormat: null };
+    // Nothing is imported into the empty store, so the provider refuses for
+    // that reason, naming import-espn — not the surface guard.
+    await assert.rejects(openLeague(settings, { store: createMemoryStore() }), /import-espn/);
+  }
+  assert.deepEqual(calls, []);
+});
+
 test("core's openLeague still opens the fetch route for the command line", async (t) => {
   const real = globalThis.fetch;
   globalThis.fetch = createFakeEspnFetch();
