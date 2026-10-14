@@ -18,6 +18,7 @@ import { futurePickOwnership } from '../src/league/draftCapital.mjs';
 import { createStore } from '../src/store.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { checkPosts } from '../src/validate.mjs';
+import { assets } from './fixtures/assets.mjs';
 import {
   RULE,
   TEAMS_AFTER_WEEK_4,
@@ -282,15 +283,15 @@ test('a projection is called a projection, later rounds get no pick numbers, and
 
 test('tank-watch is a registered edition with its own prompt', () => {
   assert.ok(TASKS.includes('tank-watch'));
-  const prompt = buildPrompt({ task: 'tank-watch', context: context() });
+  const prompt = buildPrompt({ task: 'tank-watch', context: context(), assets });
   assert.match(prompt, /# Tank Watch/);
   assert.match(prompt, /"tankWatch"/);
 });
 
 test('buildPrompt refuses a tank watch with no draft order, or for a league that is not dynasty', () => {
-  assert.throws(() => buildPrompt({ task: 'tank-watch', context: context({ draftOrder: null }) }), /draft order/);
+  assert.throws(() => buildPrompt({ task: 'tank-watch', context: context({ draftOrder: null }), assets }), /draft order/);
   const redraft = context({ league: { ...LEAGUE, format: { type: 'redraft', source: 'declared' } } });
-  assert.throws(() => buildPrompt({ task: 'tank-watch', context: redraft }), /redraft/);
+  assert.throws(() => buildPrompt({ task: 'tank-watch', context: redraft, assets }), /redraft/);
 });
 
 test('the posts a tank watch is asked for are checked against the configured limit', () => {

@@ -42,7 +42,7 @@ import { parseYaml } from './lib/yaml.mjs';
 import { environmentWithFile } from './lib/env.mjs';
 import { parseDeclaredFormatType } from './format.mjs';
 import { DEFAULT_PROVIDER, providerDisplayName } from './providers.mjs';
-import { byeWeekTableSource, parseByeWeekTable } from './analysis/byeExposure.mjs';
+import { loadAssets } from './assets.mjs';
 import { parseProspectBoard } from './prospectBoard.mjs';
 import {
   ESPN_ROUTE_KEY,
@@ -126,6 +126,38 @@ export function workspacePromptsDir(workspaceRoot) {
  */
 export function workspaceIsPackage(workspaceRoot) {
   return realpathSync(workspaceRoot) === realpathSync(PACKAGE_ROOT);
+}
+
+/**
+ * The CLI's `readText` for `loadAssets` (src/assets.mjs): a package file's
+ * text from the disk, or null when there is none.
+ *
+ * `promptsDir` is the workspace's own prompts folder. A file in it shadows the
+ * shipped prompt of the same name and the rest still come from the package, so
+ * a workspace override wins here and nowhere else needs to know about it.
+ * `packageFiles` redirects named package paths to other files, for the callers
+ * that point loadConfig at a different editorial.yml or rankings.yml.
+ */
+export function diskReadText({ promptsDir = null, packageFiles = {} } = {}) {
+  return (path) => {
+    if (promptsDir && path.startsWith('prompts/')) {
+      const local = join(promptsDir, path.slice('prompts/'.length));
+      if (existsSync(local)) {
+        const text = readFileSync(local, 'utf8');
+        // Said here, where the override's own path is known: past this point
+        // it is only 'prompts/<file>'.
+        if (!text.trim()) throw new Error(`Prompt file ${local} is empty.`);
+        return text;
+      }
+    }
+    const file = packageFiles[path] ?? join(PACKAGE_ROOT, path);
+    return existsSync(file) ? readFileSync(file, 'utf8') : null;
+  };
+}
+
+/** The shipped assets, with `promptsDir`'s workspace prompts shadowing the shipped ones. */
+export function loadDiskAssets({ promptsDir = null } = {}) {
+  return loadAssets(diskReadText({ promptsDir }));
 }
 
 /**
@@ -268,8 +300,12 @@ export function loadConfig({
   const rankingsOverride = own && existsSync(workspaceRankingsPath) ? workspaceRankingsPath : null;
   const promptsDir = own && existsSync(workspacePromptsPath) ? workspacePromptsPath : null;
 
+  const defaults = loadAssets(
+    diskReadText({ packageFiles: { 'config/editorial.yml': editorialPath, 'config/rankings.yml': rankingsPath } }),
+  ).defaultConfig();
+
   const settings = resolveSettings({
-    defaults: { editorial: readYamlLayer(editorialPath), rankings: readYamlLayer(rankingsPath) },
+    defaults,
     league: {
       editorial: readYamlLayer(editorialOverride),
       rankings: readYamlLayer(rankingsOverride),
@@ -341,40 +377,10 @@ export function loadConfig({
   };
 }
 
-/**
- * Reads and validates a season's bye-week table (src/analysis/byeExposure.mjs).
- *
- * Unlike every other config/*.yml this file reads, there is no honest fallback
- * for a missing one: "no table found" cannot default to "nobody has a bye",
- * the same reasoning `resolveRankingWeights` already applies to a format with
- * no weight set. A season without its table yet is refused loudly, naming the
- * generator that produces it, rather than reporting confident zeroes for
- * every survivor.
- *
- * Season-specific rather than part of `loadConfig()` because the season is
- * only reliably known once a league has actually been opened
- * (`league.season` in src/pipeline.mjs) — `config.season` here is only ever
- * an operator's optional override of what Sleeper already says.
- */
-export function loadByeWeekTable({ season, configDir = join(PACKAGE_ROOT, 'config') } = {}) {
-  const source = byeWeekTableSource(season);
-  const path = join(configDir, `bye-weeks.${season}.yml`);
-  if (!existsSync(path)) {
-    throw new Error(
-      `No bye-week table for season ${season} (expected ${source}).\n` +
-        `Generate it with: node scripts/fetch-bye-weeks.mjs ${season}`,
-    );
-  }
-
-  let parsed;
-  try {
-    parsed = parseYaml(readFileSync(path, 'utf8'));
-  } catch (error) {
-    throw new Error(`Could not read ${path}: ${error.message}`);
-  }
-
-  return parseByeWeekTable(parsed, { season, source });
-}
+// A season's bye-week table is `assets.byeWeekTable(season)` (src/assets.mjs).
+// There is no honest fallback for a missing one: "no table found" cannot
+// default to "nobody has a bye", so a season without its table is refused,
+// naming the generator that produces it.
 
 /**
  * Reads and validates the declared prospect board for a draft class

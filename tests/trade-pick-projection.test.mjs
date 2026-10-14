@@ -6,6 +6,7 @@ import { projectDraftOrder } from '../src/analysis/draftOrder.mjs';
 import { futurePickOwnership } from '../src/league/draftCapital.mjs';
 import { normalizePlayers } from '../src/sleeper/normalize.mjs';
 import { prospectsAroundPick } from '../src/tradePicks.mjs';
+import { assets } from './fixtures/assets.mjs';
 import {
   RULE,
   TEAMS_AFTER_WEEK_4,
@@ -278,7 +279,7 @@ test('without a projected order, picks keep the old refusal to name a slot', () 
 /* ------------------------------------------------------------ prompt */
 
 test('the dynasty prompt grades a projected pick at its slot and keeps the tiers as market context', () => {
-  const prompt = buildPrompt({ task: 'trade-report', context: context() });
+  const prompt = buildPrompt({ task: 'trade-report', context: context(), assets });
   assert.match(prompt, /`projectedPick`/);
   assert.match(prompt, /`ifOriginalTeamCrosses`/);
   assert.match(prompt, /`boardAroundPick`/);

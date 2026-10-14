@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { refuseOrdinaryEditionInGuillotineLeague } from '../src/cli.mjs';
 import { buildContext, buildPrompt } from '../src/promptContext.mjs';
 import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
+import { assets } from './fixtures/assets.mjs';
 
 /**
  * A guillotine league has no head-to-head matchups: nobody plays anybody, so
@@ -130,12 +131,12 @@ test('does not refuse the elimination editions themselves in a guillotine league
 
 test('buildPrompt refuses a preview built from a guillotine context', () => {
   const context = contextFor('preview', 'guillotine');
-  assert.throws(() => buildPrompt({ task: 'preview', context }), /guillotine league/i);
+  assert.throws(() => buildPrompt({ task: 'preview', context, assets }), /guillotine league/i);
 });
 
 test('buildPrompt refuses a recap built from a guillotine context', () => {
   const context = contextFor('recap', 'guillotine');
-  assert.throws(() => buildPrompt({ task: 'recap', context }), /guillotine league/i);
+  assert.throws(() => buildPrompt({ task: 'recap', context, assets }), /guillotine league/i);
 });
 
 /**
@@ -145,13 +146,14 @@ test('buildPrompt refuses a recap built from a guillotine context', () => {
  */
 test('buildPrompt builds the survival ranking, not the ordinary one, from a guillotine context', () => {
   assert.throws(
-    () => buildPrompt({ task: 'rankings', context: contextFor('rankings', 'guillotine') }),
+    () => buildPrompt({ task: 'rankings', context: contextFor('rankings', 'guillotine'), assets }),
     /survival-rankings/,
   );
   assert.doesNotThrow(() =>
     buildPrompt({
       task: 'survival-rankings',
       context: contextFor('survival-rankings', 'guillotine'),
+      assets,
     }),
   );
 });
@@ -164,6 +166,6 @@ test('buildPrompt still builds preview and recap for a dynasty context', () => {
       ...contextFor(task, 'dynasty'),
       upcomingMatchups: [{ matchupId: 1, teams: [{ team: 'A', manager: 'a', record: '0-0' }, { team: 'B', manager: 'b', record: '0-0' }] }],
     };
-    assert.doesNotThrow(() => buildPrompt({ task, context }));
+    assert.doesNotThrow(() => buildPrompt({ task, context, assets }));
   }
 });

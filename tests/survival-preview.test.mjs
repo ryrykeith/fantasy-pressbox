@@ -19,6 +19,7 @@ import { buildDangerBoard } from '../src/analysis/danger.mjs';
 import { gradePredictions } from '../src/rankingGrades.mjs';
 import { deriveScoringProfile, normalizePlayers } from '../src/sleeper/normalize.mjs';
 import { PACKAGE_ROOT } from '../src/config.mjs';
+import { assets } from './fixtures/assets.mjs';
 
 /**
  * The survival preview: the forward-looking edition a guillotine league gets
@@ -205,7 +206,7 @@ test('survival-preview is a registered task with a prompt file of its own', () =
 });
 
 test('buildPrompt embeds the survival-preview prompt file and the context', () => {
-  const prompt = buildPrompt({ task: 'survival-preview', context: survivalContext() });
+  const prompt = buildPrompt({ task: 'survival-preview', context: survivalContext(), assets });
   assert.match(prompt, /SURVIVAL PREVIEW/i);
   assert.match(prompt, /# LEAGUE CONTEXT/);
   assert.match(prompt, /"task": "survival-preview"/);
@@ -262,7 +263,7 @@ test('buildPrompt refuses a survival preview built from a head-to-head context',
   for (const formatType of ['dynasty', 'redraft']) {
     const context = survivalContext({ formatType, dangerBoard: null, byeExposure: null });
     assert.throws(
-      () => buildPrompt({ task: 'survival-preview', context }),
+      () => buildPrompt({ task: 'survival-preview', context, assets }),
       /nobody is eliminated/i,
       `expected a refusal for a ${formatType} league`,
     );
@@ -462,7 +463,7 @@ test('a survival preview builds in a league that has no ranking weight set', () 
     byeExposure: BYE_EXPOSURE,
   });
   assert.equal(context.editorial.rankingWeights, undefined, 'an edition that ranks nobody gets no weights');
-  assert.doesNotThrow(() => buildPrompt({ task: 'survival-preview', context }));
+  assert.doesNotThrow(() => buildPrompt({ task: 'survival-preview', context, assets }));
 });
 
 test('a ranking edition still refuses a format with no weight set of its own', () => {

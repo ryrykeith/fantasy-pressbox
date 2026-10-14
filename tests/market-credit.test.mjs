@@ -6,6 +6,7 @@ import { checkPosts } from '../src/validate.mjs';
 import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
 import { normalizeLeague, normalizeTeams } from '../src/espn/normalize.mjs';
 import { buildLeague, PUBLIC_LEAGUE_ID } from './fixtures/mock-espn-league.mjs';
+import { assets } from './fixtures/assets.mjs';
 
 /**
  * FantasyCalc's terms require its name and a link beside its values. An edition
@@ -122,6 +123,7 @@ test('the trade-report prompt tells the model to end a post that quotes a value 
   const prompt = buildPrompt({
     task: 'trade-report',
     context: { ...build({ ...sources.sleeper(), marketValues: MARKET }), trades: [{}] },
+    assets,
   });
   assert.match(prompt, /marketCredit/);
 });

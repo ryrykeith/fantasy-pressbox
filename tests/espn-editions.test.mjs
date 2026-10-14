@@ -5,7 +5,8 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { loadConfig, PACKAGE_ROOT, WORKSPACE_ENV_VAR } from '../src/config.mjs';
+import { loadConfig, loadDiskAssets, PACKAGE_ROOT, WORKSPACE_ENV_VAR } from '../src/config.mjs';
+import { assets } from './fixtures/assets.mjs';
 import { createClient } from '../src/espn/client.mjs';
 import { espnProvider } from '../src/espn/provider.mjs';
 import { espnImportLinks } from '../src/espn/urls.mjs';
@@ -434,7 +435,7 @@ for (const route of ['import', 'fetch']) {
       enrichedTransactions: enriched,
       marketValues,
     });
-    const prompt = buildPrompt({ task: 'waiver-report', context, promptsDir: config.promptsDir });
+    const prompt = buildPrompt({ task: 'waiver-report', context, assets: loadDiskAssets({ promptsDir: config.promptsDir }) });
     assert.ok(prompt.includes('"task": "waiver-report"'));
 
     // The FAAB claim, the free-agent add and the drop; the failed claim is a lost bid, not a move.
@@ -532,7 +533,7 @@ test('fetch route: a settled ESPN week is read back, not re-fetched, when ESPN l
   const opened = async (fetch) => {
     const client = createClient({ leagueId: PUBLIC_LEAGUE_ID, season: SEASON, dataDir, fetch });
     const provider = espnProvider.forClient(client, { config: { leagueFormat: 'redraft' } });
-    return { provider, ...(await provider.openLeague()) };
+    return { provider, assets, ...(await provider.openLeague()) };
   };
 
   const first = await opened(createFakeEspnFetch());
@@ -703,7 +704,7 @@ test('buildPrompt refuses a head-to-head preview whose context has no upcoming m
   const context = contextOf(join(root, 'output', EDITIONS.rankings.prompt));
   for (const upcomingMatchups of [[], undefined]) {
     assert.throws(
-      () => buildPrompt({ task: 'preview', context: { ...context, week: 9, upcomingMatchups } }),
+      () => buildPrompt({ task: 'preview', context: { ...context, week: 9, upcomingMatchups }, assets }),
       /Cannot build a preview for week 9/,
     );
   }

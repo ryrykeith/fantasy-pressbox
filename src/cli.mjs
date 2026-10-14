@@ -16,6 +16,7 @@ import { ESPN_COOKIE_HELP } from './init.mjs';
 import {
   LEAGUE_ID_KEYS,
   loadConfig,
+  loadDiskAssets,
   loadProspectBoard,
   PACKAGE_ROOT,
   describePromptOverrides,
@@ -70,6 +71,8 @@ import { createStore } from './store.mjs';
 
 /** The league folder's file store: the CLI's history lives under its data/. */
 const fileStore = (config) => createStore({ dataDir: config.dataDir });
+// The shipped prompts and defaults, read from disk; a workspace's own prompts shadow them.
+const diskAssets = (config) => loadDiskAssets({ promptsDir: config.promptsDir });
 import {
   createTeamIdentity,
   attachRosterIds,
@@ -481,7 +484,7 @@ async function commandDoctor(config) {
   let week;
   let source;
   try {
-    ctx = await openLeague(config, { store: fileStore(config), allowStaleLeague: true });
+    ctx = await openLeague(config, { store: fileStore(config), assets: diskAssets(config), allowStaleLeague: true });
     ({ week, source } = await resolveWeek({ client: ctx.client, league: ctx.league, config }));
   } catch (error) {
     // Nothing imported yet on the import route: the same addresses and notes a
@@ -701,7 +704,7 @@ function reportRankEmoji(config, teamCount) {
 
 async function commandFetch(config, args) {
   requireLeague(config);
-  const ctx = await openLeague(config, { store: fileStore(config), refreshPlayers: args.refreshPlayers });
+  const ctx = await openLeague(config, { store: fileStore(config), assets: diskAssets(config), refreshPlayers: args.refreshPlayers });
   const { week } =await resolveWeek({ ...ctx, config, requested: args.week });
   const result = await captureWeek({ ...ctx, week });
   reportCapture(result, week, ctx);
@@ -815,7 +818,7 @@ async function commandImportEspn(config, args) {
   // Opened even when the league page is now behind the week pages, only to
   // say so: nothing is captured from it then (a settled snapshot is kept as
   // it is, so stale standings must never reach one).
-  const ctx = await openLeague(config, { store: fileStore(config), allowStaleLeague: true });
+  const ctx = await openLeague(config, { store: fileStore(config), assets: diskAssets(config), allowStaleLeague: true });
   say(`\n${ctx.league.name}: ${ctx.teams.length} teams, current week ${ctx.league.currentWeek ?? 'unknown'} (the latest saved page).`);
   const stale = ctx.provider.staleLeagueNotice?.({ week: imported.week }) ?? null;
   if (stale) {
@@ -929,8 +932,8 @@ async function commandEdition(config, args, task) {
     throw new Error(`--format must be "sleeper" or "imessage", got "${format}".`);
   }
 
-  const ctx = await openLeague(config, { store: fileStore(config), refreshPlayers: args.refreshPlayers });
-  const { league, teams, players, store, client } = ctx;
+  const ctx = await openLeague(config, { store: fileStore(config), assets: diskAssets(config), refreshPlayers: args.refreshPlayers });
+  const { league, teams, players, store, assets, client } = ctx;
   // Again with the opened league: its provider and its resolved format.
   const leagueProvider = providerOf(league);
   refuseEditionWithoutCapability(task, {
@@ -1022,7 +1025,7 @@ async function commandEdition(config, args, task) {
       // Everything a transaction edition reads is a raw bundle captureWeek has
       // just saved. A quiet week is settled before the market is fetched, so
       // a week with nothing in it costs no network call and writes no file.
-      enrichedTransactions = readTransactions({ store, league, teams, players, describePlayer, week });
+      enrichedTransactions = readTransactions({ store, assets, league, teams, players, describePlayer, week });
       const quiet = describeQuietTransactionWeek(summarizeTransactionWeek(enrichedTransactions), week, {
         providerName: getProvider(league.provider).displayName,
       });
@@ -1079,7 +1082,7 @@ async function commandEdition(config, args, task) {
       if (marketValues.unavailable) {
         warn(`Pick values could not be fetched (${marketValues.unavailable}). Picks will be counted, not priced.`);
       }
-      rosterWindow = readRosterWindow({ store, league, teams, players, throughWeek: week });
+      rosterWindow = readRosterWindow({ store, assets, league, teams, players, throughWeek: week });
       pickCapital = readPickCapital({ league, teams, tradedPicks, market: marketValues, config });
       // Optional: without a declared draft rule the picks simply carry no slot.
       draftOrder = captured.draftOrder ?? null;
@@ -1198,7 +1201,7 @@ async function commandEdition(config, args, task) {
     format,
   });
 
-  const prompt = buildPrompt({ task, context, promptsDir: config.promptsDir });
+  const prompt = buildPrompt({ task, context, assets });
   const base =
     task === 'preseason-rankings'
       ? `${league.season}-preseason-rankings`
@@ -1231,8 +1234,8 @@ async function commandEdition(config, args, task) {
   say(`Generating with ${describeProvider(config.ai)}...`);
   const result = await generate({
     ai: config.ai,
-    system: systemPromptOnly(context.league.format?.type, { promptsDir: config.promptsDir }),
-    user: [taskPromptOnly(task, context.league.format?.type, { promptsDir: config.promptsDir }), '', '# LEAGUE CONTEXT', '', '```json', JSON.stringify(context, null, 2), '```'].join('\n'),
+    system: systemPromptOnly(context.league.format?.type, { assets }),
+    user: [taskPromptOnly(task, context.league.format?.type, { assets }), '', '# LEAGUE CONTEXT', '', '```json', JSON.stringify(context, null, 2), '```'].join('\n'),
   });
 
   const body = stripJsonBlock(result.text);

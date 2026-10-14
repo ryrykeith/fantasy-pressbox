@@ -19,6 +19,7 @@ import { hasEliminations } from '../src/format.mjs';
 import { createStore } from '../src/store.mjs';
 import { captureWeek } from '../src/pipeline.mjs';
 import { normalizePlayers } from '../src/sleeper/normalize.mjs';
+import { assets } from './fixtures/assets.mjs';
 
 /**
  * Sleeper reports a guillotine league as an ordinary head-to-head one and has
@@ -387,6 +388,7 @@ test('captureWeek records the ledger in a guillotine snapshot, so history stays 
   const result = await captureWeek({
     client: fakeClient(),
     store,
+    assets,
     league: leagueOf('guillotine'),
     teams,
     players: PLAYERS,
@@ -409,6 +411,7 @@ test('a format with no eliminations gets no ledger key at all, rather than a nul
   const result = await captureWeek({
     client: fakeClient(),
     store,
+    assets,
     league: leagueOf('dynasty'),
     teams,
     players: PLAYERS,
@@ -426,10 +429,11 @@ test('captureWeek carries earlier weeks forward, so week 2 knows who week 1 chop
   const league = leagueOf('guillotine');
   const config = { guillotine: { eliminations: [] } };
 
-  await captureWeek({ client: fakeClient(), store, league, teams, players: PLAYERS, week: 1, config });
+  await captureWeek({ client: fakeClient(), store, assets, league, teams, players: PLAYERS, week: 1, config });
   const second = await captureWeek({
     client: fakeClient(),
     store,
+    assets,
     league,
     teams,
     players: PLAYERS,

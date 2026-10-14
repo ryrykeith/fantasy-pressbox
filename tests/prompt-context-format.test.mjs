@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { buildContext, buildPrompt, TASKS } from '../src/promptContext.mjs';
 import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
+import { assets } from './fixtures/assets.mjs';
 
 const DYNASTY_WEIGHTS = {
   starting_lineup: 0.3,
@@ -303,7 +304,7 @@ test('the rankings prompt for a TE-premium league states the elevated tight end 
     week: 3,
   });
 
-  const prompt = buildPrompt({ task: 'rankings', context });
+  const prompt = buildPrompt({ task: 'rankings', context, assets });
   assert.match(prompt, /tight end/i);
   assert.match(prompt, /positionalValue/);
 });
@@ -318,7 +319,7 @@ test('the rankings prompt for an ordinary league mentions no premium it does not
     week: 3,
   });
 
-  const prompt = buildPrompt({ task: 'rankings', context });
+  const prompt = buildPrompt({ task: 'rankings', context, assets });
 
   // Not one word of instruction about a premium this league does not have.
   assert.doesNotMatch(prompt, /tight end/i);

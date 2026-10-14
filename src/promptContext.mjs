@@ -10,9 +10,6 @@
  * business printing that number. Keeping facts in structured form rather than
  * prose is what makes that rule enforceable.
  */
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { PACKAGE_ROOT } from './config.mjs';
 import { resolveFutureStockWeights, resolveRankingWeights } from './settings.mjs';
 import {
   capabilityGap,
@@ -111,18 +108,18 @@ export const RANKING_TASKS = [...FIXED_FIELD_RANKING_TASKS, 'survival-rankings']
  * src/promptTemplate.mjs) for `formatType`. A file with no such sections reads
  * the same for every format, so `formatType` may be omitted for it.
  *
- * Prompts ship with the package. `promptsDir` is a workspace's own prompts
- * folder: a file in it shadows the shipped file of the same name, and the rest
- * still come from the package. Either way the text goes through
- * renderFormatBlocks, so an override's format blocks resolve exactly as the
- * shipped prompt's do.
+ * Prompts ship with the package and arrive as `assets` (src/assets.mjs): this
+ * module reads no file. Whether a workspace's own prompt shadows the shipped
+ * one is decided by the readText the assets were loaded with (the CLI's is
+ * diskReadText in src/config.mjs), so an override's text goes through
+ * renderFormatBlocks exactly as the shipped prompt's does.
  */
-function readPrompt(file, formatType, promptsDir = null) {
-  const local = promptsDir ? join(promptsDir, file) : null;
-  const path = local && existsSync(local) ? local : join(PACKAGE_ROOT, 'prompts', file);
-  if (!existsSync(path)) throw new Error(`Missing prompt file: prompts/${file}`);
-  const text = renderFormatBlocks(readFileSync(path, 'utf8').trim(), formatType, file);
-  if (!text) throw new Error(`Prompt file ${path === local ? path : `prompts/${file}`} is empty.`);
+function readPrompt(file, formatType, assets) {
+  if (!assets || typeof assets.prompt !== 'function') {
+    throw new Error('Building a prompt needs the loaded assets: pass loadAssets(readText) (src/assets.mjs).');
+  }
+  const text = renderFormatBlocks(assets.prompt(file).trim(), formatType, file);
+  if (!text) throw new Error(`Prompt file prompts/${file} is empty.`);
   return text;
 }
 
@@ -1765,7 +1762,7 @@ const MATCHUP_ONLY_TASKS = ['preview', 'recap'];
 export const ELIMINATION_ONLY_TASKS = ['survival-preview', 'chop-recap', 'survival-rankings'];
 
 /** The complete text to paste into a chat, or send to an API. */
-export function buildPrompt({ task, context, promptsDir = null }) {
+export function buildPrompt({ task, context, assets }) {
   const file = TASK_PROMPTS[task];
   if (!file) throw new Error(`Unknown task "${task}". Known tasks: ${TASKS.join(', ')}`);
 
@@ -1900,11 +1897,11 @@ export function buildPrompt({ task, context, promptsDir = null }) {
     '',
     '---',
     '',
-    readPrompt('system.md', context.league.format?.type, promptsDir),
+    readPrompt('system.md', context.league.format?.type, assets),
     '',
     '---',
     '',
-    readPrompt(file, context.league.format?.type, promptsDir),
+    readPrompt(file, context.league.format?.type, assets),
     '',
     '---',
     '',
@@ -1926,13 +1923,13 @@ export function buildPrompt({ task, context, promptsDir = null }) {
 }
 
 /** The system prompt alone, resolved for the league's format type. */
-export function systemPromptOnly(formatType, { promptsDir = null } = {}) {
-  return readPrompt('system.md', formatType, promptsDir);
+export function systemPromptOnly(formatType, { assets } = {}) {
+  return readPrompt('system.md', formatType, assets);
 }
 
 /** One edition's instructions alone, resolved for the league's format type. */
-export function taskPromptOnly(task, formatType, { promptsDir = null } = {}) {
+export function taskPromptOnly(task, formatType, { assets } = {}) {
   const file = TASK_PROMPTS[task];
   if (!file) throw new Error(`Unknown task "${task}". Known tasks: ${TASKS.join(', ')}`);
-  return readPrompt(file, formatType, promptsDir);
+  return readPrompt(file, formatType, assets);
 }

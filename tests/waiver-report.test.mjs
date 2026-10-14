@@ -11,6 +11,7 @@ import {
   normalizeWeekRosters,
 } from '../src/sleeper/normalize.mjs';
 import { TASKS, TRANSACTION_TASKS, buildContext, buildPrompt, describePlayer, taskPromptOnly } from '../src/promptContext.mjs';
+import { assets } from './fixtures/assets.mjs';
 
 /**
  * The waiver report: a week 3 in which one team paid $22 for a tight end it
@@ -288,20 +289,20 @@ test('a week with no pickups builds no pickups and no prompt', () => {
   const tradeOnly = raw.filter((item) => item.type === 'trade');
   const ctx = context('dynasty', { rawEntries: tradeOnly });
   assert.equal(ctx.pickups, undefined);
-  assert.throws(() => buildPrompt({ task: 'waiver-report', context: ctx }), /no completed waiver or free-agent move/);
+  assert.throws(() => buildPrompt({ task: 'waiver-report', context: ctx, assets }), /no completed waiver or free-agent move/);
 });
 
 test('the guillotine prompt ties FAAB to survival; the other formats never mention a chop', () => {
-  const guillotine = taskPromptOnly('waiver-report', 'guillotine');
+  const guillotine = taskPromptOnly('waiver-report', 'guillotine', { assets });
   assert.match(guillotine, /later chops/i);
   assert.match(guillotine, /weekly floor/i);
   for (const type of ['dynasty', 'redraft']) {
-    assert.doesNotMatch(taskPromptOnly('waiver-report', type), /chop/i);
+    assert.doesNotMatch(taskPromptOnly('waiver-report', type, { assets }), /chop/i);
   }
 });
 
 test('the prompt names the three verdicts and requires every number as written', () => {
-  const text = taskPromptOnly('waiver-report', 'dynasty');
+  const text = taskPromptOnly('waiver-report', 'dynasty', { assets });
   assert.match(text, /best value/i);
   assert.match(text, /overpay/i);
   assert.match(text, /regret/i);
@@ -309,6 +310,6 @@ test('the prompt names the three verdicts and requires every number as written',
 });
 
 test('a built prompt carries the pickups', () => {
-  const prompt = buildPrompt({ task: 'waiver-report', context: context('redraft') });
+  const prompt = buildPrompt({ task: 'waiver-report', context: context('redraft'), assets });
   assert.match(prompt, /Wire Tight End/);
 });

@@ -5,7 +5,8 @@ import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync } fro
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describePromptOverrides, loadConfig, PACKAGE_ROOT, WORKSPACE_ENV_VAR } from '../src/config.mjs';
+import { describePromptOverrides, loadConfig, loadDiskAssets, PACKAGE_ROOT, WORKSPACE_ENV_VAR } from '../src/config.mjs';
+import { assets as shippedAssets } from './fixtures/assets.mjs';
 import { systemPromptOnly, taskPromptOnly } from '../src/promptContext.mjs';
 
 // A workspace may shadow the shipped editorial/rankings config and individual
@@ -84,12 +85,13 @@ test('a workspace prompt shadows the shipped file of the same name and nothing e
   const workspace = tempWorkspace();
   write(workspace, 'prompts/weekly-recap.md', '# Our recap voice\n\nWrite it like a pirate.\n');
   const { promptsDir } = load(workspace);
+  const assets = loadDiskAssets({ promptsDir });
   assert.equal(promptsDir, join(workspace, 'prompts'));
 
-  assert.match(taskPromptOnly('recap', 'dynasty', { promptsDir }), /like a pirate/);
+  assert.match(taskPromptOnly('recap', 'dynasty', { assets }), /like a pirate/);
   // Everything else still comes from the package.
-  assert.equal(taskPromptOnly('preview', 'dynasty', { promptsDir }), taskPromptOnly('preview', 'dynasty'));
-  assert.equal(systemPromptOnly('dynasty', { promptsDir }), systemPromptOnly('dynasty'));
+  assert.equal(taskPromptOnly('preview', 'dynasty', { assets }), taskPromptOnly('preview', 'dynasty', { assets: shippedAssets }));
+  assert.equal(systemPromptOnly('dynasty', { assets }), systemPromptOnly('dynasty', { assets: shippedAssets }));
 });
 
 test("a shadowed prompt's format blocks resolve exactly as in the shipped prompt", () => {
@@ -109,19 +111,21 @@ test("a shadowed prompt's format blocks resolve exactly as in the shipped prompt
     ].join('\n'),
   );
   const { promptsDir } = load(workspace);
-  const dynasty = taskPromptOnly('rankings', 'dynasty', { promptsDir });
+  const assets = loadDiskAssets({ promptsDir });
+  const dynasty = taskPromptOnly('rankings', 'dynasty', { assets });
   assert.match(dynasty, /DYNASTY ONLY/);
   assert.doesNotMatch(dynasty, /REDRAFT ONLY|<!--/);
-  assert.match(taskPromptOnly('rankings', 'redraft', { promptsDir }), /REDRAFT ONLY/);
+  assert.match(taskPromptOnly('rankings', 'redraft', { assets }), /REDRAFT ONLY/);
   // A format-blocked override still needs a format, as the shipped one does.
-  assert.throws(() => taskPromptOnly('rankings', undefined, { promptsDir }), /no league format/);
+  assert.throws(() => taskPromptOnly('rankings', undefined, { assets }), /no league format/);
 });
 
 test('an empty workspace prompt is refused, naming the workspace file', () => {
   const workspace = tempWorkspace();
   const path = write(workspace, 'prompts/weekly-recap.md', '   \n');
   const { promptsDir } = load(workspace);
-  assert.throws(() => taskPromptOnly('recap', 'dynasty', { promptsDir }), (error) => error.message.includes(path));
+  const assets = loadDiskAssets({ promptsDir });
+  assert.throws(() => taskPromptOnly('recap', 'dynasty', { assets }), (error) => error.message.includes(path));
 });
 
 test('describePromptOverrides separates shadowing files from ones that match nothing', () => {
@@ -172,6 +176,7 @@ test('the shipped prompts are not modified by running against a workspace overri
   const workspace = tempWorkspace();
   write(workspace, 'prompts/weekly-recap.md', 'override');
   const { promptsDir } = load(workspace);
-  taskPromptOnly('recap', 'dynasty', { promptsDir });
+  const assets = loadDiskAssets({ promptsDir });
+  taskPromptOnly('recap', 'dynasty', { assets });
   assert.equal(readFileSync(join(PACKAGE_ROOT, 'prompts', 'weekly-recap.md'), 'utf8'), before);
 });

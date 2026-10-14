@@ -9,6 +9,7 @@ import { normalizeBids, normalizePlayers, normalizeWeek, normalizeWeekRosters } 
 import { buildEliminationLedger } from '../src/analysis/elimination.mjs';
 import { captureWeek, readFaabMarket } from '../src/pipeline.mjs';
 import { createStore } from '../src/store.mjs';
+import { assets } from './fixtures/assets.mjs';
 
 /**
  * The waiver market IS the story in a guillotine league: every chop dumps a
@@ -275,6 +276,7 @@ test('captureWeek records the FAAB market in a guillotine snapshot', async () =>
   const result = await captureWeek({
     client: fakeClient(),
     store,
+    assets,
     league: leagueOf('guillotine'),
     teams,
     players: PLAYERS,
@@ -299,6 +301,7 @@ test('a format with no eliminations gets no faab key at all, rather than a null 
   const result = await captureWeek({
     client: fakeClient(),
     store,
+    assets,
     league: leagueOf('dynasty'),
     teams,
     players: PLAYERS,
@@ -317,7 +320,7 @@ test('a chop from an earlier week still reports its released pool once a later w
   const config = { guillotine: { eliminations: [] } };
 
   // Week 1: roster 2 is chopped (lowest score, and already looks emptied).
-  await captureWeek({ client: fakeClient(), store, league, teams, players: PLAYERS, week: 1, config });
+  await captureWeek({ client: fakeClient(), store, assets, league, teams, players: PLAYERS, week: 1, config });
 
   // Week 2: a different client (different matchups) — proves the released
   // pool for week 1 comes from week 1's own saved raw bundle, not week 2's.
@@ -329,7 +332,7 @@ test('a chop from an earlier week still reports its released pool once a later w
       { status: 'complete', type: 'waiver', leg: 2, settings: { waiver_bid: 8 }, adds: { rb: 1 } },
     ],
   };
-  const second = await captureWeek({ client: week2Client, store, league, teams, players: PLAYERS, week: 2, config });
+  const second = await captureWeek({ client: week2Client, store, assets, league, teams, players: PLAYERS, week: 2, config });
 
   assert.equal(second.faab.releasedPools.length, 1);
   assert.equal(second.faab.releasedPools[0].week, 1);
@@ -343,7 +346,7 @@ test('readFaabMarket fetches nothing and rebuilds the market from weeks already 
   const league = leagueOf('guillotine');
   const config = { guillotine: { eliminations: [] } };
 
-  await captureWeek({ client: fakeClient(), store, league, teams, players: PLAYERS, week: 1, config });
+  await captureWeek({ client: fakeClient(), store, assets, league, teams, players: PLAYERS, week: 1, config });
 
   const noFetchClient = {
     matchups: async () => { throw new Error('should not fetch'); },
