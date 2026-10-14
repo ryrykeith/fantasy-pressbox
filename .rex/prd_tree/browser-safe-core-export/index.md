@@ -17,5 +17,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Core entry and release](./core-entry-and-release/index.md) | pending |
 | [Editorial output](./editorial-output/index.md) | pending |
 | [League file and status](./league-file-and-status/index.md) | pending |
-| [Shared edition steps and safe input](./shared-edition-steps-and-safe-input/index.md) | pending |
+| [Shared edition steps and safe input](./shared-edition-steps-and-safe-input/index.md) | completed |
 | [Untangle core from Node](./untangle-core-from-node/index.md) | completed |
