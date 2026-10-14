@@ -15,4 +15,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Release 0.2.0 (operator-run)](./release-0-2-0-operator-run.md) | blocked |
-| [The core entry, exports and a purity guard](./the-core-entry-exports-and-a-purity.md) | pending |
+| [The core entry, exports and a purity guard](./the-core-entry-exports-and-a-purity.md) | completed |
