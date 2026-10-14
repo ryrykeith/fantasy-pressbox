@@ -15,5 +15,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [export-league writes a league file over 20 MB that import-league and parseLeagueFile then refuse](./export-league-writes-a-league-file.md) | pending |
-| [inspectLeague: one status report for doctor and the website](./inspectleague-one-status-report-for.md) | pending |
+| [inspectLeague: one status report for doctor and the website](./inspectleague-one-status-report-for.md) | completed |
 | [League file v1: schema, validator, import and export](./league-file-v1-schema-validator-import.md) | completed |
