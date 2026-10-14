@@ -18,4 +18,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Editorial output](./editorial-output/index.md) | pending |
 | [League file and status](./league-file-and-status/index.md) | pending |
 | [Shared edition steps and safe input](./shared-edition-steps-and-safe-input/index.md) | pending |
-| [Untangle core from Node](./untangle-core-from-node/index.md) | pending |
+| [Untangle core from Node](./untangle-core-from-node/index.md) | completed |
