@@ -15,4 +15,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Post formatting for Sleeper](./post-formatting-for-sleeper.md) | pending |
-| [Rank emoji: default, custom or none](./rank-emoji-default-custom-or-none.md) | pending |
+| [Rank emoji: default, custom or none](./rank-emoji-default-custom-or-none.md) | completed |
