@@ -125,6 +125,7 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | Path | Responsibility |
 |---|---|
 | `src/lib/yaml.mjs` | A small YAML reader, so `config/` needs no dependency |
+| `src/lib/safeInput.mjs` | The rules every parser applies to text a stranger could hand it: refuse keys named `__proto__`, `constructor` or `prototype`, and enforce size, nesting-depth and string-length limits (`CONFIG_LIMITS` for settings, `LEAGUE_JSON_LIMITS` for league JSON). `parseJsonSafely` and `safeJsonReviver` read league JSON; the YAML reader and `deepMerge` use the same checks. Refusals name the file and field, never a value. No `node:` imports |
 | `src/lib/env.mjs` | `.env` parsing, so secrets need no dependency |
 | `src/config.mjs` | Merges flags, env, `config/*.yml` and defaults; owns the package root and the workspace root (above) |
 | `src/workspace.mjs` | What makes a folder a league workspace, the refusal outside one, and the copy-only `migrate` |
@@ -138,7 +139,7 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/espn/provider.mjs` | ESPN behind the same interface, **experimental**. Two routes by `ESPN_ROUTE`: `import` (the default; reads pages the operator saved, contacts nothing) and `fetch` (opt-in; asks ESPN with the cookies). `docs/espn-data.md` is its contract |
 | `src/espn/client.mjs` | HTTP only, the fetch route's. Sends `espn_s2` and `SWID` as a `Cookie` header to the ESPN host and nowhere else; scrubs them from every error |
 | `src/espn/urls.mjs` | Every ESPN address, node-free. The client requests them and `import-espn` lists them for the operator to save, so the two cannot drift |
-| `src/espn/import.mjs` | The import route: validates saved pages (size, JSON, league, season, shape) and refuses a stale league page |
+| `src/espn/import.mjs` | The import route: validates saved pages (safe input at `ESPN_IMPORT_LIMITS`, JSON, league, season, shape) and refuses a stale league page |
 | `src/espn/shape.mjs` | Shape guards: a response that does not match the documented shape throws `EspnShapeError`, naming the view and field |
 | `src/espn/codes.mjs` | ESPN's numeric code tables (slots, stats, pro teams); an unknown ID throws |
 | `src/espn/normalize.mjs` | ESPN shapes → league concepts, including a saved week as WeekData (`normalizeWeek`). ESPN field names stop here |

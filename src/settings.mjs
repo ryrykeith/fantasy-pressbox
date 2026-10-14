@@ -15,6 +15,7 @@ import { parseDeclaredEliminations } from './analysis/elimination.mjs';
 import { parseDeclaredRoundOrder, parseDeclaredDraftOrder } from './rookieDraft.mjs';
 import { parseTankWatchStartWeek } from './tankWatch.mjs';
 import { DEFAULT_PROVIDER, PROVIDER_NAMES, providerDisplayName } from './providers.mjs';
+import { checkKey } from './lib/safeInput.mjs';
 
 export const DEFAULT_EDITORIAL = {
   tone: 'humorous',
@@ -235,9 +236,19 @@ function setAtPath(obj, segments, value) {
   acc[segments.at(-1)] = value;
 }
 
+/**
+ * Lays `override` over `base`, table by table. `trail` is the path of the
+ * tables being merged, for messages.
+ *
+ * The result is built by assigning keys, so a key named __proto__,
+ * constructor or prototype is refused (src/lib/safeInput.mjs): an object from
+ * JSON.parse can hold __proto__ as an ordinary key, and assigning it here
+ * would replace the merged table's prototype.
+ */
 export function deepMerge(base, override, trail = []) {
   const result = { ...base };
   for (const [key, value] of Object.entries(override)) {
+    checkKey(key, { path: trail });
     if (value === null || value === undefined) continue;
     const here = [...trail, key].join('.');
     const baseValue = base?.[key];

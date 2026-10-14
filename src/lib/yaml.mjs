@@ -13,7 +13,15 @@
  *
  * Anchors, multi-line strings, flow syntax and multiple documents are not
  * supported. If a config file needs them, the file is doing too much.
+ *
+ * The text may come from a stranger (a file dropped on the website), so the
+ * reader applies src/lib/safeInput.mjs: a key named __proto__, constructor
+ * or prototype is refused (a map is built by assigning keys, and __proto__
+ * would replace its prototype), as is text over the size limit, nesting over
+ * the depth limit, and a key or value over the string limit. Its refusals
+ * name the field, never a value; the caller names the file.
  */
+import { CONFIG_LIMITS, checkDepth, checkKey, checkSize, checkString } from './safeInput.mjs';
 
 /** Strip a trailing `# comment`, but not a `#` inside a quoted string. */
 function stripComment(line) {
@@ -72,7 +80,24 @@ function toLines(source) {
     .filter(Boolean);
 }
 
-function parseBlock(lines, start, indent) {
+/**
+ * Reads the block of `lines` starting at `start`, at `indent`. `path` is the
+ * field the block is the value of (empty at the top); `limits` are the
+ * safe-input limits.
+ */
+function parseBlock(lines, start, indent, path, limits) {
+  checkDepth(path.length + 1, { path, maxDepth: limits.maxDepth });
+  const scalar = (raw, at) => {
+    const value = parseScalar(raw);
+    if (typeof value === 'string') checkString(value, { path: at, maxStringLength: limits.maxStringLength });
+    return value;
+  };
+  const checkedKey = (key, within) => {
+    checkKey(key, { path: within });
+    checkString(key, { path: [...within, key], maxStringLength: limits.maxStringLength });
+    return key;
+  };
+
   // A block is a list if its first line starts with "- ", otherwise a map.
   if (lines[start].content.startsWith('- ') || lines[start].content === '-') {
     const list = [];
@@ -82,11 +107,12 @@ function parseBlock(lines, start, indent) {
         throw new Error(`Unexpected indentation on line ${lines[i].lineNumber}`);
       }
       const item = lines[i].content.replace(/^-\s*/, '');
+      const here = [...path, list.length];
       i++;
       const hasChildren = i < lines.length && lines[i].indent > indent;
       if (item === '') {
         if (!hasChildren) throw new Error(`Empty list item on line ${lines[i - 1].lineNumber}`);
-        const [value, next] = parseBlock(lines, i, lines[i].indent);
+        const [value, next] = parseBlock(lines, i, lines[i].indent, here, limits);
         list.push(value);
         i = next;
       } else if (splitKey(item) && hasChildren) {
@@ -99,7 +125,7 @@ function parseBlock(lines, start, indent) {
         let end = i;
         while (end < lines.length && lines[end].indent > indent) end++;
         const block = [{ ...lines[i - 1], indent: itemIndent, content: item }, ...lines.slice(i, end)];
-        const [value, consumed] = parseBlock(block, 0, itemIndent);
+        const [value, consumed] = parseBlock(block, 0, itemIndent, here, limits);
         if (consumed < block.length) {
           throw new Error(`Unexpected indentation on line ${block[consumed].lineNumber}`);
         }
@@ -107,9 +133,11 @@ function parseBlock(lines, start, indent) {
         i = end;
       } else if (splitKey(item)) {
         const [key, raw] = splitKey(item);
-        list.push({ [key]: parseScalar(raw) });
+        checkDepth(here.length + 1, { path: here, maxDepth: limits.maxDepth });
+        checkedKey(key, here);
+        list.push({ [key]: scalar(raw, [...here, key]) });
       } else {
-        list.push(parseScalar(item));
+        list.push(scalar(item, here));
       }
     }
     return [list, i];
@@ -123,26 +151,34 @@ function parseBlock(lines, start, indent) {
     }
     const pair = splitKey(lines[i].content);
     if (!pair) throw new Error(`Cannot parse line ${lines[i].lineNumber}: "${lines[i].content}"`);
-    const [key, raw] = pair;
+    const key = checkedKey(pair[0], path);
+    const raw = pair[1];
     i++;
     if (raw === '') {
       if (i < lines.length && lines[i].indent > indent) {
-        const [value, next] = parseBlock(lines, i, lines[i].indent);
+        const [value, next] = parseBlock(lines, i, lines[i].indent, [...path, key], limits);
         map[key] = value;
         i = next;
       } else {
         map[key] = null;
       }
     } else {
-      map[key] = parseScalar(raw);
+      map[key] = scalar(raw, [...path, key]);
     }
   }
   return [map, i];
 }
 
-export function parseYaml(source) {
-  const lines = toLines(source ?? '');
+/**
+ * Parses `source`. `limits` defaults to CONFIG_LIMITS (src/lib/safeInput.mjs).
+ * A refusal is an UnsafeInputError naming the field; the caller puts the
+ * file's name in front of it.
+ */
+export function parseYaml(source, { limits = CONFIG_LIMITS } = {}) {
+  const text = source ?? '';
+  checkSize(text, { maxBytes: limits.maxBytes });
+  const lines = toLines(text);
   if (lines.length === 0) return {};
-  const [value] = parseBlock(lines, 0, lines[0].indent);
+  const [value] = parseBlock(lines, 0, lines[0].indent, [], limits);
   return value;
 }

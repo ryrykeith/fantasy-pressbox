@@ -884,8 +884,11 @@ requests the fetch route makes, built by the same code:
 (`src/espn/import.mjs`, node-free so the browser core can reuse it):
 
 - **Untrusted input.** A page is refused, naming the file, when it is over
-  20 MB, is not JSON, does not hold a JSON object, holds a key named
-  `__proto__`, `constructor` or `prototype`, names no league ID or another
+  20 MB, nests more than 32 levels, has a text longer than 20,000
+  characters, is not JSON, does not hold a JSON object, holds a key named
+  `__proto__`, `constructor` or `prototype` (these limits are
+  `ESPN_IMPORT_LIMITS`, checked by core's shared reader,
+  `parseJsonSafely` in `src/lib/safeInput.mjs`), names no league ID or another
   league than `ESPN_LEAGUE_ID` (open question 34), is for another season than
   `LEAGUE_SEASON`, or fails its shape guard. No value from a page is echoed
   in a refusal. A path inside the installed package is refused before it is
