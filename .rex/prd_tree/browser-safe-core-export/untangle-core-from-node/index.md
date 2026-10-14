@@ -15,6 +15,6 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Make the settings layer pure](./make-the-settings-layer-pure.md) | completed |
-| [Pass prompts and default config in as text](./pass-prompts-and-default-config-in-as.md) | pending |
+| [Pass prompts and default config in as text](./pass-prompts-and-default-config-in-as.md) | completed |
 | [Pass the player cache in](./pass-the-player-cache-in.md) | pending |
 | [Separate the store from its storage](./separate-the-store-from-its-storage.md) | completed |
