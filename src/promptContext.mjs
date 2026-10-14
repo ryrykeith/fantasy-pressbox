@@ -69,7 +69,8 @@ const WITHOUT_TRANSACTION_COLOUR = [...TRANSACTION_TASKS, TANK_WATCH_TASK, FUTUR
  * exist yet), while a chop recap is *about* the week that just settled and
  * must see exactly that week's chop line, not the one before it.
  *
- * src/cli.mjs reads the same list to decide which way to offset `resolveWeek`
+ * src/options.mjs reads the same list (EDITIONS' `forwardLooking`), which
+ * decides which way prepareEdition and `record` offset `resolveWeek`
  * — imported from here rather than duplicated, so the two decisions can never
  * drift apart.
  */
@@ -97,7 +98,8 @@ const FIXED_FIELD_RANKING_TASKS = ['preseason-rankings', 'rankings', 'postseason
  * outright rather than ranked on somebody else's — so asking for one in an
  * edition that ranks nobody would block it on a decision it never reads.
  *
- * Exported because src/cli.mjs needs the same list to decide what `record`
+ * Exported because src/options.mjs (RECORDABLE_TASKS) and src/edition.mjs
+ * need the same list to decide what `record`
  * will accept and what shape recordBlock files — one list, so a new ranking
  * edition cannot be publishable and unrecordable at the same time.
  */
@@ -911,7 +913,7 @@ export function buildContext({
   format = 'sleeper',
 }) {
   // What the league's provider can supply. Third line of defence for an
-  // edition it cannot support at all (src/cli.mjs refuses before and after
+  // edition it cannot support at all (src/edition.mjs refuses before and after
   // contacting it); every gap short of that is an `unavailable` entry.
   const provider = providerOf(league);
   const { capabilities } = provider;
@@ -1766,7 +1768,7 @@ export function buildPrompt({ task, context, assets }) {
   const file = TASK_PROMPTS[task];
   if (!file) throw new Error(`Unknown task "${task}". Known tasks: ${TASKS.join(', ')}`);
 
-  // Second line of defence: src/cli.mjs already refuses a guillotine
+  // Second line of defence: prepareEdition (src/edition.mjs) already refuses a guillotine
   // preview/recap before any work begins, using the declared format alone.
   // This catches any other caller that reaches buildPrompt directly and skips
   // that guard — the JSON context block is authoritative, so a prompt built
@@ -1780,7 +1782,7 @@ export function buildPrompt({ task, context, assets }) {
     );
   }
 
-  // The same guard in the other direction. src/cli.mjs refuses this off the
+  // The same guard in the other direction. prepareEdition refuses this off the
   // declared format before any work begins; this catches a caller that reaches
   // buildPrompt directly.
   if (ELIMINATION_ONLY_TASKS.includes(task) && !hasEliminations(context.league.format)) {
@@ -1851,7 +1853,7 @@ export function buildPrompt({ task, context, assets }) {
   }
 
   // A tank watch is about a rookie draft, which only a dynasty league has, and
-  // about a projected order, which needs a declared rule. src/cli.mjs refuses
+  // about a projected order, which needs a declared rule. prepareEdition refuses
   // both before any work begins; this catches a caller that reaches here
   // directly.
   if (task === TANK_WATCH_TASK) {
@@ -1870,7 +1872,7 @@ export function buildPrompt({ task, context, assets }) {
   }
 
   // A future stock edition ranks a multi-season window, which only a dynasty
-  // league has, from the roster window and the pick capital. src/cli.mjs
+  // league has, from the roster window and the pick capital. prepareEdition
   // refuses the format first; this catches a caller that reaches here directly.
   if (task === FUTURE_STOCK_TASK) {
     refuseFutureStock({ formatType: context.league.format?.type ?? 'unknown' });

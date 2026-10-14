@@ -260,7 +260,7 @@ export function readFaabMarket({ store, assets, league, teams, config = null, th
  * captureWeek already saved, through `throughWeek` (which defaults to `week`;
  * pass a later week to follow the players past the move).
  *
- * `describePlayer` is the same formatter cli.mjs hands normalizeTransactions,
+ * `describePlayer` is the same formatter prepareEdition hands normalizeTransactions,
  * so the readable `moves` match the ones every edition already prints.
  */
 export function readTransactions({ store, assets, league, teams, players, describePlayer, week, throughWeek = week }) {
@@ -419,7 +419,7 @@ export function readDraftOrder({ league, teams, config = null, tradedPicks = [] 
  * seasons the market prices, never a fixed count. Ownership is
  * futurePickOwnership per season, so a team absent from Sleeper's traded picks
  * holds its full complement. Null for a format with no future draft capital,
- * for the reason src/cli.mjs gives at normalizeFutureDraftCapital.
+ * for the reason src/edition.mjs gives at normalizeFutureDraftCapital.
  */
 export function readPickCapital({ league, teams, tradedPicks = [], market = null, config = null }) {
   if (!holdsFutureDraftCapital(league)) return null;

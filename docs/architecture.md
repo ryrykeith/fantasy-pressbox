@@ -169,7 +169,9 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/generate.mjs` | Optional Anthropic / OpenAI call |
 | `src/validate.mjs` | Post splitting and length checking |
 | `src/pipeline.mjs` | The run order |
-| `src/cli.mjs` | Commands and human-facing output |
+| `src/options.mjs` | `EDITIONS` and `OPTIONS`, the descriptors both surfaces read: each edition's command, formats, and whether it is recordable or forward-looking; each option's flag, values, default, help line, the editions it changes, and whether only the CLI offers it. `parseArgs` is built from them. No `node:` imports |
+| `src/edition.mjs` | The steps of an edition, shared by the CLI and the website: `prepareEdition` (every refusal, open, resolve the week, capture, build the context and the prompt) and `recordEdition` (file a reply's machine-readable tail). No `node:` imports, directly or through anything it imports |
+| `src/cli.mjs` | Commands and human-facing output: finds the league folder, calls `prepareEdition`/`recordEdition`, writes files, and makes the optional AI call. `--help` is built from the descriptors |
 | `src/welcome.mjs` | How the CLI talks someone through starting: the command line its advice prints (global install, npx, a project's node_modules, or a clone), the banner, the getting-started steps and the weekly routine |
 
 ## Domain concepts
@@ -212,7 +214,7 @@ The capability gates work at two levels:
 - An edition that needs a capability (`EDITION_CAPABILITIES` in
   `src/format.mjs`: future picks for `tank-watch` and `future-stock`,
   guillotine for the survival editions) is refused by
-  `refuseEditionWithoutCapability`, naming the reason. `src/cli.mjs` runs it
+  `refuseEditionWithoutCapability`, naming the reason. `prepareEdition` runs it
   before the provider is contacted and again with the opened league, and
   `buildContext` runs it a third time. A declared guillotine on a provider
   that cannot run one refuses every edition.
@@ -260,7 +262,7 @@ A week is read as **WeekData** (`provider.normalizeWeek`; Sleeper's is in
   period's. `captureWeek` does not analyze such a week, because `analyzeWeek`
   would read every null as 0. Its snapshot keeps the marker in place of an
   `analysis`. Every edition that reads the week's analysis refuses it, naming
-  the reason (`refuseMultiWeekMatchup` in `src/cli.mjs`): preview, recap,
+  the reason (`refuseMultiWeekMatchup` in `src/edition.mjs`): preview, recap,
   rankings and grade. A preview whose previous week is such a week leaves
   last week's results out and warns.
 
@@ -346,7 +348,7 @@ generate a thin, confused edition, both commands refuse outright.
 
 Two lines of defence, both keyed off `hasMatchups`/the declared format:
 
-- `refuseOrdinaryEditionInGuillotineLeague` in `src/cli.mjs` runs first, before any
+- `refuseOrdinaryEditionInGuillotineLeague` in `src/edition.mjs` runs first, before any
   Sleeper call or file write. It only needs `config.leagueFormat`: guillotine
   can never be *detected* (see above), so a declaration is the only way it is
   ever true, and checking it costs nothing.
@@ -372,7 +374,7 @@ preview. `prompts/survival-preview.md` is registered in `TASK_PROMPTS` as
 `survival-preview`, and `src/cli.mjs` exposes it as its own command.
 
 It is guarded in both directions, mirroring the matchup guard exactly:
-`refuseSurvivalEditionWithoutEliminations` in `src/cli.mjs` refuses it before
+`refuseSurvivalEditionWithoutEliminations` in `src/edition.mjs` refuses it before
 any work begins for a league that is not declared guillotine, and `buildPrompt`
 refuses again from the resolved format via `ELIMINATION_ONLY_TASKS`. The CLI
 guard can read the declaration alone for the same reason the matchup one can:
@@ -441,8 +443,8 @@ still loud.
 
 The backward-looking edition a guillotine league gets in place of the matchup
 recap. `prompts/chop-recap.md` is registered in `TASK_PROMPTS` as `chop-recap`,
-and `src/cli.mjs` exposes it as its own command. It shares `commandEdition`'s
-recap/rankings/postseason path in `src/cli.mjs` rather than getting a branch of
+and `src/cli.mjs` exposes it as its own command. It shares `prepareEdition`'s
+recap/rankings/postseason path in `src/edition.mjs` rather than getting a branch of
 its own — the only thing that path does differently for it is also read the
 danger board, which a plain recap has no format-fact to want.
 
@@ -464,7 +466,7 @@ the whole point, since its scores do not exist yet. A chop recap is *about*
 the week that just finished, and that week's own chop is the fact the edition
 exists to report, so it passes `beforeWeek: week + 1` instead — landing
 `lastCompletedWeek` on the week being recapped rather than the one before it.
-`FORWARD_LOOKING_TASKS` (`src/promptContext.mjs`, imported by `src/cli.mjs` for
+`FORWARD_LOOKING_TASKS` (`src/promptContext.mjs`, read by `src/options.mjs` for
 the same `resolveWeek` offset decision rather than duplicated) is what
 `buildContext` asks to choose between the two.
 
@@ -496,7 +498,7 @@ week before to come back gradeable the week after.
 The power ranking a guillotine league gets in place of `rankings`.
 `prompts/survival-rankings.md` is registered in `TASK_PROMPTS` as
 `survival-rankings`, and `src/cli.mjs` exposes it as its own command. Like the
-chop recap it shares `commandEdition`'s recap/rankings path, and like the chop
+chop recap it shares `prepareEdition`'s recap/rankings path, and like the chop
 recap it is backward-looking — it ranks after a week that has been played.
 
 **Why the ordinary edition could not be reused.** `prompts/weekly-power-rankings.md`
@@ -532,7 +534,7 @@ every survivor's points, and the order it publishes *is* the output; a second
 ordering sitting in the context is an invitation to print that one instead.
 
 **Two guards, in both directions, keyed on the field rather than on matchups.**
-`GUILLOTINE_EDITION_FOR` in `src/cli.mjs` gains `rankings: 'survival-rankings'`,
+`GUILLOTINE_EDITION_FOR` in `src/edition.mjs` gains `rankings: 'survival-rankings'`,
 so `refuseOrdinaryEditionInGuillotineLeague` and
 `refuseSurvivalEditionWithoutEliminations` pick the pairing up from the same
 map the other two editions use. `buildPrompt` carries the second line of
@@ -546,7 +548,7 @@ turned that loud failure into a silent success for `preseason-rankings` and
 `postseason`, which have no guillotine version of their own — a preseason
 ranking would have been steered by a floor nobody has yet, and a postseason
 ranking describes a postseason this format does not have.
-`GUILLOTINE_REFUSAL_BECAUSE` in `src/cli.mjs` refuses both by name — it is the
+`GUILLOTINE_REFUSAL_BECAUSE` in `src/edition.mjs` refuses both by name — it is the
 list of what a guillotine league cannot run *and* the reason for each, kept
 together so a task cannot be refused without an explanation or explained
 without being refused. The refusal is a decision now, not a side effect of a
@@ -647,7 +649,7 @@ not a fact, and nothing downstream may cite it.
   been chopped yet: an empty list is a fact ("nobody chopped so far"), while an
   absent key would be indistinguishable from "not tracked in this edition".
 
-`eliminationLedger` reaches `buildContext` as a plain parameter — `src/cli.mjs`
+`eliminationLedger` reaches `buildContext` as a plain parameter — `prepareEdition`
 passes through the same ledger `captureWeek` already attached to the week's
 snapshot, so nothing downstream builds its own copy.
 
@@ -732,7 +734,7 @@ already on disk and fetches nothing.
 becomes a line a model can read — `src/analysis/faab.mjs` deals only in ids
 and numbers, the same split `rosterView` already makes for a team's own
 roster — and reaches `context.faabMarket` the same way `eliminationLedger`
-reaches `context.standings`: as a plain parameter `src/cli.mjs` passes
+reaches `context.standings`: as a plain parameter `prepareEdition` passes
 through from `captureWeek`'s own result, so nothing downstream builds a
 second copy.
 
