@@ -12,7 +12,8 @@
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { PACKAGE_ROOT, resolveFutureStockWeights, resolveRankingWeights } from './config.mjs';
+import { PACKAGE_ROOT } from './config.mjs';
+import { resolveFutureStockWeights, resolveRankingWeights } from './settings.mjs';
 import {
   capabilityGap,
   hasMatchups,
