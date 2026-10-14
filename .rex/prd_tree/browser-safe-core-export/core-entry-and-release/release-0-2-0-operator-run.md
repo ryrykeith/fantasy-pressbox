@@ -4,10 +4,14 @@ level: "task"
 title: "Release 0.2.0 (operator-run)"
 status: "blocked"
 priority: "high"
+blockedBy:
+  - "e32c99dd-0ae6-4a11-a530-fdc6e2d0ccc6"
+  - "d377c5cf-7300-4868-a344-db6938170ce7"
+  - "f1ab8dbb-f9f5-4c7e-8b29-fd9964cf38fc"
 acceptanceCriteria:
   - "fantasy-pressbox 0.2.0 is on npm"
   - "The jsDelivr URL serves the core entry as application/javascript"
-description: "For the owner. Once every other task in this epic is complete, publish 0.2.0 following RELEASING.md, then check that jsDelivr serves https://cdn.jsdelivr.net/npm/fantasy-pressbox@0.2.0/src/core/index.mjs as application/javascript.\n\nAn autonomous run must never publish to npm."
-lastModified: "2026-10-13T02:35:42.429Z"
+description: "For the owner. Once every other task in this epic is complete, publish 0.2.0 following RELEASING.md, then check that jsDelivr serves https://cdn.jsdelivr.net/npm/fantasy-pressbox@0.2.0/src/core/index.mjs as application/javascript.\n\nAn autonomous run must never publish to npm.\n\nRelease notes to include (from fe01f9b's CHANGELOG entry, removed because CHANGELOG is written at release): (1) Browser-safe core entry: fantasy-pressbox/core exports the league file, settings, edition preparation, prompt building, reply checks, status report and ESPN saved-page import, with no node: imports and no AI call; a guard test keeps it that way; the ESPN cookie fetch stays CLI-only. (2) exports field: package.json now declares exports, with only fantasy-pressbox/core and fantasy-pressbox/package.json. Importing fantasy-pressbox/src/... is no longer supported and fails with ERR_PACKAGE_PATH_NOT_EXPORTED; the fantasy-pressbox command is unaffected.\n\nBefore publishing, decide the final league-file size cap (LEAGUE_JSON_LIMITS.maxBytes, 20 MB today; the website plan names 10 MB per file) using scripts/measure-league-file.mjs. Note from review 2026-10-14: ESPN_IMPORT_LIMITS.maxStringLength (20,000) is unchecked against real pages; the live check b68a41d0 should confirm it."
+lastModified: "2026-10-14T20:21:50.000Z"
 lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 ---

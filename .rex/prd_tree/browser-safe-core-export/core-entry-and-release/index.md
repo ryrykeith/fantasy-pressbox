@@ -6,7 +6,7 @@ status: "pending"
 priority: "high"
 acceptanceCriteria: []
 description: "The fantasy-pressbox/core entry, a guard that keeps it browser-safe, and the 0.2.0 release."
-lastModified: "2026-10-13T02:35:31.676Z"
+lastModified: "2026-10-14T20:21:50.000Z"
 lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 ---
 
@@ -14,5 +14,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
+| [Core openLeague refuses the ESPN fetch route off the command line](./core-openleague-refuses-the-espn-fetch.md) | pending |
 | [Release 0.2.0 (operator-run)](./release-0-2-0-operator-run.md) | blocked |
+| [Take the Unreleased heading out of CHANGELOG.md](./take-the-unreleased-heading-out-of.md) | pending |
 | [The core entry, exports and a purity guard](./the-core-entry-exports-and-a-purity.md) | completed |
