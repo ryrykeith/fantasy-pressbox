@@ -403,7 +403,7 @@ test('a matchup period over two NFL weeks is marked, and its points are not give
 // --- The provider -------------------------------------------------------------
 
 const fakeClient = (leagueId = PUBLIC_LEAGUE_ID, extra = {}) =>
-  createClient({ leagueId, season: 2026, dataDir: mkdtempSync(join(tmpdir(), 'pressbox-espn-week-')), fetch: createFakeEspnFetch(), ...extra });
+  createClient({ leagueId, season: 2026, fetch: createFakeEspnFetch(), ...extra });
 
 test('the registry hands out the ESPN provider', () => {
   assert.equal(getProvider('espn'), espnProvider);

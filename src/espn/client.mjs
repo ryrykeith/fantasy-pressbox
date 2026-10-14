@@ -10,21 +10,17 @@
  * the config reads from .env) and nowhere else. They are sent only as a Cookie
  * header on league requests to the ESPN host. They are never logged, never put
  * in an error (every message is scrubbed of them, as a backstop), and never
- * written to disk: the only file this client writes is the player cache, whose
- * request carries no cookie.
+ * written anywhere: the only thing this client hands out for storage is the
+ * player list, through `playerCache`, and its request carries no cookie.
  *
  * Responses are checked by src/espn/shape.mjs. The client checks only what it
  * must to be sure it holds JSON of the right outer kind, and the player list
  * before it is cached.
  */
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-
+import { cachedPlayers } from '../playerCache.mjs';
 import { EspnShapeError, guardPlayers } from './shape.mjs';
 import { HOST, leagueViewsUrl, playersUrl, seasonUrl as seasonAddress } from './urls.mjs';
 
-// Doc, "Players": the player list is cached daily, as Sleeper's is.
-const PLAYER_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 // Doc, "Players": the filter value is assumed (espn-api requests/espn_requests.py:163-168).
 const ACTIVE_PLAYERS_FILTER = JSON.stringify({ filterActive: { value: true } });
 
@@ -41,7 +37,8 @@ const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * @param {object} options
  * @param {string} options.leagueId
  * @param {number|string} options.season
- * @param {string} options.dataDir
+ * @param {{get: Function, set: Function}|null} [options.playerCache]  see src/playerCache.mjs;
+ *   without one the player list is fetched every time
  * @param {{ ESPN_S2?: string, ESPN_SWID?: string }} [options.secrets]  config.league.secrets
  * @param {typeof fetch} [options.fetch]  injected by tests; defaults to the global fetch
  * @param {(ms: number) => Promise<void>} [options.sleep]  injected by tests so backoff costs no time
@@ -50,7 +47,7 @@ const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export function createClient({
   leagueId,
   season,
-  dataDir,
+  playerCache = null,
   secrets = {},
   fetch: fetchImpl = (...args) => globalThis.fetch(...args),
   sleep = defaultSleep,
@@ -158,33 +155,25 @@ export function createClient({
     },
 
     /**
-     * The player list (`players_wl`), cached on disk for a day. The request
-     * needs no login and carries no cookie, and only a list that passed the
-     * shape guard is ever cached.
+     * The player list (`players_wl`), cached for a day through `playerCache`
+     * (Doc "Players": as Sleeper's is). The request needs no login and carries
+     * no cookie, and only a list that passed the shape guard is ever cached or
+     * trusted back out of the cache.
      */
-    async players({ refresh = false } = {}) {
-      const cacheDir = join(dataDir, 'cache');
-      const cachePath = join(cacheDir, `players-espn-${season}.json`);
-      if (!refresh && existsSync(cachePath)) {
-        const age = Date.now() - statSync(cachePath).mtimeMs;
-        if (age < PLAYER_CACHE_MAX_AGE_MS) {
-          try {
-            return guardPlayers(JSON.parse(readFileSync(cachePath, 'utf8')));
-          } catch {
-            // An unreadable or out-of-shape cache is fetched again, never trusted.
-          }
-        }
-      }
-      const players = guardPlayers(
-        await getJson(playersUrl(season), {
-          headers: { 'x-fantasy-filter': ACTIVE_PLAYERS_FILTER },
-          what: `the player list for ${season}`,
-        }),
-      );
-      mkdirSync(cacheDir, { recursive: true });
-      writeFileSync(cachePath, JSON.stringify(players));
-      return players;
-    },
+    players: ({ refresh = false } = {}) =>
+      cachedPlayers({
+        cache: playerCache,
+        key: `players-espn-${season}`,
+        refresh,
+        accept: guardPlayers,
+        fetchFresh: async () =>
+          guardPlayers(
+            await getJson(playersUrl(season), {
+              headers: { 'x-fantasy-filter': ACTIVE_PLAYERS_FILTER },
+              what: `the player list for ${season}`,
+            }),
+          ),
+      }),
   };
 }
 

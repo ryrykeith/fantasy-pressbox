@@ -29,7 +29,7 @@ function tempDir(prefix) {
 }
 
 async function openFixture(leagueId, dataDir) {
-  const client = createClient({ leagueId, season: SEASON, dataDir, fetch: createFakeEspnFetch() });
+  const client = createClient({ leagueId, season: SEASON, fetch: createFakeEspnFetch() });
   const provider = espnProvider.forClient(client);
   const ctx = await provider.openLeague();
   return { provider, store: createStore({ dataDir }), ...ctx };

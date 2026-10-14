@@ -7,14 +7,10 @@
  *
  * The Sleeper API is public and read-only — there is no API key and no login.
  */
-import { mkdirSync, writeFileSync, readFileSync, existsSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { cachedPlayers } from '../playerCache.mjs';
 
 const BASE = 'https://api.sleeper.app/v1';
 const PLAYERS_URL = `${BASE}/players/nfl`;
-
-// Sleeper asks callers to pull the full player file at most once per day.
-const PLAYER_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 class SleeperError extends Error {}
 
@@ -45,7 +41,13 @@ async function getJson(url, { retries = 2 } = {}) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export function createClient({ leagueId, dataDir }) {
+/**
+ * @param {object} options
+ * @param {string} options.leagueId
+ * @param {{get: Function, set: Function}|null} [options.playerCache]  see src/playerCache.mjs;
+ *   without one the player list is fetched every time
+ */
+export function createClient({ leagueId, playerCache = null }) {
   if (!leagueId) throw new SleeperError('No Sleeper league ID configured.');
 
   return {
@@ -74,23 +76,17 @@ export function createClient({ leagueId, dataDir }) {
     state: () => getJson(`${BASE}/state/nfl`),
 
     /**
-     * The full NFL player dictionary (~15 MB). Cached on disk because it changes
-     * slowly and re-downloading it every run would be rude and slow.
+     * The full NFL player dictionary (~15 MB). Cached through `playerCache`
+     * because it changes slowly and re-downloading it every run would be rude
+     * and slow. A cached list older than a day is fetched again.
      */
-    async players({ refresh = false } = {}) {
-      const cacheDir = join(dataDir, 'cache');
-      const cachePath = join(cacheDir, 'players-nfl.json');
-      if (!refresh && existsSync(cachePath)) {
-        const age = Date.now() - statSync(cachePath).mtimeMs;
-        if (age < PLAYER_CACHE_MAX_AGE_MS) {
-          return JSON.parse(readFileSync(cachePath, 'utf8'));
-        }
-      }
-      const players = await getJson(PLAYERS_URL);
-      mkdirSync(cacheDir, { recursive: true });
-      writeFileSync(cachePath, JSON.stringify(players));
-      return players;
-    },
+    players: ({ refresh = false } = {}) =>
+      cachedPlayers({
+        cache: playerCache,
+        key: 'players-nfl',
+        refresh,
+        fetchFresh: () => getJson(PLAYERS_URL),
+      }),
   };
 }
 

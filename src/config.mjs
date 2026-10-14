@@ -43,6 +43,7 @@ import { environmentWithFile } from './lib/env.mjs';
 import { parseDeclaredFormatType } from './format.mjs';
 import { DEFAULT_PROVIDER, providerDisplayName } from './providers.mjs';
 import { loadAssets } from './assets.mjs';
+import { createDiskPlayerCache } from './diskPlayerCache.mjs';
 import { parseProspectBoard } from './prospectBoard.mjs';
 import {
   ESPN_ROUTE_KEY,
@@ -328,6 +329,7 @@ export function loadConfig({
   // Which platform the league is on, and which league. Refused here, before
   // any command runs, when the .env cannot say.
   const league = readLeagueSettings(env);
+  const dataDir = resolve(workspaceRoot, env.DATA_DIR || 'data');
 
   return {
     workspaceRoot,
@@ -360,7 +362,9 @@ export function loadConfig({
       openaiKey: (env.OPENAI_API_KEY || '').trim(),
       model: (env.AI_MODEL || env.OPENAI_MODEL || '').trim(),
     },
-    dataDir: resolve(workspaceRoot, env.DATA_DIR || 'data'),
+    dataDir,
+    // Where the player list is kept between runs: data/cache, a day at most.
+    playerCache: createDiskPlayerCache({ dataDir }),
     outputDir: resolve(workspaceRoot, env.OUTPUT_DIR || 'output'),
     debug: bool(env.DEBUG, false),
     editorial: settings.editorial,

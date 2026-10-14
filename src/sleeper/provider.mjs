@@ -114,7 +114,7 @@ export const sleeperProvider = Object.freeze({
         'No Sleeper league ID configured. Set SLEEPER_LEAGUE_ID in the league folder\'s .env, or run init.',
       );
     }
-    return instance(createClient({ leagueId: id, dataDir: config.dataDir }), { config });
+    return instance(createClient({ leagueId: id, playerCache: config.playerCache ?? null }), { config });
   },
 
   /**
@@ -127,7 +127,7 @@ export const sleeperProvider = Object.freeze({
 
   /** The League with this ID, for setup's confirmation. Sleeper needs no secrets. */
   async lookupLeague({ id, declaredFormatType = null } = {}) {
-    const raw = await createClient({ leagueId: id, dataDir: null }).league();
+    const raw = await createClient({ leagueId: id }).league();
     return leagueFrom(raw, { declaredFormatType });
   },
 

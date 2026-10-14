@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createClient, EspnError } from '../src/espn/client.mjs';
+import { createDiskPlayerCache } from '../src/diskPlayerCache.mjs';
 import { EspnShapeError } from '../src/espn/shape.mjs';
 import { createFakeEspnFetch } from './fixtures/fake-espn-fetch.mjs';
 import {
@@ -31,7 +32,6 @@ function client(overrides = {}) {
   const made = createClient({
     leagueId: PUBLIC_LEAGUE_ID,
     season: 2026,
-    dataDir: tmpdir(),
     fetch: fake,
     sleep: noSleep,
     ...overrides,
@@ -180,14 +180,14 @@ test('only one cookie configured is refused, naming the missing one', () => {
 });
 
 test('a missing league ID or season is refused', () => {
-  assert.throws(() => createClient({ season: 2026, dataDir: tmpdir() }), /ESPN_LEAGUE_ID/);
-  assert.throws(() => createClient({ leagueId: '1', dataDir: tmpdir() }), /LEAGUE_SEASON/);
+  assert.throws(() => createClient({ season: 2026 }), /ESPN_LEAGUE_ID/);
+  assert.throws(() => createClient({ leagueId: '1' }), /LEAGUE_SEASON/);
 });
 
 test('the player list is fetched once, cached under data/cache, and read from the cache within a day', async () => {
   const ws = workspace();
   try {
-    const { made, logged } = client({ dataDir: ws.dir });
+    const { made, logged } = client({ playerCache: createDiskPlayerCache({ dataDir: ws.dir }) });
     const first = await made.players();
     assert.ok(first.length > 10);
     assert.ok(existsSync(join(ws.dir, 'cache', 'players-espn-2026.json')));
@@ -207,7 +207,7 @@ test('the player request carries the active-players filter and no cookie', async
     const fake = createFakeEspnFetch();
     let init;
     const spy = async (url, i) => ((init = i), fake(url, i));
-    await client({ dataDir: ws.dir, secrets: SECRETS, fetch: spy }).made.players();
+    await client({ playerCache: createDiskPlayerCache({ dataDir: ws.dir }), secrets: SECRETS, fetch: spy }).made.players();
     assert.equal(init.headers['x-fantasy-filter'], JSON.stringify({ filterActive: { value: true } }));
     assert.equal(init.headers.cookie, undefined);
   } finally {
@@ -218,7 +218,7 @@ test('the player request carries the active-players filter and no cookie', async
 test('a stale or unreadable player cache is fetched again', async () => {
   const ws = workspace();
   try {
-    const { made, logged } = client({ dataDir: ws.dir });
+    const { made, logged } = client({ playerCache: createDiskPlayerCache({ dataDir: ws.dir }) });
     await made.players();
     const cachePath = join(ws.dir, 'cache', 'players-espn-2026.json');
     const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
@@ -239,7 +239,7 @@ test('a malformed player list is refused and never cached', async () => {
   const ws = workspace();
   try {
     const stub = async () => new Response(JSON.stringify([{ id: 1, fullName: 'No Slots' }]), { status: 200 });
-    await assert.rejects(client({ dataDir: ws.dir, fetch: stub }).made.players(), (error) => {
+    await assert.rejects(client({ playerCache: createDiskPlayerCache({ dataDir: ws.dir }), fetch: stub }).made.players(), (error) => {
       assert.ok(error instanceof EspnShapeError);
       assert.equal(error.view, 'players_wl');
       assert.equal(error.path, '(response)[0].defaultPositionId');
@@ -254,7 +254,7 @@ test('a malformed player list is refused and never cached', async () => {
 test('no cookie value reaches any file written or any URL asked for', async () => {
   const ws = workspace();
   try {
-    const { made, logged } = client({ dataDir: ws.dir, leagueId: PRIVATE_LEAGUE_ID, secrets: SECRETS });
+    const { made, logged } = client({ playerCache: createDiskPlayerCache({ dataDir: ws.dir }), leagueId: PRIVATE_LEAGUE_ID, secrets: SECRETS });
     await made.league(['mSettings', 'mTeam']);
     await made.players();
     const walk = (dir) =>

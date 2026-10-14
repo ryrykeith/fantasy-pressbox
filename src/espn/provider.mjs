@@ -402,7 +402,7 @@ export const espnProvider = Object.freeze({
       createClient({
         leagueId: id,
         season: seasonOf(config),
-        dataDir: config.dataDir,
+        playerCache: config.playerCache ?? null,
         secrets: config.league.secrets ?? {},
       }),
       { config },
@@ -424,7 +424,7 @@ export const espnProvider = Object.freeze({
    * not fetched.
    */
   async lookupLeague({ id, season = null, secrets = {}, declaredFormatType = null } = {}) {
-    const client = createClient({ leagueId: id, season, dataDir: null, secrets });
+    const client = createClient({ leagueId: id, season, secrets });
     const body = await client.league(['mSettings', 'mDraftDetail']);
     return normalizeLeague({ mSettings: body, mDraftDetail: body }, { leagueId: id, declaredFormatType });
   },
