@@ -17,4 +17,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Compute a team strength rating](./compute-a-team-strength-rating.md) | completed |
 | [Credit-line check for strength market values has no test: reverting it fails nothing](./credit-line-check-for-strength-market.md) | pending |
 | [Ranking presets in config/rankings.yml](./ranking-presets-in-config-rankings-yml.md) | completed |
-| [Strength rating in the ranking prompts](./strength-rating-in-the-ranking-prompts.md) | pending |
+| [Strength rating in the ranking prompts](./strength-rating-in-the-ranking-prompts.md) | completed |
