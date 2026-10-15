@@ -18,12 +18,23 @@
  */
 import { providerOf, getProvider } from './providers.mjs';
 import { hasFutureDraftCapital, refuseEditionWithoutCapability } from './format.mjs';
-import { captureWeek, openLeague, readByeExposure, readMarketValues, readPickCapital, readRosterWindow, readTransactions, resolveWeek } from './pipeline.mjs';
+import {
+  captureWeek,
+  openLeague,
+  readByeExposure,
+  readMarketValues,
+  readPickCapital,
+  readRosterWindow,
+  readStrength,
+  readTransactions,
+  resolveWeek,
+} from './pipeline.mjs';
 import { FUTURE_STOCK_TASK, refuseFutureStock } from './futureStock.mjs';
 import { normalizeFutureDraftCapital } from './league/draftCapital.mjs';
 import {
   TASKS,
   RANKING_TASKS,
+  STRENGTH_TASKS,
   ELIMINATION_ONLY_TASKS,
   TRANSACTION_TASKS,
   buildContext,
@@ -476,9 +487,39 @@ export async function prepareEdition({
   let prospectBoard = null;
   let rosterWindow = null;
   let pickCapital = null;
+  let strength = null;
+
+  /**
+   * The team strength rating, for an edition in STRENGTH_TASKS, from what is
+   * on file and the week's market (fetched once and saved, so the same week
+   * always rates on the same prices). A market that cannot be fetched leaves
+   * the priced components out, saying so; it never stops the edition.
+   */
+  const rateStrength = async ({ preseason = false } = {}) => {
+    if (!marketValues) {
+      marketValues = await readMarketValues({ store, league, teams, week, refresh: options.refreshMarket });
+      if (marketValues.unavailable) {
+        warn(`Trade values could not be fetched (${marketValues.unavailable}). The strength rating leaves them out.`);
+      }
+    }
+    return readStrength({
+      store,
+      assets,
+      league,
+      teams,
+      players,
+      config,
+      throughWeek: week,
+      market: marketValues,
+      tradedPicks,
+      ...(pickCapital ? { pickCapital } : {}),
+      preseason,
+    });
+  };
 
   if (task === 'preseason-rankings') {
     say('Preseason edition: regular-season results are deliberately excluded.');
+    strength = await rateStrength({ preseason: true });
   } else {
     const captured = await captureWeek({ ...ctx, week });
     eliminationLedger = captured.elimination ?? null;
@@ -565,6 +606,7 @@ export async function prepareEdition({
       if (!rosterWindow.weeksCovered.length) {
         warn(`Week ${week} has no completed week on disk: production by age cannot be reported yet.`);
       }
+      strength = await rateStrength();
     } else if (task === 'preview') {
       // The week has not been played, so the preview gets the pairings plus
       // last week's results — never this week's partial scores.
@@ -629,6 +671,7 @@ export async function prepareEdition({
       if (gradedPredictions) {
         say(`Grading week ${week} predictions: ${gradedPredictions.correct}/${gradedPredictions.total} correct.`);
       }
+      if (STRENGTH_TASKS.includes(task)) strength = await rateStrength();
     }
   }
 
@@ -673,6 +716,7 @@ export async function prepareEdition({
     prospectBoard,
     rosterWindow,
     pickCapital,
+    strength,
     format,
   });
 

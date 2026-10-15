@@ -106,6 +106,14 @@ const FIXED_FIELD_RANKING_TASKS = ['preseason-rankings', 'rankings', 'postseason
 export const RANKING_TASKS = [...FIXED_FIELD_RANKING_TASKS, 'survival-rankings'];
 
 /**
+ * Editions that carry the team strength rating (src/analysis/strength.mjs):
+ * the rankings of a league whose field is fixed, and the future stock. Not
+ * survival-rankings: a guillotine league gets no strength rating, because its
+ * ranking already judges the floor, which is a different question.
+ */
+export const STRENGTH_TASKS = [...FIXED_FIELD_RANKING_TASKS, FUTURE_STOCK_TASK];
+
+/**
  * Reads a prompt file and resolves its format-conditional sections (see
  * src/promptTemplate.mjs) for `formatType`. A file with no such sections reads
  * the same for every format, so `formatType` may be omitted for it.
@@ -863,6 +871,23 @@ function marketCreditView() {
   };
 }
 
+/**
+ * The team strength rating as an edition carries it. Teams by name, with no
+ * roster ids, as every other view lists them; everything else is the rating
+ * as src/analysis/strength.mjs built it.
+ */
+function strengthView(strength) {
+  const { formatType, teams, ...rest } = strength;
+  return {
+    scale:
+      'Computed by code from the facts on file, not a judgement: each team 0-100 relative to this league. Each ' +
+      'component is ranked across the league and scored by rank (100 first, 0 last); the rating is the ' +
+      'weighted mean of those scores. A component in `unavailable` was left out, never counted as zero.',
+    ...rest,
+    teams: teams.map(({ rosterId, ...team }) => team),
+  };
+}
+
 /** What the market is, for the edition that quotes it. */
 function marketValuesView(market) {
   return {
@@ -907,6 +932,8 @@ function marketValuesView(market) {
  *        only read by a future stock edition.
  * @param {object|null} input.pickCapital from src/pipeline.mjs#readPickCapital;
  *        only read by a future stock edition.
+ * @param {object|null} input.strength from src/pipeline.mjs#readStrength; only
+ *        read by STRENGTH_TASKS, and never for a format where teams are chopped.
  */
 export function buildContext({
   task,
@@ -934,6 +961,7 @@ export function buildContext({
   prospectBoard = null,
   rosterWindow = null,
   pickCapital = null,
+  strength = null,
   format = 'sleeper',
 }) {
   // What the league's provider can supply. Third line of defence for an
@@ -1237,6 +1265,10 @@ export function buildContext({
     if (prize) context.prospectBoard = prospectBoardView(prize);
   }
 
+  // The rating the code computed. Not for a format where teams are chopped:
+  // the survival rankings judge the floor, a different question.
+  if (strength && STRENGTH_TASKS.includes(task) && !eliminates) context.strength = strengthView(strength);
+
   if (transactions?.length && !WITHOUT_TRANSACTION_COLOUR.includes(task)) {
     context.transactions = transactions.map(({ type, week: leg, teams: names, bid, moves, contentsUnknown }) =>
       // An ESPN trade sent without its items: no `moves` at all, since an
@@ -1248,7 +1280,9 @@ export function buildContext({
   }
 
   // Only an edition that actually received FantasyCalc values owes the credit.
-  if (context.marketValues || context.draftCapital?.valueSource) context.marketCredit = marketCreditView();
+  if (context.marketValues || context.draftCapital?.valueSource || context.strength?.valueSource) {
+    context.marketCredit = marketCreditView();
+  }
 
   // A manager name the provider's source is not confirmed for (ESPN's
   // displayName, open question 27) never reaches the model, wherever a view

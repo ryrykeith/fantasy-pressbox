@@ -17,6 +17,8 @@ import { enrichTransactions } from './analysis/transactions.mjs';
 import { buildRosterWindow } from './analysis/rosterWindow.mjs';
 import { buildPickCapital, pickCapitalSeasons } from './analysis/pickCapital.mjs';
 import { byeWeekTableSource, upcomingByeExposure } from './analysis/byeExposure.mjs';
+import { buildStrength } from './analysis/strength.mjs';
+import { resolveStrengthChoice } from './settings.mjs';
 import {
   MARKET_ID_SPACES,
   MarketValuesError,
@@ -25,7 +27,7 @@ import {
   normalizeMarketValues,
   snapshotIdSpace,
 } from './fantasycalc/client.mjs';
-import { hasEliminations, hasFutureDraftCapital } from './format.mjs';
+import { capabilityGap, hasEliminations, hasFutureDraftCapital } from './format.mjs';
 
 /**
  * The season's bye-week table from the loaded assets. A step reads it only
@@ -454,6 +456,71 @@ export function readRosterWindow({ store, assets, league, teams, players, throug
       rosters: weekData.rosters,
     })),
     ageBandEdges,
+  });
+}
+
+/**
+ * Every settled week on file through `throughWeek`, as `{ week, rosters }`
+ * (WeekData rosters): a week whose stored snapshot is its settled record
+ * (isSettledSnapshot) and holds an analysis (a multi-week matchup's does not).
+ * A week still being played is never read as a result. Fetches nothing.
+ */
+export function settledWeeks({ store, assets, league, teams, players, throughWeek }) {
+  return savedWeeks({ store, assets, league, teams, players, throughWeek })
+    .filter((weekData) => {
+      const snapshot = store.loadSnapshot(league.season, weekData.week);
+      return isSettledSnapshot(snapshot, league) && Boolean(snapshot.analysis);
+    })
+    .map((weekData) => ({ week: weekData.week, rosters: weekData.rosters }));
+}
+
+/**
+ * The team strength rating (src/analysis/strength.mjs) from what is on file:
+ * the settled weeks through `throughWeek`, the week's market (readMarketValues'
+ * result, or null) and the league's future pick capital. Fetches nothing. Null
+ * for a format with no strength rating (guillotine).
+ *
+ * - `preseason`: a preseason ranking reads none of this season's results, so
+ *   lineup, depth and age window are unavailable, saying so.
+ * - `pickCapital`: readPickCapital's result when the caller already has it;
+ *   left undefined, it is read here from `tradedPicks` and `market`.
+ */
+export function readStrength({
+  store,
+  assets,
+  league,
+  teams,
+  players,
+  config,
+  throughWeek,
+  market = null,
+  tradedPicks = [],
+  pickCapital = undefined,
+  preseason = false,
+}) {
+  const choice = resolveStrengthChoice(config.rankings, league.format?.type);
+  if (!choice) return null;
+  const weeks = preseason
+    ? { settled: [], unavailable: "a preseason ranking reads none of this season's results" }
+    : { settled: settledWeeks({ store, assets, league, teams, players, throughWeek }), unavailable: null };
+  const capital = pickCapital === undefined ? readPickCapital({ league, teams, tradedPicks, market, config }) : pickCapital;
+  const provider = providerOf(league);
+  const draftCapitalUnavailable = capital
+    ? null
+    : (capabilityGap('futurePicks', { capabilities: provider.capabilities, provider: provider.displayName }) ??
+      `a ${league.format.type} league holds no future draft picks`);
+  return buildStrength({
+    formatType: league.format.type,
+    preset: choice.preset,
+    weights: choice.weights,
+    inputs: choice.inputs,
+    teams,
+    players,
+    slots: league.startingSlots,
+    weeks,
+    market,
+    pickCapital: capital,
+    draftCapitalUnavailable,
   });
 }
 

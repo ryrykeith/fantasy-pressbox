@@ -104,8 +104,9 @@ weights:
 # up to 1.0 and uses the same factors as the balanced set it shifts, so the
 # prompt describes every preset in the same words; only the emphasis moves.
 # A partial set in a league's own file replaces the shipped one wholesale, as
-# under `weights`. A preset also chooses the team strength rating's weights;
-# those will sit beside each preset's `weights`, as strength.<format>.
+# under `weights`. A preset also chooses the team strength rating's weights,
+# which sit beside each preset's `weights` as strength.<format> (see `strength`
+# below for what the components are).
 #
 # Guillotine has no other preset on purpose: the format already decides what a
 # team plays for (not being last this week), so "win-now" and "rebuild" mean
@@ -137,6 +138,17 @@ presets:
         quarterback: 0.10          # unchanged
         roster_flexibility: 0.05   # unchanged
         contender_viability: 0.20  # +0.05 over balanced
+    strength:
+      dynasty:
+        lineup: 0.45               # +0.10: the lineup is the title case
+        depth: 0.15                # +0.05: a title run cannot lose a starter
+        market_value: 0.20         # -0.05
+        age_window: 0.10           # -0.05: this season, not the next five
+        draft_capital: 0.10        # -0.05: picks are currency for help now
+      redraft:
+        lineup: 0.70               # +0.10: ceiling over insurance, as above
+        depth: 0.10                # -0.10
+        market_value: 0.20         # unchanged
   rebuild:
     # For a league that ranks who is building best for the seasons ahead.
     # Weight moves from this season's lineup and title chances to what the
@@ -156,6 +168,62 @@ presets:
         # No contender_viability: a league ranking for the rebuild does not
         # reward winning this season over setting up the next. A team that
         # can win now still shows it in starting_lineup.
+    strength:
+      dynasty:
+        lineup: 0.15               # -0.20: this season's form is evidence
+        depth: 0.05                # -0.05
+        market_value: 0.30         # +0.05: what the roster is worth
+        age_window: 0.25           # +0.10: who is young where it counts
+        draft_capital: 0.25        # +0.10: the picks are the rebuild
+
+# The team strength rating: a number from 0 to 100 that the CODE computes for
+# every team from facts (src/analysis/strength.mjs), so it can be reproduced and
+# checked. The rankings above are still the model's judgement under `weights`;
+# the rating is one piece of evidence it may cite, never the sole reason for a
+# rank. docs/editorial-model.md has the formula.
+#
+# Each component is ranked across the league and turned into a 0-100 score by
+# its rank, so the rating is relative to this league, not to football at large:
+#
+#   lineup         the best legal lineup each roster could have fielded, in
+#                  points, averaged over the last `lineup_weeks` settled weeks
+#   depth          the points the bench would have supplied in those weeks had
+#                  the week's `short_week_starters` best starters been missing
+#                  (an injury and a bye)
+#   market_value   FantasyCalc's value of the players on the roster today
+#   age_window     dynasty only: the starters' age against the league's average
+#                  at each position, weighted by their points; younger is better
+#   draft_capital  dynasty only, and only where traded picks are read (Sleeper):
+#                  the priced value of the future picks the team holds
+#
+# A component the league cannot supply (no settled week in the preseason, no
+# market, ESPN's traded picks) is left out and listed as unavailable, and the
+# weights of the others are scaled back up to 1.0. It never counts as zero.
+#
+# These sets are the `balanced` preset; the other presets carry their own under
+# presets.<name>.strength. Like the ranking weights they are editorial choices
+# and each set adds up to 1.0. Guillotine leagues get no strength rating: their
+# survival rankings already judge the floor, which is a different question.
+strength:
+  dynasty:
+    lineup: 0.35         # what the roster can put on the field now
+    depth: 0.10          # survives an injury or a bye
+    market_value: 0.25   # what the assets are worth long term
+    age_window: 0.15     # how long the production lasts
+    draft_capital: 0.15  # the picks still to come
+  redraft:
+    # No age_window and no draft_capital: nothing carries into next season.
+    lineup: 0.60
+    depth: 0.20
+    market_value: 0.20   # the market's view of the roster for this season
+
+# What the strength rating reads.
+strength_inputs:
+  lineup_weeks: 4          # the last N settled weeks for lineup, depth and
+                            # age_window: recent enough to be this roster,
+                            # long enough that one week is not the rating
+  short_week_starters: 2   # how many of a week's best starters a short week
+                            # loses, for depth
 
 weekly:
   # How far a team should normally move in one week. One Sunday is a very

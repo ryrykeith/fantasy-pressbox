@@ -32,6 +32,22 @@ export const DEFAULT_AGE_BAND_EDGES = [25, 29];
 /** Positions a roster age summary is not meaningful for: the "player" is a franchise or has no career arc worth aging. */
 const AGELESS_POSITIONS = new Set(['DEF']);
 
+/** Whether a position's players have an age worth summarizing (a defense does not). */
+export function isAgedPosition(position) {
+  return Boolean(position) && !AGELESS_POSITIONS.has(position);
+}
+
+/**
+ * The starters a WeekData roster fielded that week and what each scored:
+ * `[{ id, points }]`, an empty slot left out. `points` is null for a start the
+ * provider reported no points for (ESPN's noPointsIds): unknown, never 0.
+ */
+export function fieldedStarterPoints(fielded) {
+  return (fielded?.starterIds || [])
+    .filter((id) => id !== null)
+    .map((id) => ({ id, points: reportedPoints(fielded, id) }));
+}
+
 const round1 = (value) => Math.round(value * 10) / 10;
 const round2 = (value) => Math.round(value * 100) / 100;
 
@@ -115,8 +131,7 @@ export function buildRosterWindow({ teams = [], players = {}, weeks = [], ageBan
       let startsWithoutPoints = 0;
       for (const { rosters = [] } of weeks) {
         const fielded = rosters.find((roster) => roster.rosterId === team.rosterId);
-        for (const id of (fielded?.starterIds || []).filter((slot) => slot !== null)) {
-          const points = reportedPoints(fielded, id);
+        for (const { id, points } of fieldedStarterPoints(fielded)) {
           if (points === null) {
             startsWithoutPoints += 1;
             continue;
@@ -158,7 +173,7 @@ export function buildRosterWindow({ teams = [], players = {}, weeks = [], ageBan
       const byPosition = new Map();
       for (const id of team.playerIds || []) {
         const position = positionOf(id);
-        if (!position || AGELESS_POSITIONS.has(position)) continue;
+        if (!isAgedPosition(position)) continue;
         if (!byPosition.has(position)) byPosition.set(position, { all: [], starting: [] });
         const entry = byPosition.get(position);
         entry.all.push(ageOf(id));

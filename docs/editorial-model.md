@@ -47,6 +47,70 @@ this season's lineup or towards long-term value and picks. The context names
 the preset (`editorial.rankingPreset`), so a ranking can say what the league
 ranks for. The numbers stay out of the posts.
 
+### The team strength rating
+
+The weights above steer a ranking that the model writes. The strength rating
+is a different kind of thing: a number from 0 to 100 that **the code**
+computes for every team (`src/analysis/strength.mjs`), so the same saved data
+always gives the same rating and anyone can check it. The weekly, preseason
+and postseason rankings and the future stock carry it as `strength`. It is
+evidence the ranking may cite, never the sole reason for a rank. Guillotine
+leagues get no rating, because their survival rankings judge the floor, which
+is a different question.
+
+**Components.** Each one is built only from data the league has:
+
+| Component | What it measures | Better | Formats |
+|---|---|---|---|
+| `lineup` | Points of the best legal lineup the roster could have fielded (the same solver as lineup efficiency), averaged over the window weeks | higher | dynasty, redraft |
+| `depth` | In each window week, the week's `short_week_starters` (default 2) highest scorers in that best lineup are removed and the solver fills the lineup again from what is left. Depth is the refilled total minus what the remaining starters scored, which is exactly what the bench supplied. Averaged over the window weeks | higher | dynasty, redraft |
+| `market_value` | FantasyCalc value of the players on the roster today, summed over the priced ones | higher | dynasty, redraft |
+| `age_window` | Each starter's age minus the league's points-weighted mean age at his position, weighted by the points he scored as a starter in the window weeks. Negative is younger than the league. Defenses have no age and are left out | lower | dynasty |
+| `draft_capital` | Priced value of the future picks the team holds (`pickCapital`'s horizon value) | higher | dynasty, where traded picks are read (Sleeper) |
+
+The **window** is the last `lineup_weeks` (default 4) settled weeks this
+season: weeks whose stored snapshot is the settled record. A week still being
+played is never read. A team's week whose best lineup cannot be known (a
+player with no reported points, or no known position) is not counted for that
+team.
+
+**Formula.** For each component, the teams that have a value are ranked
+(ties share a rank) and scored by rank:
+
+```
+score = 100 × (n − r) ÷ (n − 1)
+```
+
+where `n` is the number of teams ranked and `r` is the team's rank, averaged
+across a tie, so first scores 100, last scores 0 and tied teams score the same.
+A lone team scores 100. The rating is the weighted mean of a team's component
+scores, rounded to a whole number:
+
+```
+rating = Σ (weightᵢ × scoreᵢ) ÷ Σ weightᵢ     over the components the team has
+```
+
+So the rating is relative: it says where a team stands in its league, not how
+good it is in absolute terms.
+
+**Missing data.** A component the league cannot supply is listed in
+`strength.unavailable` with its reason, and the context's `note` says that the
+remaining weights were scaled back up to 1.0 (`weightsUsed`). The usual causes
+are no settled week (the preseason, which reads none of this season's
+results), no market, and ESPN's traded picks, which are not read. A team that
+alone lacks a component (FantasyCalc prices nobody on its roster, say) has
+its own `unavailable` entry and its own `weightsUsed`. A missing component is
+never counted as 0.
+
+**Weights.** `strength.dynasty` and `strength.redraft` in
+`config/rankings.yml` are the `balanced` preset's. The other presets carry
+their own under `presets.<name>.strength.<format>`, and the preset that sets
+the ranking weights sets these too. They are editorial choices, validated like
+the ranking weights: each set sums to 1.0 and uses only the components its
+format has. A league that writes its own `strength.<format>` cannot also name a
+preset for that format. `strength_inputs` sets `lineup_weeks` and
+`short_week_starters`.
+
 ### Draft capital means *future* draft capital
 
 The `future_draft_capital` weight refers only to drafts that have not happened

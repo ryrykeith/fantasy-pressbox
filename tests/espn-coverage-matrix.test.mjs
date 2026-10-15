@@ -10,8 +10,10 @@ import { normalizeLeague } from '../src/espn/normalize.mjs';
 import { espnProvider } from '../src/espn/provider.mjs';
 import { capabilityGap, EDITION_CAPABILITIES, refuseEditionWithoutCapability } from '../src/format.mjs';
 import { FUTURE_STOCK_TASK } from '../src/futureStock.mjs';
-import { captureWeek, readMarketValues, readTransactions } from '../src/pipeline.mjs';
-import { buildContext, describePlayer, TASKS } from '../src/promptContext.mjs';
+import { captureWeek, readMarketValues, readStrength, readTransactions } from '../src/pipeline.mjs';
+import { buildContext, describePlayer, STRENGTH_TASKS, TASKS } from '../src/promptContext.mjs';
+import { resolveSettings } from '../src/settings.mjs';
+import { assets } from './fixtures/assets.mjs';
 import { createStore } from '../src/store.mjs';
 import { TANK_WATCH_TASK } from '../src/tankWatch.mjs';
 import { createFakeEspnFetch } from './fixtures/fake-espn-fetch.mjs';
@@ -288,13 +290,29 @@ async function espnWeek({ leagueId = PUBLIC_LEAGUE_ID, leagueFormat = null } = {
   const store = createStore({ dataDir });
   const captured = await captureWeek({ provider, store, ...opened, week: SCORED_WEEK });
   const enriched = readTransactions({ store, ...opened, describePlayer, week: SCORED_WEEK });
-  return { ...opened, captured, enriched };
+  return { ...opened, store, captured, enriched };
 }
+
+/** The shipped strength weights: CONFIG's hand-built rankings carry none. */
+const STRENGTH_CONFIG = { rankings: resolveSettings().rankings };
 
 /** The context for `task` from an ESPN week, the way src/cli.mjs builds it; `extra` overrides any input. */
 function espnContext(task, week, extra = {}) {
   const readsTheWeek = !['preview', 'preseason-rankings', 'trade-report', 'waiver-report'].includes(task);
+  const strength = STRENGTH_TASKS.includes(task)
+    ? readStrength({
+        store: week.store,
+        assets,
+        league: week.league,
+        teams: week.teams,
+        players: week.players,
+        config: STRENGTH_CONFIG,
+        throughWeek: SCORED_WEEK,
+        preseason: task === 'preseason-rankings',
+      })
+    : null;
   return buildContext({
+    strength,
     task,
     config: CONFIG,
     league: week.league,
@@ -436,6 +454,15 @@ test('every top-level context key has a row, and is Supported exactly when an ES
       assert.equal(row.status === 'Supported', present.has(name), `${name} is ${row.status}, but ${present.has(name) ? 'an ESPN context carries it' : 'no ESPN context built here carries it'}`);
     }
   }
+});
+
+test('an ESPN dynasty ranking is rated without draft capital, naming why, and on the settled week', () => {
+  const ranking = contexts.find((context) => context.task === 'rankings' && context.league.format.type === 'dynasty');
+  const reason = capabilityGap('futurePicks', { capabilities: ESPN_CAPABILITIES, provider: 'ESPN' });
+  assert.ok(ranking.strength.unavailable.some((entry) => entry.component === 'draft_capital' && entry.reason === reason));
+  assert.ok(ranking.strength.weightsUsed.lineup > 0);
+  assert.deepEqual(ranking.strength.window.weeks, [SCORED_WEEK]);
+  assert.ok(ranking.strength.teams.every((team) => Number.isInteger(team.rating)));
 });
 
 test('the drift check names a key added to the code without a row', () => {

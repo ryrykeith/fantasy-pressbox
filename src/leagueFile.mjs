@@ -53,6 +53,7 @@ import {
   leagueSettingsFromEnv,
   resolveRankingChoice,
   resolveSettings,
+  resolveStrengthChoice,
 } from './settings.mjs';
 import { PACKAGE_NAME, PACKAGE_VERSION } from './version.mjs';
 
@@ -308,10 +309,14 @@ function checkSettings(settings, league) {
   // elimination ledger or draft order is refused here, not in the first run.
   // A declared format with a named preset is checked against that preset too,
   // as its first ranking would: one the format lacks, or a preset beside the
-  // league's own set for the format, is refused here.
+  // league's own set for the format (ranking or strength weights), is refused
+  // here.
   try {
     const { rankings } = resolveSettings({ league: settingsLayers(settings) });
-    if (settings.format !== null && rankings.preset !== null) resolveRankingChoice(rankings, settings.format);
+    if (settings.format !== null && rankings.preset !== null) {
+      resolveRankingChoice(rankings, settings.format);
+      resolveStrengthChoice(rankings, settings.format);
+    }
   } catch (error) {
     throw new LeagueFileError(field, `${field} are refused: ${error.message}`, { whole: true });
   }

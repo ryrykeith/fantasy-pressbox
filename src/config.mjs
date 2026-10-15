@@ -63,6 +63,7 @@ export {
   resolveFutureStockWeights,
   resolveRankingChoice,
   resolveRankingWeights,
+  resolveStrengthChoice,
   resolveSettings,
   validateRankingWeights,
 } from './settings.mjs';

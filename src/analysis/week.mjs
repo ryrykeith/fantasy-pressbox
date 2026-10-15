@@ -80,10 +80,26 @@ const hasPoints = (entry) => typeof entry.points === 'number';
  * fall below the points the team actually scored. An empty starting slot (a
  * null id) is no player and does not count.
  */
-function optimalLineup(slots, candidates) {
+export function optimalLineup(slots, candidates) {
   if (candidates.some((entry) => !hasPoints(entry) && !entry.onBye)) return null;
   if (candidates.some((entry) => entry.id !== null && !entry.player?.position)) return null;
   return bestLineup({ slots, candidates: candidates.map((entry) => (hasPoints(entry) ? entry : { ...entry, points: 0 })) });
+}
+
+/**
+ * One WeekData roster's lineup candidates, for optimalLineup: its starters and
+ * bench as entriesFor reads them, less any player in a reserve slot. A roster
+ * that lists `reserveIds` (ESPN's IR slot) cannot start those players; a roster
+ * without the list (Sleeper's) is read exactly as it always was.
+ */
+export function lineupCandidates(roster, players) {
+  const { starters, bench } = entriesFor(roster, players);
+  const reserve = new Set(roster.reserveIds || []);
+  return {
+    starters,
+    bench,
+    candidates: [...starters, ...bench].filter((entry) => !(roster.reserveIds && reserve.has(entry.id))),
+  };
 }
 
 /**
@@ -111,15 +127,8 @@ export function analyzeWeek({ league, teams, rosters, players, week }) {
    */
   const buildSide = (side, opponentSide = null) => {
     const team = teamsByRosterId.get(side.rosterId);
-    const { starters, bench } = entriesFor(side, players);
-    // A roster that lists `reserveIds` (ESPN's IR slot) cannot start those
-    // players, so they are not lineup candidates. A roster without the list
-    // (Sleeper's) is read exactly as it always was.
-    const reserve = new Set(side.reserveIds || []);
-    const optimal = optimalLineup(
-      slots,
-      [...starters, ...bench].filter((entry) => !(side.reserveIds && reserve.has(entry.id))),
-    );
+    const { starters, bench, candidates } = lineupCandidates(side, players);
+    const optimal = optimalLineup(slots, candidates);
     const unreported = [...starters, ...bench].filter((entry) => entry.id !== null && !hasPoints(entry));
     const scored = Number((side.points ?? 0).toFixed(2));
 
