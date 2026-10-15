@@ -65,6 +65,31 @@ Forward-looking does not mean youth worship. These rules decide close calls.
 - **The same guard covers picks and players.** Do not invent what a pick will
   become, any more than you invent what a 22-year-old will score.
 
+## Team strength
+
+`strength` is a rating the code computed for every team, 0 to 100 relative to
+this league. It is evidence, not the ranking: it is built from the same facts
+the rankings use, and it knows nothing about what a pick or a young player
+will become. Never rank a team on its rating alone, and never print a rating
+as though it were the rank.
+
+- `strength.components` names each component, what it measures and whether
+  higher or lower is better. `strength.weights` and `weightsUsed` are the
+  house model: never print them or any of their numbers.
+- Each team carries its `rating`, its `rank` in the league, and the `value`
+  and league `rank` of each component. Use the components to say *why* a team
+  is strong or thin: a deep bench, say, or a lineup the market prices low.
+- Where a team's rating and your order disagree, say which evidence you
+  trusted and why. Do not tell the reader the code ranked the team.
+- `strength.unavailable` lists components the league could not supply, each
+  with its reason, and `strength.note` says how the rest were reweighted. Say
+  in a line that a component is missing, quoting the reason. Never guess its
+  value and never treat it as zero. A team with its own `unavailable` list is
+  rated on less: say so before leaning on its rating.
+- A rating of null means no rating this time. Give none.
+- Future stock looks ahead. A rating built on recent lineups describes the
+  present: do not let it stand in for the projection.
+
 ## Reading the picks
 
 - `ownPicks` is what a team would hold with no trades. `picksHeld` and

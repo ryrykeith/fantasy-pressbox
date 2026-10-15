@@ -441,7 +441,11 @@ const FAKE_MARKET = [
   { player: { name: '2027 3rd', position: 'PICK' }, value: 300 },
 ];
 
-async function build(task, { format = 'dynasty', week = 1 } = {}) {
+async function build(task, options) {
+  return (await buildEdition(task, options)).context;
+}
+
+async function buildEdition(task, { format = 'dynasty', week = 1 } = {}) {
   await import('./fixtures/fake-sleeper-api-fetch.mjs');
   if (!globalThis.fetch.answersMarket) {
     const sleeper = globalThis.fetch;
@@ -466,8 +470,27 @@ async function build(task, { format = 'dynasty', week = 1 } = {}) {
       assets: loadDiskAssets({ promptsDir: config.promptsDir }),
       log: { say() {}, warn() {} },
     });
-  return (await run(task)).context;
+  return run(task);
 }
+
+test('each ranking prompt explains the strength block that its context carries', async () => {
+  const editions = {
+    rankings: 'weekly-power-rankings',
+    'preseason-rankings': 'preseason-power-rankings',
+    postseason: 'postseason-power-rankings',
+    'future-stock': 'future-stock',
+  };
+  for (const [task, file] of Object.entries(editions)) {
+    const { context, prompt } = await buildEdition(task);
+    assert.ok(context.strength, task);
+    assert.match(prompt, /"strength": \{/, `${task}: the block is in the context`);
+    assert.match(prompt, /## Team strength/, `${task} (${file})`);
+    assert.match(prompt, /evidence,\s+not\s+the\s+ranking/, task);
+    assert.match(prompt, /Never\s+rank\s+a\s+team\s+on\s+its\s+rating\s+alone/, task);
+    assert.match(prompt, /strength\.unavailable/, task);
+    assert.match(prompt, /Never guess its\s+value/, task);
+  }
+});
 
 test('the weekly, preseason and postseason rankings and the future stock contexts carry the rating', async () => {
   for (const task of ['rankings', 'postseason', 'future-stock']) {
