@@ -460,6 +460,8 @@ test('an ESPN dynasty ranking is rated without draft capital, naming why, and on
   const ranking = contexts.find((context) => context.task === 'rankings' && context.league.format.type === 'dynasty');
   const reason = capabilityGap('futurePicks', { capabilities: ESPN_CAPABILITIES, provider: 'ESPN' });
   assert.ok(ranking.strength.unavailable.some((entry) => entry.component === 'draft_capital' && entry.reason === reason));
+  // No player age is read from ESPN, so there is no age window either.
+  assert.ok(ranking.strength.unavailable.some((entry) => entry.component === 'age_window'));
   assert.ok(ranking.strength.weightsUsed.lineup > 0);
   assert.deepEqual(ranking.strength.window.weeks, [SCORED_WEEK]);
   assert.ok(ranking.strength.teams.every((team) => Number.isInteger(team.rating)));
