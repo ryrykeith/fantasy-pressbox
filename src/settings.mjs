@@ -118,10 +118,69 @@ const DEFAULT_RANKING_WEIGHTS = {
   },
 };
 
+/**
+ * The ranking presets other than `balanced`, keyed by preset name and then by
+ * league format. `balanced` is not in this table: it is the per-format sets
+ * above, so a league that names no preset ranks exactly as it always has.
+ *
+ * The values are editorial choices, not facts, and kept in step with
+ * config/rankings.yml, which says why each one is what it is; this is only the
+ * fallback for a missing file (tests/rankings-presets.test.mjs holds the two
+ * together). A preset will also carry the strength rating's weights, as
+ * `presets.<name>.strength.<format>`, beside its `weights`.
+ */
+const DEFAULT_RANKING_PRESETS = {
+  'win-now': {
+    weights: {
+      dynasty: {
+        starting_lineup: 0.4,
+        dynasty_value: 0.1,
+        depth: 0.2,
+        quarterback: 0.1,
+        future_draft_capital: 0.05,
+        roster_flexibility: 0.05,
+        contender_viability: 0.1,
+      },
+      redraft: {
+        starting_lineup: 0.5,
+        depth: 0.15,
+        quarterback: 0.1,
+        roster_flexibility: 0.05,
+        contender_viability: 0.2,
+      },
+    },
+  },
+  rebuild: {
+    weights: {
+      dynasty: {
+        starting_lineup: 0.15,
+        dynasty_value: 0.35,
+        depth: 0.1,
+        quarterback: 0.1,
+        future_draft_capital: 0.25,
+        roster_flexibility: 0.05,
+      },
+    },
+  },
+};
+
 export const DEFAULT_RANKINGS = {
   weights: DEFAULT_RANKING_WEIGHTS,
+  presets: DEFAULT_RANKING_PRESETS,
   weekly: { max_normal_movement: 3, allow_exceptional_movement: true },
 };
+
+/** The preset a league ranks under when it names none: the per-format sets under `weights`. */
+export const DEFAULT_RANKING_PRESET = 'balanced';
+
+/**
+ * Weight sets under `weights` that belong to an edition, not to a league
+ * format. A preset never chooses them: the future stock edition has one set.
+ */
+const EDITION_WEIGHT_SETS = ['future_stock'];
+
+/** What a preset name may look like: it is a key in a dotted settings path, so no dots. */
+const PRESET_NAME = /^[a-z][a-z0-9-]*$/;
 
 /**
  * The guillotine settings, before an operator has written any.
@@ -241,12 +300,12 @@ function sumWeights(weights) {
  * current league happens to use: a typo in a set nobody is running today is
  * still a typo.
  */
-export function validateRankingWeights(weights) {
+export function validateRankingWeights(weights, { path = 'weights' } = {}) {
   for (const [formatType, set] of Object.entries(weights ?? {})) {
     const sum = sumWeights(set);
     if (Math.abs(sum - 1) > WEIGHT_SUM_TOLERANCE) {
       throw new Error(
-        `config/rankings.yml weights.${formatType} sums to ${sum}, not 1.0. ` +
+        `config/rankings.yml ${path}.${formatType} sums to ${sum}, not 1.0. ` +
           'Fix the weights (or the keys under it) so they add up to exactly 1.0.',
       );
     }
@@ -254,35 +313,172 @@ export function validateRankingWeights(weights) {
 }
 
 /**
- * Picks the weight set for a resolved league format.
- *
- * There is no fallback to another format's set. A format with no set of its
- * own in config/rankings.yml is a loud error naming the missing key, because
- * silently reusing another format's weights would rank that league on
- * criteria that do not apply to it, with nothing saying so. That is the case
- * an operator who trims a set out of the file lands in, and the case a newly
- * added format lands in before its own set is written.
+ * The presets each league format has, `balanced` first:
+ * `{ dynasty: ['balanced', 'win-now', 'rebuild'], ... }`. `balanced` is a
+ * format's set under `weights`; every other preset is in `presets`.
  */
-export function resolveRankingWeights(rankings, formatType) {
-  const weights = rankings?.weights?.[formatType];
+export function rankingPresetsByFormat(rankings) {
+  const byFormat = {};
+  const add = (formatType, name) => {
+    byFormat[formatType] ??= [];
+    if (!byFormat[formatType].includes(name)) byFormat[formatType].push(name);
+  };
+  for (const formatType of Object.keys(rankings?.weights ?? {})) {
+    if (!EDITION_WEIGHT_SETS.includes(formatType)) add(formatType, DEFAULT_RANKING_PRESET);
+  }
+  for (const [name, preset] of Object.entries(rankings?.presets ?? {})) {
+    for (const formatType of Object.keys(preset?.weights ?? {})) add(formatType, name);
+  }
+  return byFormat;
+}
+
+/** "dynasty: balanced, win-now, rebuild; redraft: balanced, win-now", for messages. */
+function describePresetsByFormat(byFormat) {
+  const entries = Object.entries(byFormat);
+  if (!entries.length) return 'No presets are defined at all.';
+  return `Presets by format: ${entries.map(([formatType, names]) => `${formatType}: ${names.join(', ')}`).join('; ')}.`;
+}
+
+/** A format's set under `weights`, or a loud error naming the missing key. */
+function weightSet(rankings, key) {
+  const weights = rankings?.weights?.[key];
   if (weights) return weights;
 
   const known = Object.keys(rankings?.weights ?? {});
   throw new Error(
-    `No ranking weight set for format "${formatType}" (missing weights.${formatType} in ` +
+    `No ranking weight set for format "${key}" (missing weights.${key} in ` +
       `config/rankings.yml). ${known.length ? `Sets defined: ${known.join(', ')}.` : 'No sets are defined at all.'} ` +
-      `Add weights.${formatType} to config/rankings.yml — write out every key it needs; a partial ` +
+      `Add weights.${key} to config/rankings.yml — write out every key it needs; a partial ` +
       'set is not accepted.',
   );
+}
+
+/**
+ * Which weights rank a league of a resolved format, and which preset chose
+ * them: `{ preset, weights }`. `preset` is null when the league wrote its own
+ * `weights.<format>` and named no preset.
+ *
+ * - No preset named: the league's own set if it wrote one, otherwise
+ *   `balanced` (the set under `weights`), exactly as before presets existed.
+ * - A preset named together with the league's own `weights.<format>` is
+ *   refused, naming both: nothing silently wins.
+ * - An unknown preset, or one this format does not have, is refused, naming
+ *   the presets this format does have.
+ *
+ * There is no fallback to another format's set. A format with no set of its
+ * own in config/rankings.yml is a loud error naming the missing key, because
+ * silently reusing another format's weights would rank that league on
+ * criteria that do not apply to it, with nothing saying so.
+ */
+export function resolveRankingChoice(rankings, formatType) {
+  const preset = rankings?.preset ?? null;
+  const ownWeights = rankings?.ownWeights ?? [];
+  if (preset === null) {
+    const weights = weightSet(rankings, formatType);
+    return { preset: ownWeights.includes(formatType) ? null : DEFAULT_RANKING_PRESET, weights };
+  }
+  if (ownWeights.includes(formatType)) {
+    throw new Error(
+      `config/rankings.yml sets both preset: ${preset} and its own weights.${formatType}, so it does not say ` +
+        `which should rank this ${formatType} league. Remove one: the preset, or weights.${formatType}.`,
+    );
+  }
+  const available = rankingPresetsByFormat(rankings)[formatType] ?? [];
+  if (!available.includes(preset)) {
+    const known = Object.values(rankingPresetsByFormat(rankings)).some((names) => names.includes(preset));
+    throw new Error(
+      `preset: ${preset} in config/rankings.yml is ${known ? `not a preset a ${formatType} league has` : 'not a ranking preset'}. ` +
+        (available.length
+          ? `A ${formatType} league's presets are: ${available.join(', ')}.`
+          : `A ${formatType} league has no presets: there is no weights.${formatType} in config/rankings.yml.`),
+    );
+  }
+  const weights =
+    preset === DEFAULT_RANKING_PRESET ? weightSet(rankings, formatType) : rankings.presets[preset].weights[formatType];
+  return { preset, weights };
+}
+
+/** The weight set that ranks a league of a resolved format — see resolveRankingChoice. */
+export function resolveRankingWeights(rankings, formatType) {
+  return resolveRankingChoice(rankings, formatType).weights;
 }
 
 /**
  * The weight set for the future stock edition. Like resolveRankingWeights it
  * never borrows another set: trimming `weights.future_stock` out of
  * config/rankings.yml is an error naming it, not a quiet fall back to dynasty.
+ * No preset chooses it: the edition has one set.
  */
 export function resolveFutureStockWeights(rankings) {
-  return resolveRankingWeights(rankings, 'future_stock');
+  return weightSet(rankings, 'future_stock');
+}
+
+/**
+ * Checks the `preset` setting and the `presets` table at load, before any
+ * league format is known: the name is a word, `balanced` is not redefined
+ * (it is the sets under `weights`), every preset set sums to 1.0, and the
+ * named preset exists for some format. Whether the league's own format has
+ * it is resolveRankingChoice's question.
+ */
+function validateRankingPresets(rankings) {
+  const { preset = null, presets = {} } = rankings;
+  if (!isTable(presets)) throw new Error('presets in config/rankings.yml must be a table of presets');
+  for (const [name, table] of Object.entries(presets)) {
+    if (name === DEFAULT_RANKING_PRESET) {
+      throw new Error(
+        `config/rankings.yml defines presets.${name}, but ${name} is the sets under weights. ` +
+          `Change weights.<format> to change it, and remove presets.${name}.`,
+      );
+    }
+    if (!PRESET_NAME.test(name)) {
+      throw new Error(`presets.${name} in config/rankings.yml is not a preset name: use lower-case letters, digits and hyphens.`);
+    }
+    if (!isTable(table) || !isTable(table.weights ?? {})) {
+      throw new Error(`presets.${name} in config/rankings.yml must be a table holding weights.<format>`);
+    }
+    validateRankingWeights(table.weights, { path: `presets.${name}.weights` });
+  }
+  if (preset === null) return;
+  if (typeof preset !== 'string' || !PRESET_NAME.test(preset)) {
+    throw new Error(
+      `preset in config/rankings.yml is ${JSON.stringify(preset)}, which is not a preset name. ` +
+        describePresetsByFormat(rankingPresetsByFormat(rankings)),
+    );
+  }
+  const byFormat = rankingPresetsByFormat(rankings);
+  if (!Object.values(byFormat).some((names) => names.includes(preset))) {
+    throw new Error(`preset: ${preset} in config/rankings.yml is not a ranking preset. ${describePresetsByFormat(byFormat)}`);
+  }
+}
+
+/**
+ * The replace-wholesale paths for every preset weight set any layer writes
+ * (`presets.rebuild.weights.dynasty`), so a partial preset set replaces the
+ * shipped one exactly as a partial `weights.<format>` does.
+ */
+function presetReplaceKeys(layers) {
+  const keys = new Set();
+  for (const layer of layers) {
+    if (!isTable(layer?.presets)) continue;
+    for (const [name, table] of Object.entries(layer.presets)) {
+      if (!isTable(table?.weights)) continue;
+      for (const formatType of Object.keys(table.weights)) keys.add(`presets.${name}.weights.${formatType}`);
+    }
+  }
+  return [...keys];
+}
+
+/** The league formats whose weight set a league (or the caller's overrides) wrote itself. */
+function ownWeightFormats(layers) {
+  const formats = new Set();
+  for (const layer of layers) {
+    for (const key of Object.keys(isTable(layer?.weights) ? layer.weights : {})) {
+      if (!EDITION_WEIGHT_SETS.includes(key) && layer.weights[key] !== null && layer.weights[key] !== undefined) {
+        formats.add(key);
+      }
+    }
+  }
+  return [...formats];
 }
 
 /** Reads a dotted path (`"weights.redraft"`) out of a plain object. */
@@ -405,18 +601,29 @@ export function resolveSettings({ defaults = {}, league = {}, overrides = {}, so
     ],
     { replaceKeys: EDITORIAL_REPLACE_KEYS },
   );
-  const rankings = foldLayers(
+  const rankingLayers = [defaults.rankings, league.rankings, overrides.rankings];
+  const merged = foldLayers(
     DEFAULT_RANKINGS,
     [
       { layer: defaults.rankings, source: from('defaults', 'rankings') },
       { layer: league.rankings, source: from('league', 'rankings') },
       { layer: overrides.rankings, source: from('overrides', 'rankings') },
     ],
-    { replaceKeys: RANKING_WEIGHT_REPLACE_KEYS },
+    { replaceKeys: [...RANKING_WEIGHT_REPLACE_KEYS, ...presetReplaceKeys([DEFAULT_RANKINGS, ...rankingLayers])] },
   );
+  // `preset` is the league's choice (null: balanced). `ownWeights` lists the
+  // formats whose set the league wrote itself, rather than the package
+  // shipping it: a preset named beside one of those is refused when that
+  // format is ranked (resolveRankingChoice).
+  const rankings = {
+    ...merged,
+    preset: merged.preset ?? null,
+    ownWeights: ownWeightFormats([league.rankings, overrides.rankings]),
+  };
   // Every set is checked, not only the one this league uses — see the comment
   // on validateRankingWeights.
   validateRankingWeights(rankings.weights);
+  validateRankingPresets(rankings);
 
   // Checked even for a league that is not guillotine: a typo in a ledger nobody
   // is running today is still a typo, found before any command runs.

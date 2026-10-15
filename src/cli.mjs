@@ -22,7 +22,7 @@ import {
   describePromptOverrides,
   rankEmoji,
   rankEmojiOf,
-  resolveRankingWeights,
+  resolveRankingChoice,
   resolveWorkspaceRoot,
   WORKSPACE_ENV_VAR,
   workspaceConfigDir,
@@ -386,8 +386,9 @@ async function commandDoctor(config) {
         `(${UNDETECTABLE_FORMAT_TYPES.join(', ')} can only be declared)`);
   }
   try {
-    const weights = resolveRankingWeights(config.rankings, league.format.type);
-    say(`  Weights for league ✓ using the ${league.format.type} set (${Object.keys(weights).length} factors)`);
+    const { preset, weights } = resolveRankingChoice(config.rankings, league.format.type);
+    const chosenBy = preset ? `the ${preset} preset` : 'the league\'s own weights';
+    say(`  Weights for league ✓ ${chosenBy} for ${league.format.type} (${Object.keys(weights).length} factors)`);
   } catch (error) {
     say(`  Weights for league ✗ ${error.message}`);
   }

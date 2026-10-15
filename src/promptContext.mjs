@@ -10,7 +10,7 @@
  * business printing that number. Keeping facts in structured form rather than
  * prose is what makes that rule enforceable.
  */
-import { rankEmojiOf, resolveFutureStockWeights, resolveRankingWeights } from './settings.mjs';
+import { rankEmojiOf, resolveFutureStockWeights, resolveRankingChoice } from './settings.mjs';
 import {
   capabilityGap,
   hasMatchups,
@@ -364,6 +364,12 @@ function rankEmojiView(config) {
   };
 }
 
+/** The ranking weights and the preset that chose them, as editorialView carries them. */
+function rankingChoiceView(rankings, formatType) {
+  const { preset, weights } = resolveRankingChoice(rankings, formatType);
+  return { rankingPreset: preset, rankingWeights: weights };
+}
+
 function editorialView(config, format, task) {
   const formatType = format?.type;
   return {
@@ -379,9 +385,11 @@ function editorialView(config, format, task) {
     // when its format has no set of its own, which is what lets a league
     // publish the editions it does have while a weight set it never reads is
     // still being specified.
-    ...(RANKING_TASKS.includes(task)
-      ? { rankingWeights: resolveRankingWeights(config.rankings, formatType) }
-      : {}),
+    //
+    // `rankingPreset` names what the league ranks for (`balanced`,
+    // `win-now`, `rebuild`), so a ranking can say so; null when the league
+    // wrote its own weights. The prompts never print the numbers.
+    ...(RANKING_TASKS.includes(task) ? rankingChoiceView(config.rankings, formatType) : {}),
     // The future stock edition has its own set rather than its league
     // format's: the dynasty set has no age factor and weighs this week's form
     // far more than a forward-looking ranking should.

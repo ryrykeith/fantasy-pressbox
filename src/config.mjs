@@ -61,6 +61,7 @@ export {
   rankEmoji,
   rankEmojiOf,
   resolveFutureStockWeights,
+  resolveRankingChoice,
   resolveRankingWeights,
   resolveSettings,
   validateRankingWeights,

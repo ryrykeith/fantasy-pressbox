@@ -20,6 +20,12 @@ output.
 Weigh the factors in `editorial.rankingWeights`. Those weights are the house
 model — respect their relative sizes.
 
+`editorial.rankingPreset` names what this league ranks for: `balanced`,
+`win-now` (who can take this season's title) or `rebuild` (who is building best
+for the seasons ahead). Null means the league wrote its own weights. You may say
+what the league ranks for in a line, but never print the weights or any of
+their numbers.
+
 ## Positional value
 
 `league.positionalValue` names the ways this league's scoring changes what a

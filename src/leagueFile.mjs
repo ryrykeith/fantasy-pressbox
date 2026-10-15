@@ -45,7 +45,15 @@ import { parseDeclaredFormatType } from './format.mjs';
 import { EDITIONS, optionNamed } from './options.mjs';
 import { parseProspectBoard } from './prospectBoard.mjs';
 import { PROVIDER_NAMES, providerDisplayName } from './providers.mjs';
-import { ESPN_ROUTES, LEAGUE_ID_KEYS, firstSet, isSingleEmoji, leagueSettingsFromEnv, resolveSettings } from './settings.mjs';
+import {
+  ESPN_ROUTES,
+  LEAGUE_ID_KEYS,
+  firstSet,
+  isSingleEmoji,
+  leagueSettingsFromEnv,
+  resolveRankingChoice,
+  resolveSettings,
+} from './settings.mjs';
 import { PACKAGE_NAME, PACKAGE_VERSION } from './version.mjs';
 
 export const LEAGUE_FILE_SCHEMA_VERSION = 1;
@@ -298,8 +306,12 @@ function checkSettings(settings, league) {
 
   // The same merge and checks a league folder's files get: a bad weight set,
   // elimination ledger or draft order is refused here, not in the first run.
+  // A declared format with a named preset is checked against that preset too,
+  // as its first ranking would: one the format lacks, or a preset beside the
+  // league's own set for the format, is refused here.
   try {
-    resolveSettings({ league: settingsLayers(settings) });
+    const { rankings } = resolveSettings({ league: settingsLayers(settings) });
+    if (settings.format !== null && rankings.preset !== null) resolveRankingChoice(rankings, settings.format);
   } catch (error) {
     throw new LeagueFileError(field, `${field} are refused: ${error.message}`, { whole: true });
   }

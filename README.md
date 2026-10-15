@@ -845,6 +845,24 @@ recaps alike.
 - If you override a set, write out every line it needs. A partial set replaces
   the whole thing rather than merging into the default, so five lines means
   five.
+- `preset` — what your league ranks for, in one line of your league folder's
+  own `config/rankings.yml`, such as `preset: rebuild`. Leave it out and the
+  league ranks on `balanced`, the sets under `weights`, exactly as before.
+
+  | Format | Presets |
+  |---|---|
+  | dynasty | `balanced`, `win-now`, `rebuild` |
+  | redraft | `balanced`, `win-now` |
+  | guillotine | `balanced` |
+
+  `win-now` leans on this season's lineup and title chances. `rebuild` leans on
+  what the roster is worth long term and the picks still to come. The values
+  are under `presets` in the shipped file, with the reasoning for each. They
+  are editorial guidance, like every weight here. The posts may say what the
+  league ranks for but never print the numbers. A preset your league's format
+  does not have is refused, naming the ones it does have. So is a preset
+  together with your own `weights.<format>` for the same format, because
+  nothing should silently win: pick one.
 - `weekly.max_normal_movement` — how far a team normally moves in one week.
   One Sunday is a small sample, and the rankings should act like it.
 

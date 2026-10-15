@@ -18,8 +18,17 @@
 #
 # Every format the publication understands has a set below. A format without
 # one is refused rather than ranked on somebody else's criteria — see
-# resolveRankingWeights in src/config.mjs — so if you delete a set, the league
+# resolveRankingChoice in src/settings.mjs — so if you delete a set, the league
 # it belonged to stops ranking and says why.
+#
+# These sets are the `balanced` preset (see `presets` further down). A league
+# folder's own config/rankings.yml may pick another preset with one line:
+#
+#   preset: rebuild
+#
+# or write out its own weights.<format> instead. Not both for the same format:
+# a league that names a preset and writes its own set for its format is refused,
+# naming both, because nothing should silently win.
 weights:
   dynasty:
     starting_lineup: 0.30        # how good the week-to-week starting ten is
@@ -80,6 +89,73 @@ weights:
     dynasty_value: 0.15           # what the assets are worth long term
     quarterback: 0.10             # weighted heavily in Superflex leagues
     starting_lineup: 0.05         # current form: far less than dynasty's 0.30
+
+# Ranking presets: named alternatives to the sets under `weights`, chosen per
+# league with `preset: <name>`. Leaving `preset` out means `balanced`, which is
+# the sets under `weights` exactly, so a league that names no preset ranks as
+# it always has.
+#
+#   dynasty     balanced, win-now, rebuild
+#   redraft     balanced, win-now
+#   guillotine  balanced only
+#
+# Like the sets above, these are editorial guidance — a statement of what the
+# league ranks FOR — not a formula and not a fact about any team. Each set adds
+# up to 1.0 and uses the same factors as the balanced set it shifts, so the
+# prompt describes every preset in the same words; only the emphasis moves.
+# A partial set in a league's own file replaces the shipped one wholesale, as
+# under `weights`. A preset also chooses the team strength rating's weights;
+# those will sit beside each preset's `weights`, as strength.<format>.
+#
+# Guillotine has no other preset on purpose: the format already decides what a
+# team plays for (not being last this week), so "win-now" and "rebuild" mean
+# nothing there. future_stock has none either: it is one edition's set, not a
+# league's emphasis.
+presets:
+  win-now:
+    # For a league that ranks who can take this season's title. Weight moves
+    # from long-term assets to the roster that plays on Sunday.
+    weights:
+      dynasty:
+        starting_lineup: 0.40      # +0.10: the starting ten is the case
+        dynasty_value: 0.10        # -0.15: a contender's assets are spent
+                                    # on this year, not banked
+        depth: 0.20                # +0.05: one injury in a title run costs
+                                    # more than in a lost season
+        quarterback: 0.10          # unchanged: Superflex scarcity is the
+                                    # same whatever the league ranks for
+        future_draft_capital: 0.05 # -0.05: picks are currency to trade for
+                                    # help now, not the thing ranked
+        roster_flexibility: 0.05   # unchanged
+        contender_viability: 0.10  # +0.05: can it actually win it this year
+      redraft:
+        # Redraft has no long-term assets to move weight away from, so win-now
+        # here trades insurance for ceiling: a lineup that wins a title over
+        # a deep bench that survives one.
+        starting_lineup: 0.50      # +0.05 over balanced
+        depth: 0.15                # -0.10 over balanced
+        quarterback: 0.10          # unchanged
+        roster_flexibility: 0.05   # unchanged
+        contender_viability: 0.20  # +0.05 over balanced
+  rebuild:
+    # For a league that ranks who is building best for the seasons ahead.
+    # Weight moves from this season's lineup and title chances to what the
+    # assets are worth and the picks still to come. Dynasty only: a redraft
+    # roster carries nothing into next season to rebuild with.
+    weights:
+      dynasty:
+        starting_lineup: 0.15      # -0.15: this season's form is evidence,
+                                    # not the thing ranked
+        dynasty_value: 0.35        # +0.10: what the roster is worth over the
+                                    # long run
+        depth: 0.10                # -0.05: an injury costs a rebuilding team
+                                    # a week it was not playing for
+        quarterback: 0.10          # unchanged
+        future_draft_capital: 0.25 # +0.15: the picks are the rebuild
+        roster_flexibility: 0.05   # unchanged
+        # No contender_viability: a league ranking for the rebuild does not
+        # reward winning this season over setting up the next. A team that
+        # can win now still shows it in starting_lineup.
 
 weekly:
   # How far a team should normally move in one week. One Sunday is a very

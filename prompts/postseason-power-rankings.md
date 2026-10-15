@@ -29,6 +29,15 @@ from it. Apply every one of them — both to the final ranking and to the audit,
 where misreading what this league pays a position is one of the ways an earlier
 edition got a team wrong. An empty list means nothing here is unusual.
 
+## What the league ranks for
+
+`editorial.rankingWeights` says how much each factor counts, as guidance.
+`editorial.rankingPreset` names what this league ranks for: `balanced`,
+`win-now` (who can take this season's title) or `rebuild` (who is building best
+for the seasons ahead). Null means the league wrote its own weights. You may say
+what the league ranks for in a line, but never print the weights or any of
+their numbers.
+
 ## Structure
 
 One post per item, separated by `%%%`:

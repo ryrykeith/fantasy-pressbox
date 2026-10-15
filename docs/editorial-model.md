@@ -41,6 +41,12 @@ Default weights live in `config/rankings.yml`:
 These are configurable on purpose. A redraft league and a dynasty league
 should not use the same numbers.
 
+The table is the dynasty `balanced` preset. A league can rank for something
+else with `preset: win-now` or `preset: rebuild`, which shift weight towards
+this season's lineup or towards long-term value and picks. The context names
+the preset (`editorial.rankingPreset`), so a ranking can say what the league
+ranks for. The numbers stay out of the posts.
+
 ### Draft capital means *future* draft capital
 
 The `future_draft_capital` weight refers only to drafts that have not happened
