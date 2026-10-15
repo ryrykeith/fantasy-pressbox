@@ -16,7 +16,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 |-------|--------|
 | [Basketball context, prompts and weights](./basketball-context-prompts-and-weights.md) | pending |
 | [Basketball editions end to end and a coverage matrix](./basketball-editions-end-to-end-and-a.md) | pending |
+| [init, doctor and the league file for basketball](./init-doctor-and-the-league-file-for.md) | pending |
 | [NBA fixtures, player dictionary, lineup solver and week data](./nba-fixtures-player-dictionary-lineup.md) | pending |
 | [README and docs for basketball](./readme-and-docs-for-basketball.md) | pending |
 | [The sport axis and capability gates](./the-sport-axis-and-capability-gates.md) | pending |
-| [init, doctor and the league file for basketball](./init-doctor-and-the-league-file-for.md) | pending |

@@ -15,5 +15,5 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Compute a team strength rating](./compute-a-team-strength-rating.md) | pending |
-| [Ranking presets in config/rankings.yml](./ranking-presets-in-config-rankings-yml.md) | pending |
+| [Ranking presets in config/rankings.yml](./ranking-presets-in-config-rankings-yml.md) | completed |
 | [Strength rating in the ranking prompts](./strength-rating-in-the-ranking-prompts.md) | pending |
