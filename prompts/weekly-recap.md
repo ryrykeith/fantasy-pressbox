@@ -60,9 +60,13 @@ rivals. For that game's post, and only that one:
   build further history on top of it.
 - **The only history you may cite is `rivalry.headToHead`**: wins, ties,
   points, the last meeting, the streak and the biggest margin, as written. It
-  already counts this week's game (`through` is this week), so do not add the
-  result to it again. It counts only the saved weeks listed in `covered`, so
-  call it the record on file, never all-time.
+  counts only the saved weeks listed in `covered`, so call it the record on
+  file, never all-time.
+- **Check `headToHead.throughWeekCounted`.** When it is `true`, the record
+  already counts this week's game: do not add the result to it again. When it
+  is `false`, this week's game is not in it yet (the week is not settled):
+  call it the record coming into this game, never the record now, and do not
+  update its totals, streak or last meeting yourself.
 - If `headToHead.unavailable` is set, no meeting between them is saved. Quote
   no record, and do not call this a first meeting.
 

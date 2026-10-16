@@ -1084,8 +1084,10 @@ trade report) it reads every saved season once (`readSavedSeasons`) and gives
 each rivalry its `headToHead` record and the week it reads `through`. A
 preview reads up to the week before its own, since its game has not been
 played. A recap and a trade report read through their own week, so a recap's
-record already counts the game it is about. These `rivalryRecords` go to
-`buildContext`.
+record counts the game it is about once that week is settled;
+`throughWeekCounted` says whether it is, and the recap prompt calls an
+unsettled week's record the one coming into the game. These `rivalryRecords`
+go to `buildContext`.
 
 `buildContext` attaches `rivalryView` where both teams of a rivalry appear:
 `rivalry` on an `upcomingMatchups` entry or a `thisWeek.games` entry, and

@@ -136,6 +136,7 @@ for (const provider of Object.keys(PROVIDERS)) {
     assert.equal(record.streak.won, 1);
     assert.equal(record.wins.reduce((total, side) => total + side.wins, 0) + record.ties, 1);
     assert.equal(record.through, `${context.league.season} week ${recapWeek}`);
+    assert.equal(record.throughWeekCounted, true);
     assert.ok(record.covered.some((line) => line.startsWith(`${context.league.season}: week`)));
     // No roster ids and no managers in the block.
     assert.doesNotMatch(JSON.stringify(rivalry), /rosterId|manager/);
@@ -198,6 +199,16 @@ test('sleeper: a trade between rivals is flagged in the trade report, and the pr
     const plain = await build('sleeper', 'trade-report', 1, { rivalriesYml });
     assert.equal(plain.context.trades[0].rivalries, undefined);
   }
+});
+
+test('sleeper: a recap built before its week is settled says the record does not count this game yet', async () => {
+  // The fake league has scored week 1 only, so week 2 is played but not settled.
+  const { context, prompt } = await build('sleeper', 'recap', 2);
+  const game = context.thisWeek.games.find((entry) => hasTeams(entry, 'Bye Week Blues', 'Lowered Expectations'));
+  assert.ok(game?.rivalry, 'the bare rivals meet in week 2');
+  assert.equal(game.rivalry.headToHead.through, `${context.league.season} week 2`);
+  assert.equal(game.rivalry.headToHead.throughWeekCounted, false);
+  assert.match(prompt, /When it\s+is `false`, this week's game is not in it yet/);
 });
 
 test('the preview and recap prompts turn the intensity up for rivals only, on the note and the record alone', async () => {

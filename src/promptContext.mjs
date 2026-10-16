@@ -926,12 +926,18 @@ const twoDecimals = (n) => Number(n.toFixed(2));
  * by team name with no roster ids. A pair with no saved meeting carries the
  * record's `unavailable` reason, never 0-0. `coverage` names the seasons and
  * weeks the record was read from and every season it could not be.
+ * `throughWeekCounted` says whether the `through` week itself is in the
+ * record: a recap built before the provider has settled its week reads a
+ * record that stops short of the game it is about, and must not call it current.
  */
 function rivalryView({ rosterIds, teams, name, note, headToHead: record, through }) {
   const nameOf = (rosterId) => (rosterId === rosterIds[0] ? teams[0] : rosterId === rosterIds[1] ? teams[1] : null);
   const score = ([a, b]) => `${teams[0]} ${twoDecimals(a)}, ${teams[1]} ${twoDecimals(b)}`;
   const coverage = {
     through: `${through.season} week ${through.week}`,
+    throughWeekCounted: record.covered.some(
+      ({ season, weeks }) => season === String(through.season) && weeks.includes(through.week),
+    ),
     covered: record.covered.map(({ season, weeks }) => `${season}: week${weeks.length === 1 ? '' : 's'} ${weeks.join(', ')}`),
     notCovered: record.notCovered.map(({ season, reason }) => `${season}: ${reason}`),
   };
