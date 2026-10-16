@@ -2,11 +2,14 @@
 id: "df63cf24-cf1f-4985-b1c2-36eae56cd10d"
 level: "feature"
 title: "Presets and strength rating"
-status: "pending"
+status: "completed"
 priority: "high"
+startedAt: "2026-10-16T19:08:13.550Z"
+completedAt: "2026-10-16T19:08:13.550Z"
+endedAt: "2026-10-16T19:08:13.550Z"
 acceptanceCriteria: []
 description: "Presets pick the ranking and strength weights; the strength rating is a computed 0-100 per team."
-lastModified: "2026-10-15T16:59:21.000Z"
+lastModified: "2026-10-16T19:08:13.576Z"
 lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 ---
 
@@ -15,6 +18,6 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Compute a team strength rating](./compute-a-team-strength-rating.md) | completed |
-| [Credit-line check for strength market values has no test: reverting it fails nothing](./credit-line-check-for-strength-market.md) | pending |
+| [Credit-line check for strength market values has no test: reverting it fails nothing](./credit-line-check-for-strength-market.md) | completed |
 | [Ranking presets in config/rankings.yml](./ranking-presets-in-config-rankings-yml.md) | completed |
 | [Strength rating in the ranking prompts](./strength-rating-in-the-ranking-prompts.md) | completed |
