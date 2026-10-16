@@ -184,6 +184,47 @@ already scoring. `tests/future-stock.test.mjs` builds this league and checks
 that each of those facts reaches the context and that the prompt states each
 rule.
 
+## Rivalries
+
+A rivalry is the operator's judgement, declared in `config/rivalries.yml`. It
+is never inferred from results. Two things come from it, and they are kept
+apart on purpose.
+
+**The facts.** The pair's head-to-head record (`src/analysis/rivalry.mjs`)
+comes only from the weeks the publication saved: wins, losses and ties, total
+points, the last meeting, the current streak and the biggest margin. It says
+which seasons and weeks it covers, so the post calls it "the record on file",
+never all-time. With no meeting saved it is `unavailable` ("no meeting
+saved"), never 0-0, and the post must not call that a first meeting.
+
+**The intensity rule.** In the preview and the recap, a matchup between rivals
+is written one step above `roast_intensity`, for that matchup's post only:
+
+| `roast_intensity` | Rivals' matchup |
+|---|---|
+| `light` | `medium` |
+| `medium` | `scorched` |
+| `scorched` | `scorched` (no step above it) |
+
+Every limit in the system instructions still holds at the higher step, and
+every other post keeps the configured intensity. The step is an editorial
+choice written in `prompts/weekly-preview.md` and `prompts/weekly-recap.md`;
+the code attaches a `rivalry` block to the matchup and computes no intensity.
+The `note` is the operator's framing of why the two are rivals, an angle and
+not a fact about either manager, so the writer may not present it as something
+a manager did or build more history on it. The only history it may cite is the
+head-to-head record. A trade between rivals is marked in the trade report and
+graded like any other.
+
+## The five-year plan
+
+The `five-year-plan` edition is about one dynasty team. It is an outlook, not
+a prediction: the context carries forward only the calendar (a year older each
+season) and the picks already issued, and the prompt frames the plan as a
+contention window and the options open to the team, each tied to a fact. Age
+stages come from `age_curves` in `config/rankings.yml`, which are editorial
+judgement and say so. The plan states no projected points, records or titles.
+
 ## Tone
 
 Confident, analytical, funny, dry, slightly petty, occasionally absurd,

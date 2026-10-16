@@ -236,6 +236,7 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/analysis/transactions.mjs` | A transaction's grading context: each side's roster shape before and after, a claim's cost against budget, moved players' weekly points |
 | `src/analysis/rosterWindow.mjs` | Per-position age summaries, starter age, and season points by age band, for a dynasty roster |
 | `src/analysis/pickCapital.mjs` | Future pick capital across the tradeable drafts: each held pick priced (projected Early/Mid/Late tier for the draft the standings decide, generic round value otherwise, unpriced when the market lists none), per season and summed, net against each team's own picks |
+| `src/analysis/strength.mjs` | The team strength rating, 0 to 100 and relative to the league: `lineup`, `depth`, `market_value`, `age_window` and `draft_capital`, each ranked across the teams that have it and scored by rank, then weighted by `strength.<format>` in `config/rankings.yml` (set by the preset). A component the league cannot supply is in `unavailable` with its reason and the other weights are rescaled; nothing missing counts as 0. `src/pipeline.mjs#readStrength` feeds it saved weeks, the market and pick capital, and the editions in `STRENGTH_TASKS` carry it. Formula in `docs/editorial-model.md`. No `node:` imports |
 | `src/analysis/fiveYearPlan.mjs` | One dynasty team's facts for seasons S to S+4: each player's age (today's age plus one a season) and stage on the editorial `age_curves` in `config/rankings.yml`, today's starters past their decline age and the share of their points from players before the cliff, picks held per draft (`unavailable` for a draft held or not issued yet), and today's strength, standing and market value. No projected points, records or titles. No `node:` imports |
 | `src/analysis/standings.mjs` | Current seeds: wins, then points-for |
 | `src/analysis/playoffField.mjs` | The projected playoff field and the bubble that decides it |
@@ -244,6 +245,7 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/tankWatch.mjs` | The tank-watch edition: its refusals (dynasty only, declared rule, start week) and the race/stakes/cliff/movement view of the projected draft order |
 | `src/analysis/draftOrder.mjs` | The projected rookie draft order: each slot's original team and current owner, the cliff a bubble team's pick falls off, week-over-week movement |
 | `src/tradePicks.mjs` | A traded pick at its projected slot for the trade report: slot, cliff, the board prospects around it, and what is still unknown |
+| `src/fiveYearPlan.mjs` | The five-year-plan edition: its refusals (dynasty only; a missing, blank or over-long `--team`), `--team` resolved through `src/teamIdentity.mjs` (name now or before, manager username, roster id; unknown or ambiguous is refused, listing the teams), and the plan's facts as the compact view the prompt reads, one line per player across the seasons. No `node:` imports |
 | `src/futureStock.mjs` | The future-stock edition: its refusal (dynasty only) and each team's age, production-by-age and priced pick capital, with held picks placed at their projected slot |
 | `src/fantasycalc/client.mjs` | FantasyCalc trade values: query from the league's format and scoring, fetch, normalize. FantasyCalc field names stop here, as Sleeper's stop at `src/sleeper/` |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
@@ -1076,6 +1078,36 @@ entries some held 1st is around (`tradeProspectBoard`).
 The edition gets no standings table and no transaction colour. Its `teams`
 already carries every record, and its subject is who holds which pick. It is
 not recorded, so it has no movement.
+
+### Five-year plan
+
+`src/fiveYearPlan.mjs` holds the `five-year-plan` edition's gate and view;
+`src/analysis/fiveYearPlan.mjs` builds the facts. `--team` is an entry in
+`OPTIONS` (`src/options.mjs`) that applies to this edition only.
+`prepareEdition` refuses a declared non-dynasty format and a missing `--team`
+before the league is opened, and an ESPN league through the capability gate
+(`futurePicks`, so before ESPN is contacted). After the league opens it
+refuses a resolved non-dynasty format and a `--team` that is unknown or
+ambiguous, before any week is captured. It then reads the market, the pick
+capital, the settled weeks and the strength rating, and the output file name
+carries `-team<rosterId>`.
+
+`buildContext` puts the plan in `context.fiveYearPlan` (and `draftProjection`
+when the projected draft falls inside the five seasons). The edition has no
+`teams`, standings or strength block of its own: the team's strength, standing
+and market value ride inside the plan. Its field for the seasons is
+`futureSeasons`, not `projections`, because `projections` already means a
+trade-report entry in the ESPN matrix. Every absence stays an `unavailable`
+entry with its reason: a season's picks (draft held, or not issued yet), the
+strength rating, `otherRosters`, `starterProduction`, `pickValues`.
+
+Ages are today's age plus one per season. Stages come from `age_curves`
+(`rising` below `peak`, `peak` from `peak`, `declining` from `decline`, `cliff`
+from `cliff`), merged per position over the shipped defaults and validated in
+`src/settings.mjs`. "Today's starter points" are the points today's starters
+scored as starters in the settled weeks; a player with no known age or no
+curve is counted in `pointsWithoutStage` rather than in the share. The
+edition is not recorded, so it has no movement.
 
 ### Rivalries in the editions
 
