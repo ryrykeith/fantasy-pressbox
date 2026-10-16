@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { MARKET_CREDIT_LINE, buildContext, buildPrompt } from '../src/promptContext.mjs';
-import { checkPosts } from '../src/validate.mjs';
+import { checkPosts, marketValueNumbers } from '../src/validate.mjs';
 import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
 import { normalizeLeague, normalizeTeams } from '../src/espn/normalize.mjs';
 import { buildLeague, PUBLIC_LEAGUE_ID } from './fixtures/mock-espn-league.mjs';
@@ -177,4 +177,62 @@ test('the credit line counts toward the length limit', () => {
   assert.equal(tight.allOk, false);
   assert.equal(tight.violations[0].overBy, 1);
   assert.equal(tight.creditMissing.length, 0);
+});
+
+/**
+ * The strength rating prices two of its components in FantasyCalc values
+ * (market_value, draft_capital); lineup, depth and age_window are points and
+ * years, and quoting those owes no credit.
+ */
+const withStrength = {
+  marketCredit: { line: CREDIT },
+  strength: {
+    teams: [
+      {
+        components: {
+          lineup: { value: 131.5, weeks: 3 },
+          depth: { value: 77.25, weeks: 3 },
+          market_value: { value: 18400, pricedPlayers: 20, unpricedPlayers: 0 },
+          age_window: { value: 26.4 },
+          draft_capital: { value: 5200, picksHeld: 4, unpricedPicks: 0 },
+        },
+      },
+      {
+        components: {
+          lineup: { value: 140.1 },
+          depth: { value: 80.9 },
+          market_value: { value: null, reason: 'FantasyCalc prices no player on this roster' },
+          age_window: { value: 24.1 },
+          draft_capital: { value: null, reason: 'its future picks are not priced' },
+        },
+      },
+    ],
+  },
+};
+
+test('marketValueNumbers includes a strength market_value and draft_capital, not lineup, depth or age_window', () => {
+  assert.deepEqual([...marketValueNumbers(withStrength)].sort((a, b) => a - b), [5200, 18400]);
+});
+
+test('a ranking post quoting a strength market value without the credit line is reported', () => {
+  const report = checkPosts('POWER RANKINGS\n1. Team 1 — a roster worth 18,400 on the market.', { context: withStrength });
+  assert.equal(report.posts[0].missingCredit, true);
+  assert.equal(report.allOk, false);
+  assert.equal(report.creditMissing.length, 1);
+});
+
+test('a ranking post quoting a strength draft capital value without the credit line is reported', () => {
+  const report = checkPosts('POWER RANKINGS\n1. Team 1 — picks worth 5200.', { context: withStrength });
+  assert.equal(report.creditMissing.length, 1);
+});
+
+test('a ranking post quoting a strength market value with the credit line passes', () => {
+  const report = checkPosts(`POWER RANKINGS\n1. Team 1 — a roster worth 18,400.\n${CREDIT}`, { context: withStrength });
+  assert.equal(report.allOk, true);
+  assert.deepEqual(report.creditMissing, []);
+});
+
+test('a ranking post quoting only strength lineup, depth and age values needs no credit', () => {
+  const report = checkPosts('POWER RANKINGS\n1. Team 1 — lineup 131.5, depth 77.25, starters average 26.4.', { context: withStrength });
+  assert.equal(report.allOk, true);
 });
