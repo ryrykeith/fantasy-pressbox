@@ -1002,6 +1002,14 @@ rivalries:
   package.
 - **`doctor` checks them** against the league's teams and lists any rivalry
   that no longer resolves (a team that left, a name that was misspelt).
+- **What the editions do with them.** In the preview and the recap, a matchup
+  between rivals is written one step hotter than `roast_intensity` (light to
+  medium, medium to scorched), and that post alone. It is given your name and
+  note and the pair's head-to-head record from the weeks you have saved: wins,
+  points, the last meeting, the streak and the biggest margin. With no meeting
+  saved, it gets no record at all, never 0-0. A trade between rivals is marked
+  as one in the trade report, and graded like any other. Survival editions
+  have no matchups, so they leave rivalries out.
 
 ### Trade values — fetched for you
 

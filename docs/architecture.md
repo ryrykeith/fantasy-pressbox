@@ -1076,6 +1076,30 @@ The edition gets no standings table and no transaction colour. Its `teams`
 already carries every record, and its subject is who holds which pick. It is
 not recorded, so it has no movement.
 
+### Rivalries in the editions
+
+`prepareEdition` resolves the declared rivalries once the league's teams are
+known (`resolveRivalries`). For an edition in `RIVALRY_TASKS` (preview, recap,
+trade report) it reads every saved season once (`readSavedSeasons`) and gives
+each rivalry its `headToHead` record and the week it reads `through`. A
+preview reads up to the week before its own, since its game has not been
+played. A recap and a trade report read through their own week, so a recap's
+record already counts the game it is about. These `rivalryRecords` go to
+`buildContext`.
+
+`buildContext` attaches `rivalryView` where both teams of a rivalry appear:
+`rivalry` on an `upcomingMatchups` entry or a `thisWeek.games` entry, and
+`rivalries` (a list, since a trade of three teams can hold two pairs) on a
+trade. The view names teams as they go by now, carries the operator's `name`
+and `note` only when written, and gives the record by team name, with
+`covered`, `notCovered` and `through`. A pair with no saved meeting carries
+`unavailable: "no meeting saved"` instead of a record. A format with no
+matchups gets no rivalry blocks, whatever is passed in.
+
+How hot a rivals' matchup is written is editorial: the preview and recap
+prompts take it one step above `roast_intensity`, for that post only, and
+`config/editorial.yml` says so. The code does not compute an intensity.
+
 ## State
 
 **League constitution** — mostly static: size, scoring, roster positions,

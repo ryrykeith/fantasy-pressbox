@@ -11,6 +11,12 @@ tone: humorous
 
 # How hard the publication is allowed to roast people.
 # Try: light | medium | scorched
+#
+# A matchup between rivals declared in config/rivalries.yml is written one step
+# hotter than this (light -> medium, medium -> scorched; scorched stays
+# scorched), in the preview and the recap, for that matchup's post only. That
+# step is an editorial choice, made in prompts/weekly-preview.md and
+# prompts/weekly-recap.md, not something the code works out.
 roast_intensity: medium
 
 output:

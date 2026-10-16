@@ -68,6 +68,19 @@ the team that got him.
   and future value entirely: a team that is chopped never collects either.
 <!-- end format -->
 
+## Trades between rivals
+
+A trade with `rivalries` was made between teams the league declared rivals.
+Say so in the deal post, calling the rivalry by its `name` when it has one.
+
+- `note` is the league's own framing of the rivalry, not a fact about either
+  manager: use it as colour, never as a claim about what a manager did or
+  meant.
+- `headToHead` is their record on file, as written. If it is `unavailable`,
+  quote no record.
+- The rivalry changes how the deal is framed, never its grades: grade each side
+  exactly as you would grade a trade between strangers.
+
 ## Grades
 
 A letter grade from A+ to F for each side. The grades are independent: both

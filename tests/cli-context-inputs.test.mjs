@@ -50,3 +50,11 @@ test('the future stock inputs specifically reach the context', () => {
   assert.ok(passed.has('rosterWindow'));
   assert.ok(passed.has('pickCapital'));
 });
+
+test('the rivalries’ head-to-head records reach the context', () => {
+  // Computed in prepareEdition (`let rivalryRecords`), so the general check
+  // above also covers it; named here so dropping the declaration cannot
+  // quietly take the rivalry blocks out of the preview, recap and trade report.
+  assert.ok(/\blet rivalryRecords\b/.test(cli));
+  assert.ok(namesPassedByCli().has('rivalryRecords'));
+});

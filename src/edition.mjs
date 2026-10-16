@@ -35,6 +35,7 @@ import {
   TASKS,
   RANKING_TASKS,
   STRENGTH_TASKS,
+  RIVALRY_TASKS,
   ELIMINATION_ONLY_TASKS,
   TRANSACTION_TASKS,
   buildContext,
@@ -45,6 +46,7 @@ import { extractJsonBlock } from './validate.mjs';
 import { gradePredictions, withMovement, movementLabel } from './rankingGrades.mjs';
 import { createTeamIdentity, attachRosterIds, presentPreviousRankings, describeUnresolved } from './teamIdentity.mjs';
 import { resolveRivalries } from './rivalries.mjs';
+import { headToHead, readSavedSeasons } from './analysis/rivalry.mjs';
 import { TANK_WATCH_TASK, refuseTankWatch, resolveTankWatchStartWeek } from './tankWatch.mjs';
 import { OPTIONS, editionNamed, optionNamed, quotedValues } from './options.mjs';
 import { ESPN_ROUTE_KEY, withRankEmojiMode } from './settings.mjs';
@@ -497,6 +499,7 @@ export async function prepareEdition({
   let rosterWindow = null;
   let pickCapital = null;
   let strength = null;
+  let rivalryRecords = null;
 
   /**
    * The team strength rating, for an edition in STRENGTH_TASKS, from what is
@@ -684,6 +687,21 @@ export async function prepareEdition({
     }
   }
 
+  // Each declared rivalry's head-to-head record, from the weeks saved so far
+  // (captureWeek above has just saved this one). A preview reads up to the
+  // week before the game: the game itself has not happened. A recap and a
+  // trade report read through their own week, so a recap's record already
+  // counts the game it is about.
+  if (rivalries.length && RIVALRY_TASKS.includes(task)) {
+    const through = { season: String(league.season), week: edition.forwardLooking ? week - 1 : week };
+    const seasons = readSavedSeasons(store, { through });
+    rivalryRecords = rivalries.map((rivalry) => ({
+      ...rivalry,
+      headToHead: headToHead(seasons, rivalry.rosterIds),
+      through,
+    }));
+  }
+
   // Shown to the model under the names teams go by now, with the published
   // name kept as `formerly`, so a rename reads as a rename and not as a team
   // that appeared from nowhere while another vanished.
@@ -726,6 +744,7 @@ export async function prepareEdition({
     rosterWindow,
     pickCapital,
     strength,
+    rivalryRecords,
     format,
   });
 

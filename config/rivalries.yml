@@ -28,6 +28,9 @@
 # - A team may have several rivals.
 # - The note is the only backstory the writer is given. Write only what
 #   happened; nothing else will be invented to fill it out.
+# - The preview and the recap write a rivals' matchup one step hotter than
+#   roast_intensity (config/editorial.yml), with the pair's head-to-head record
+#   from your saved weeks; the trade report marks a trade between rivals.
 #
 # Run `node src/cli.mjs doctor` after editing to see whether every rivalry
 # still resolves to a team.

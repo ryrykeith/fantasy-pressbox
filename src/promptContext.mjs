@@ -114,6 +114,14 @@ export const RANKING_TASKS = [...FIXED_FIELD_RANKING_TASKS, 'survival-rankings']
 export const STRENGTH_TASKS = [...FIXED_FIELD_RANKING_TASKS, FUTURE_STOCK_TASK];
 
 /**
+ * Editions that carry the declared rivalries (src/rivalries.mjs) with their
+ * head-to-head records (src/analysis/rivalry.mjs): a preview and a recap mark
+ * a matchup between rivals, and a trade report marks a trade between them.
+ * The survival editions play no matchups and are left as they are.
+ */
+export const RIVALRY_TASKS = ['preview', 'recap', 'trade-report'];
+
+/**
  * Reads a prompt file and resolves its format-conditional sections (see
  * src/promptTemplate.mjs) for `formatType`. A file with no such sections reads
  * the same for every format, so `formatType` may be omitted for it.
@@ -794,7 +802,17 @@ function pickupsView(transactions, { league = null, teams, players, headToHead }
  */
 function tradesView(
   transactions,
-  { league = null, teams, players, headToHead, withPicks, market, draftOrder = null, board = null },
+  {
+    league = null,
+    teams,
+    players,
+    headToHead,
+    withPicks,
+    market,
+    draftOrder = null,
+    board = null,
+    rivalriesBetween = () => [],
+  },
 ) {
   const teamsById = new Map(teams.map((team) => [team.rosterId, team]));
   const seeds = seedsFor(league, teams);
@@ -812,13 +830,23 @@ function tradesView(
     completedAt: trade.completedAt,
     teams: trade.teams,
     contentsUnknown: true,
+    ...rivalriesIn(trade),
   });
+
+  // Every declared rivalry between two of the trade's teams; a trade of
+  // three or more teams can hold more than one.
+  function rivalriesIn(trade) {
+    const rosterIds = trade.sides?.length ? trade.sides.map((side) => side.rosterId) : (trade.rosterIds ?? []);
+    const found = rivalriesBetween(rosterIds);
+    return found.length ? { rivalries: found } : {};
+  }
 
   return transactions
     .filter((transaction) => transaction.type === 'trade')
     .map((trade) => (trade.contentsUnknown ? unknownContents(trade) : {
       week: trade.week,
       completedAt: trade.completedAt,
+      ...rivalriesIn(trade),
       sides: trade.sides.map((side) => {
         const startsAfter = new Map((side.roster?.received ?? []).map((entry) => [entry.id, entry.startsAfter]));
         const startedBefore = new Map((side.roster?.gaveUp ?? []).map((entry) => [entry.id, entry.startedBefore]));
@@ -888,6 +916,78 @@ function strengthView(strength) {
   };
 }
 
+/** Round to two decimals, as every score in the context is written. */
+const twoDecimals = (n) => Number(n.toFixed(2));
+
+/**
+ * One declared rivalry as an edition carries it: the pair under the names they
+ * go by now, the operator's name and note when they wrote one, and the
+ * head-to-head record from saved history (src/analysis/rivalry.mjs#headToHead),
+ * by team name with no roster ids. A pair with no saved meeting carries the
+ * record's `unavailable` reason, never 0-0. `coverage` names the seasons and
+ * weeks the record was read from and every season it could not be.
+ */
+function rivalryView({ rosterIds, teams, name, note, headToHead: record, through }) {
+  const nameOf = (rosterId) => (rosterId === rosterIds[0] ? teams[0] : rosterId === rosterIds[1] ? teams[1] : null);
+  const score = ([a, b]) => `${teams[0]} ${twoDecimals(a)}, ${teams[1]} ${twoDecimals(b)}`;
+  const coverage = {
+    through: `${through.season} week ${through.week}`,
+    covered: record.covered.map(({ season, weeks }) => `${season}: week${weeks.length === 1 ? '' : 's'} ${weeks.join(', ')}`),
+    notCovered: record.notCovered.map(({ season, reason }) => `${season}: ${reason}`),
+  };
+  const headToHead = record.unavailable
+    ? { unavailable: record.unavailable, ...coverage }
+    : {
+        meetings: record.meetings,
+        wins: [
+          { team: teams[0], wins: record.record.wins, points: record.points[0] },
+          { team: teams[1], wins: record.record.losses, points: record.points[1] },
+        ],
+        ties: record.record.ties,
+        lastMeeting: {
+          season: record.lastMeeting.season,
+          week: record.lastMeeting.week,
+          score: score(record.lastMeeting.points),
+          winner: nameOf(record.lastMeeting.winner),
+        },
+        streak:
+          record.streak.result === 'T'
+            ? { tied: record.streak.length }
+            : { team: nameOf(record.streak.holder), won: record.streak.length },
+        biggestMargin: {
+          season: record.biggestMargin.season,
+          week: record.biggestMargin.week,
+          score: score(record.biggestMargin.points),
+          winner: nameOf(record.biggestMargin.winner),
+          margin: record.biggestMargin.margin,
+        },
+        ...coverage,
+      };
+  return {
+    teams: [...teams],
+    ...(name ? { name } : {}),
+    ...(note ? { note } : {}),
+    headToHead,
+  };
+}
+
+/**
+ * Finds the declared rivalries between the given teams.
+ *
+ * @param rivalries  buildContext's `rivalryRecords`, or null
+ * @returns `(rosterIds) => views` — every rivalry both of whose teams are in
+ *   `rosterIds`, as rivalryView builds it; [] when there is none.
+ */
+function rivalriesAmong(rivalries) {
+  if (!rivalries?.length) return () => [];
+  return (rosterIds) => {
+    const present = new Set(rosterIds);
+    return rivalries
+      .filter((rivalry) => present.has(rivalry.rosterIds[0]) && present.has(rivalry.rosterIds[1]))
+      .map(rivalryView);
+  };
+}
+
 /** What the market is, for the edition that quotes it. */
 function marketValuesView(market) {
   return {
@@ -934,6 +1034,11 @@ function marketValuesView(market) {
  *        only read by a future stock edition.
  * @param {object|null} input.strength from src/pipeline.mjs#readStrength; only
  *        read by STRENGTH_TASKS, and never for a format where teams are chopped.
+ * @param {Array|null} input.rivalryRecords the declared rivalries resolved to
+ *        roster ids (src/rivalries.mjs#resolveRivalries), each with
+ *        `headToHead` (src/analysis/rivalry.mjs#headToHead) and `through`
+ *        (`{ season, week }`, the last week the record read); only read by
+ *        RIVALRY_TASKS, and only where teams meet head to head.
  */
 export function buildContext({
   task,
@@ -962,6 +1067,7 @@ export function buildContext({
   rosterWindow = null,
   pickCapital = null,
   strength = null,
+  rivalryRecords = null,
   format = 'sleeper',
 }) {
   // What the league's provider can supply. Third line of defence for an
@@ -979,6 +1085,14 @@ export function buildContext({
   // play one. Nothing below is allowed to pass one on: a matchup in the context
   // block is a fact the model is entitled to print.
   const headToHead = hasMatchups(league.format);
+  // The declared rivalries between a set of teams. A rivalry is about meeting
+  // someone, so a format with no matchups gets none, whatever was passed in.
+  const rivalriesBetween = rivalriesAmong(RIVALRY_TASKS.includes(task) && headToHead ? rivalryRecords : null);
+  /** A matchup's `rivalry` field: present only for two declared rivals. */
+  const rivalryOf = (sides) => {
+    const [rivalry] = rivalriesBetween(sides.map((side) => side.rosterId));
+    return rivalry ? { rivalry } : {};
+  };
 
   const context = {
     task,
@@ -1108,6 +1222,7 @@ export function buildContext({
         manager: side.manager,
         record: side.record ? `${side.record.wins}-${side.record.losses}` : null,
       })),
+      ...rivalryOf(game.teams),
     }));
     if (upcomingAnalysis.unpairedRosterIds?.length) {
       context.unpairedTeams = upcomingAnalysis.unpairedRosterIds;
@@ -1122,7 +1237,7 @@ export function buildContext({
     context.thisWeek = {
       week: weekAnalysis.week,
       ...(headToHead
-        ? { games: weekAnalysis.games.map(gameView) }
+        ? { games: weekAnalysis.games.map((game) => ({ ...gameView(game), ...rivalryOf(game.teams) })) }
         : {
             teams: weekAnalysis.teamWeeks.map((side) =>
               teamWeekView(side, { includeRecord: false }),
@@ -1199,6 +1314,7 @@ export function buildContext({
       market,
       draftOrder: projectable,
       board,
+      rivalriesBetween,
     });
     if (trades.length) context.trades = trades;
     if (market) context.marketValues = marketValuesView(market);
