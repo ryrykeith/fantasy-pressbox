@@ -238,6 +238,8 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/analysis/pickCapital.mjs` | Future pick capital across the tradeable drafts: each held pick priced (projected Early/Mid/Late tier for the draft the standings decide, generic round value otherwise, unpriced when the market lists none), per season and summed, net against each team's own picks |
 | `src/analysis/standings.mjs` | Current seeds: wins, then points-for |
 | `src/analysis/playoffField.mjs` | The projected playoff field and the bubble that decides it |
+| `src/rivalries.mjs` | The declared rivalries (`config/rivalries.yml`): parsing, limits through the safe-input rules, and each team resolved to a roster id through `src/teamIdentity.mjs`. No `node:` imports |
+| `src/analysis/rivalry.mjs` | Two teams' head-to-head record from saved snapshots across every saved season, read through the store: record, total points, last meeting, streak and biggest margin, matched by roster id. Counts only settled weeks with both teams' sides saved, says which seasons and weeks that covers, names the seasons it does not, and is `unavailable` ("no meeting saved"), never 0-0, without a meeting. Pure, no `node:` imports |
 | `src/tankWatch.mjs` | The tank-watch edition: its refusals (dynasty only, declared rule, start week) and the race/stakes/cliff/movement view of the projected draft order |
 | `src/analysis/draftOrder.mjs` | The projected rookie draft order: each slot's original team and current owner, the cliff a bubble team's pick falls off, week-over-week movement |
 | `src/tradePicks.mjs` | A traded pick at its projected slot for the trade report: slot, cliff, the board prospects around it, and what is still unknown |

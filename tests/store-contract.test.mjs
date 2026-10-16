@@ -74,6 +74,16 @@ for (const [name, make] of Object.entries(BACKENDS)) {
     assert.equal(typeof store.importedLeaguePath(SEASON), 'string');
   });
 
+  test(`${name} store: snapshot seasons are the seasons with a week's snapshot saved, oldest first`, () => {
+    const store = make();
+    assert.deepEqual(store.snapshotSeasons(), []);
+    store.saveSnapshot('2026', 1, { week: 1 });
+    store.saveSnapshot('2024', 9, { week: 9 });
+    store.saveRaw('2025', 1, { week: 1 }); // a raw bundle alone is no snapshot
+    store.saveRankings('2023', 'preseason', ranking(0));
+    assert.deepEqual(store.snapshotSeasons(), ['2024', '2026']);
+  });
+
   test(`${name} store: the previous tank watch is the latest strictly before the week`, () => {
     const store = make();
     assert.equal(store.loadPreviousTankWatch(SEASON, 9), null);
@@ -104,8 +114,8 @@ test('the file store writes data/<kind>/<season>/<file>.json, pretty-printed wit
   assert.equal(existsSync(join(dataDir, 'snapshots')), false);
 });
 
-test('pipeline.mjs, the store core and the grading helpers import nothing from node:, and the pipeline never makes a store', () => {
-  for (const file of ['pipeline.mjs', 'storeCore.mjs', 'rankingGrades.mjs']) {
+test('pipeline.mjs, the store core, the grading helpers and the rivalry record import nothing from node:, and the pipeline never makes a store', () => {
+  for (const file of ['pipeline.mjs', 'storeCore.mjs', 'rankingGrades.mjs', 'analysis/rivalry.mjs']) {
     const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /from\s+['"]node:/, `${file} imports from node:`);
     assert.doesNotMatch(source, /import\(\s*['"]node:/, `${file} dynamically imports node:`);

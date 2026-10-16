@@ -27,6 +27,10 @@ export function createStore({ dataDir }) {
       const dir = join(dataDir, kind, String(season));
       return existsSync(dir) ? readdirSync(dir) : [];
     },
+    seasons(kind) {
+      const dir = join(dataDir, kind);
+      return existsSync(dir) ? readdirSync(dir) : [];
+    },
     locate: pathFor,
   });
 
