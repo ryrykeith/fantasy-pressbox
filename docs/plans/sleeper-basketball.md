@@ -1,8 +1,9 @@
 # Sleeper basketball, first flight
 
-Status: planned 2026-10-15. Owner: the operator. Ships in 0.2.0, labelled
-**experimental**. Branch: `feat/sleeper-basketball`, started from main after
-`feat/football-config` merges.
+Status: planned 2026-10-15; deferred 2026-10-16 until the browser tool is built
+for football. Owner: the operator. Ships after 0.2.0, labelled
+**experimental**. Branch: `feat/sleeper-basketball`, started from main when
+the work begins.
 
 PRD epic: "Sleeper basketball, first flight". This file holds the scope and
 the design constraints. The facts about Sleeper's NBA data come from the

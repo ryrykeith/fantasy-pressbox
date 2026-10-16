@@ -184,10 +184,9 @@ website renders it as a team picker.
 4. Five-year plan facts, then the edition. It needs the strength rating.
 5. Docs and README.
 
-Merge to main, then start `feat/sleeper-basketball`
-(`docs/plans/sleeper-basketball.md`). The basketball research task is
-docs-only, so it can run on the football branch while it's open if the
-operator wants to overlap.
+Merge to main. Basketball (`docs/plans/sleeper-basketball.md`) was deferred
+on 2026-10-16: the browser tool is built for football first, and basketball
+starts after it.
 
 ## 8. Risks
 
