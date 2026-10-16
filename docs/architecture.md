@@ -237,7 +237,7 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/analysis/rosterWindow.mjs` | Per-position age summaries, starter age, and season points by age band, for a dynasty roster |
 | `src/analysis/pickCapital.mjs` | Future pick capital across the tradeable drafts: each held pick priced (projected Early/Mid/Late tier for the draft the standings decide, generic round value otherwise, unpriced when the market lists none), per season and summed, net against each team's own picks |
 | `src/analysis/strength.mjs` | The team strength rating, 0 to 100 and relative to the league: `lineup`, `depth`, `market_value`, `age_window` and `draft_capital`, each ranked across the teams that have it and scored by rank, then weighted by `strength.<format>` in `config/rankings.yml` (set by the preset). A component the league cannot supply is in `unavailable` with its reason and the other weights are rescaled; nothing missing counts as 0. `src/pipeline.mjs#readStrength` feeds it saved weeks, the market and pick capital, and the editions in `STRENGTH_TASKS` carry it. Formula in `docs/editorial-model.md`. No `node:` imports |
-| `src/analysis/fiveYearPlan.mjs` | One dynasty team's facts for seasons S to S+4: each player's age (today's age plus one a season) and stage on the editorial `age_curves` in `config/rankings.yml`, today's starters past their decline age and the share of their points from players before the cliff, picks held per draft (`unavailable` for a draft held or not issued yet), and today's strength, standing and market value. No projected points, records or titles. No `node:` imports |
+| `src/analysis/fiveYearPlan.mjs` | One dynasty team's facts for seasons S to S+4: each player's age (today's age plus one a season) and stage on the editorial `age_curves` in `config/rankings.yml`, today's starters past their decline age and the share of their points from players before the cliff, picks held per draft (`unavailable` for a draft held, or one beyond every traded or priced draft: whether Sleeper issues it is not known, so it is never called "not issued"), and today's strength, standing and market value. No projected points, records or titles. No `node:` imports |
 | `src/analysis/standings.mjs` | Current seeds: wins, then points-for |
 | `src/analysis/playoffField.mjs` | The projected playoff field and the bubble that decides it |
 | `src/rivalries.mjs` | The declared rivalries (`config/rivalries.yml`): parsing, limits through the safe-input rules, and each team resolved to a roster id through `src/teamIdentity.mjs`. No `node:` imports |
@@ -1098,7 +1098,7 @@ when the projected draft falls inside the five seasons). The edition has no
 and market value ride inside the plan. Its field for the seasons is
 `futureSeasons`, not `projections`, because `projections` already means a
 trade-report entry in the ESPN matrix. Every absence stays an `unavailable`
-entry with its reason: a season's picks (draft held, or not issued yet), the
+entry with its reason: a season's picks (draft held, or issuance not known), the
 strength rating, `otherRosters`, `starterProduction`, `pickValues`.
 
 Ages are today's age plus one per season. Stages come from `age_curves`

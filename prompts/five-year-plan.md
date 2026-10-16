@@ -71,7 +71,8 @@ Stating a guess as if it were a fact is not.
 - A pick with `projectedPick` and `tier` is placed by `draftProjection.rule`
   from today's standings. Call the slot projected. Any other pick has no slot.
 - A season whose `picks` is `unavailable` says why: its draft has been held,
-  or its picks are not issued yet. Never treat that season as holding no
+  or no pick of it has been traded or priced, so whether it is issued is not
+  known. Never say such a draft does not exist. Never treat that season as holding no
   picks, and never invent the picks it will hold.
 
 ### Team strength

@@ -32,8 +32,13 @@ export const FIVE_YEAR_PLAN_SEASONS = 5;
 /** The stages of an age curve, youngest first. */
 export const AGE_CURVE_STAGES = Object.freeze(['rising', 'peak', 'declining', 'cliff']);
 
-/** The reason a draft with no issued picks gives. */
-export const PICKS_NOT_ISSUED = 'not issued yet';
+/**
+ * The reason a draft beyond every traded or priced one gives. Nothing here
+ * reads which drafts Sleeper issues, and no horizon is documented, so the
+ * edition never says a draft is "not issued": it says that it is not known.
+ */
+export const PICKS_ISSUE_UNKNOWN =
+  'no pick of this draft has been traded or priced, so whether it is issued is not known';
 
 export const AGE_BASIS =
   "Each player's age on his record today (Sleeper's), taken as his age at the start of this season and " +
@@ -190,10 +195,11 @@ function picksView(row) {
 }
 
 /**
- * The team's picks for every plan season. A draft already held, a season with
- * no issued picks, or a league with no pick capital is `unavailable` with its
- * reason, never an empty list. A season inside the issued range that no trade
- * or price touched still holds the team's own picks, unpriced.
+ * The team's picks for every plan season. A draft already held, a draft beyond
+ * every traded or priced one (whether it is issued is not known), or a league
+ * with no pick capital is `unavailable` with its reason, never an empty list.
+ * A season inside the traded-or-priced range that no trade or price touched
+ * still holds the team's own picks, unpriced.
  */
 function picksBySeason({ seasons, league, teams, team, pickCapital, pickCapitalUnavailable }) {
   if (!pickCapital) {
@@ -208,11 +214,11 @@ function picksBySeason({ seasons, league, teams, team, pickCapital, pickCapitalU
       if (!isFuturePick({ season }, league)) return [season, { unavailable: "this season's rookie draft has been held" }];
       const seasonRow = row?.seasons.find((entry) => entry.season === season);
       if (seasonRow) return [season, picksView(seasonRow)];
-      if (lastIssued === undefined || season > lastIssued) return [season, { unavailable: PICKS_NOT_ISSUED }];
+      if (lastIssued === undefined || season > lastIssued) return [season, { unavailable: PICKS_ISSUE_UNKNOWN }];
       if (!Number.isInteger(league.draftRounds) || league.draftRounds < 1) {
         return [season, { unavailable: 'the league reports no round count for its drafts' }];
       }
-      // Inside the issued range: no pick of this draft has moved and none is
+      // Inside the traded-or-priced range: no pick of this draft has moved and none is
       // priced, so every team holds its own.
       const own = buildPickCapital({
         teams,

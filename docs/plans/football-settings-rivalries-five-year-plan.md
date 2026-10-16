@@ -157,8 +157,10 @@ The facts for seasons S to S+4 come from `src/analysis/fiveYearPlan.mjs`
   - how many of today's starters are past their position's decline age;
   - how much of today's starter production comes from players still before
     their cliff.
-- **Draft picks** held each season, from `pickCapital`. Seasons Sleeper has
-  not issued picks for yet are `unavailable` ("not issued yet"), never empty.
+- **Draft picks** held each season, from `pickCapital`. A draft already held is
+  `unavailable`, and so is a draft beyond every traded or priced one: no
+  Sleeper horizon of issued drafts is documented, so the reason is "whether it
+  is issued is not known", never "not issued". Never empty.
 - **Context:** today's strength rating and its parts, the team's league rank,
   and its market value.
 - **No projected points, records or titles.** The prompt frames the plan as a

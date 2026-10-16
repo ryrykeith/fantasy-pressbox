@@ -933,8 +933,8 @@ issued. It gives the AI, for this season and the four after it:
   position's decline age, and how much of today's starter production comes
   from players still before their cliff.
 - **Picks.** The picks the team holds for each draft. A draft that has already
-  been held, or one Sleeper has not issued picks for yet, is `unavailable`
-  with that reason, never an empty list.
+  been held, or one no pick of which has been traded or priced (so whether
+  it is issued is not known), is `unavailable` with that reason, never an empty list.
 - **Today.** The team's strength rating and its parts, its place in the
   standings, and its roster's market value.
 

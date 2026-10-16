@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import {
   AGE_BASIS,
   AGE_CURVE_STAGES,
-  PICKS_NOT_ISSUED,
+  PICKS_ISSUE_UNKNOWN,
   ageCurveStage,
   buildFiveYearPlan,
   planSeasons,
@@ -249,7 +249,7 @@ test("the roster by the roster window's age bands, each season", () => {
 
 /* ---------------------------------------------------------- picks */
 
-test('picks per season come from pickCapital; a held draft and an unissued one are unavailable', () => {
+test('picks per season come from pickCapital; a held draft and one of unknown issuance are unavailable', () => {
   const result = plan();
   const picks = Object.fromEntries(result.bySeason.map((season) => [season.season, season.picks]));
   assert.deepEqual(picks['2026'], { unavailable: "this season's rookie draft has been held" });
@@ -261,8 +261,19 @@ test('picks per season come from pickCapital; a held draft and an unissued one a
     picks['2027'].picks.map((pick) => [pick.round, pick.originalTeam]),
     [[1, 'Bye Week Blues'], [1, 'Punt Intended'], [2, 'Bye Week Blues']],
   );
-  for (const season of ['2028', '2029', '2030']) assert.deepEqual(picks[season], { unavailable: PICKS_NOT_ISSUED });
-  assert.equal(PICKS_NOT_ISSUED, 'not issued yet');
+  for (const season of ['2028', '2029', '2030']) assert.deepEqual(picks[season], { unavailable: PICKS_ISSUE_UNKNOWN });
+});
+
+test('with no market and no trades past the next draft, later drafts are not claimed to be unissued', () => {
+  const result = plan({ pickCapital: pickCapital({ market: { unavailable: 'fetch failed' }, traded: [] }) });
+  const picks = Object.fromEntries(result.bySeason.map((season) => [season.season, season.picks]));
+  for (const season of ['2028', '2029', '2030']) {
+    assert.deepEqual(picks[season], { unavailable: PICKS_ISSUE_UNKNOWN });
+  }
+  // No season is ever called "not issued": no Sleeper horizon is documented,
+  // so no season is known not to be issued.
+  assert.ok(!JSON.stringify(result).toLowerCase().includes('not issued'));
+  assert.match(PICKS_ISSUE_UNKNOWN, /is not known$/);
 });
 
 test('a draft inside the issued range that nothing touched holds the team its own picks, unpriced', () => {
@@ -273,7 +284,7 @@ test('a draft inside the issued range that nothing touched holds the team its ow
   assert.equal(picks['2028'].value, null);
   assert.ok(picks['2028'].picks.every((pick) => pick.basis === 'unpriced' && pick.originalTeam === 'Bye Week Blues'));
   assert.equal(picks['2029'].picksHeld, 1);
-  assert.deepEqual(picks['2030'], { unavailable: PICKS_NOT_ISSUED });
+  assert.deepEqual(picks['2030'], { unavailable: PICKS_ISSUE_UNKNOWN });
 });
 
 test('a league with no pick capital gives its reason for every season', () => {
