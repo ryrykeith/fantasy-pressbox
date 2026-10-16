@@ -11,7 +11,7 @@
  *     settings: { displayName, format, season, week, espnRoute, tone,
  *                 roastIntensity, postFormat, maxChars, rankEmoji,
  *                 editorial, rankings,
- *                 declared: { eliminations, rookieDraft, prospects } },
+ *                 declared: { eliminations, rookieDraft, prospects, rivalries } },
  *     seasons: { <season>: { raw, import, snapshots, rankings, predictions,
  *                            market, tankWatch, editions } },
  *   }
@@ -25,7 +25,10 @@
  * nothing (the package's default applies). `editorial` and `rankings` are the
  * league's own config/editorial.yml (less the keys the named settings carry)
  * and config/rankings.yml; `declared` holds config/guillotine.yml's
- * eliminations, config/rookie-draft.yml and every config/prospects.<year>.yml.
+ * eliminations, config/rookie-draft.yml, every config/prospects.<year>.yml and
+ * config/rivalries.yml (null when it declares none). Rivalries are the
+ * operator's own words about real people: they travel in the file the
+ * operator exports and nowhere else.
  *
  * Never in the file: an API key, ESPN_S2, ESPN_SWID, AI_PROVIDER, AI_MODEL,
  * DATA_DIR, OUTPUT_DIR or DEBUG. A folder's .env is read through an allowlist
@@ -44,6 +47,7 @@ import { parseYaml, stringifyYaml } from './lib/yaml.mjs';
 import { parseDeclaredFormatType } from './format.mjs';
 import { EDITIONS, optionNamed } from './options.mjs';
 import { parseProspectBoard } from './prospectBoard.mjs';
+import { RIVALRIES_FILE, parseRivalryTable, rivalryTable } from './rivalries.mjs';
 import { PROVIDER_NAMES, providerDisplayName } from './providers.mjs';
 import {
   ESPN_ROUTES,
@@ -119,7 +123,7 @@ const SETTINGS_KEYS = [
   'rankings',
   'declared',
 ];
-const DECLARED_KEYS = ['eliminations', 'rookieDraft', 'prospects'];
+const DECLARED_KEYS = ['eliminations', 'rookieDraft', 'prospects', 'rivalries'];
 const POST_FORMATS = optionNamed('format').values;
 
 /** The editorial.yml keys the named settings carry; the rest stay in `settings.editorial`. */
@@ -288,11 +292,22 @@ function checkSettings(settings, league) {
     }
   }
 
-  const declared = mapAt(`${field}.declared`, settings.declared, 'a table of eliminations, rookieDraft and prospects');
+  const declared = mapAt(`${field}.declared`, settings.declared, 'a table of eliminations, rookieDraft, prospects and rivalries');
   onlyKeys(`${field}.declared`, declared, DECLARED_KEYS);
   requireKeys(`${field}.declared`, declared, DECLARED_KEYS);
-  for (const key of ['eliminations', 'rookieDraft']) {
+  for (const key of ['eliminations', 'rookieDraft', 'rivalries']) {
     if (declared[key] !== null) mapAt(`${field}.declared.${key}`, declared[key], 'a table, or null');
+  }
+  // The same checks config/rivalries.yml gets. Teams are not resolved here: a
+  // league file holds no team list until history is read, and a rivalry that
+  // no longer resolves is reported by inspectLeague, not refused on import.
+  if (declared.rivalries !== null) {
+    const at = `${field}.declared.rivalries`;
+    try {
+      parseRivalryTable(declared.rivalries, { source: at });
+    } catch (error) {
+      throw new LeagueFileError(at, error.message, { whole: true });
+    }
   }
   mapAt(`${field}.declared.prospects`, declared.prospects, 'a table of draft year to board');
   for (const [year, board] of Object.entries(declared.prospects)) {
@@ -556,7 +571,7 @@ function blankSettings() {
     rankEmoji: { mode: 'default' },
     editorial: null,
     rankings: null,
-    declared: { eliminations: null, rookieDraft: null, prospects: {} },
+    declared: { eliminations: null, rookieDraft: null, prospects: {}, rivalries: null },
   };
 }
 
@@ -638,6 +653,7 @@ const CONFIG_FILES = {
   'config/rankings.yml': 'rankings',
   'config/rookie-draft.yml': 'rookieDraft',
   'config/guillotine.yml': 'guillotine',
+  [RIVALRIES_FILE]: 'rivalries',
 };
 const PROSPECTS_FILE = /^config\/prospects\.(\d{4})\.yml$/;
 const DATA_FILE = /^data\/([a-z-]+)\/(\d{4})\/([^/]+)\.json$/;
@@ -734,6 +750,7 @@ function settingsFromFolder(env, league, layers) {
       eliminations: isMap(layers.guillotine?.eliminations) ? layers.guillotine.eliminations : null,
       rookieDraft: isMap(layers.rookieDraft) ? layers.rookieDraft : null,
       prospects: layers.prospects,
+      rivalries: rivalryTable(parseRivalryTable(layers.rivalries, { source: RIVALRIES_FILE })),
     },
   };
 }
@@ -743,8 +760,8 @@ function settingsFromFolder(env, league, layers) {
  * pairs with paths relative to the folder (`.env`, `config/rankings.yml`,
  * `data/rankings/2026/week-3.json`). Reads an allowlist only:
  *   - from .env, LEAGUE_FILE_ENV_KEYS; every other line is dropped as it is read;
- *   - config/editorial.yml, rankings.yml, rookie-draft.yml, guillotine.yml and
- *     prospects.<YYYY>.yml;
+ *   - config/editorial.yml, rankings.yml, rookie-draft.yml, guillotine.yml,
+ *     rivalries.yml and prospects.<YYYY>.yml;
  *   - data/<kind>/<YYYY>/<name>.json for every kind of history.
  * Everything else, data/cache/ among it, is listed in `skipped` and never
  * opened. A file that cannot be read refuses the whole folder, naming it.
@@ -902,6 +919,7 @@ export function workspaceFromLeagueFile(value) {
   if (settings.rankings) yaml('config/rankings.yml', settings.rankings);
   if (settings.declared.rookieDraft) yaml('config/rookie-draft.yml', settings.declared.rookieDraft);
   if (settings.declared.eliminations) yaml('config/guillotine.yml', { eliminations: settings.declared.eliminations });
+  if (settings.declared.rivalries) yaml(RIVALRIES_FILE, settings.declared.rivalries);
   for (const [year, board] of Object.entries(settings.declared.prospects)) yaml(`config/prospects.${year}.yml`, board);
 
   for (const [season, kinds] of Object.entries(file.seasons)) {

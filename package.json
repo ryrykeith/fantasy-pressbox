@@ -38,6 +38,7 @@
     "config/prospects.example.yml",
     "config/rookie-draft.yml",
     "config/guillotine.yml",
+    "config/rivalries.yml",
     "setup.mjs",
     ".env.example",
     "README.md",

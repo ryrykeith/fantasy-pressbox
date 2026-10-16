@@ -446,6 +446,7 @@ how teams are judged. It is saved as `LEAGUE_FORMAT` in `.env`.
 | **Rankings judge** | This season and the long term: starting lineup, dynasty value, depth, quarterback, future picks | This season only: starting lineup, depth, contender status | Not being last: weekly floor, bye-week exposure, remaining FAAB |
 | **Extra editions** | `tank-watch`, `future-stock` | — | — |
 | **League config** | `rookie-draft.yml`, a prospect board | — | `guillotine.yml` |
+| **Any format** | `rivalries.yml` (optional) | `rivalries.yml` (optional) | `rivalries.yml` (optional) |
 
 **Why guillotine has to be declared.** In a guillotine league the lowest
 scorer each week is eliminated, and the commissioner does that by hand:
@@ -690,7 +691,8 @@ It's a separate developer account that bills per use. See
 Two kinds of settings, in two places:
 
 - **Your league's own settings** live in your league folder: `.env`,
-  `config/rookie-draft.yml`, `config/guillotine.yml` and your prospect board.
+  `config/rookie-draft.yml`, `config/guillotine.yml`, `config/rivalries.yml`
+  and your prospect board.
   Setup writes the first ones for you.
 - **The house style** — `config/editorial.yml`, `config/rankings.yml` and the
   prompts — ships with Fantasy Pressbox. To change it for one league, put a
@@ -968,6 +970,39 @@ with a message naming the entry. A prospect who isn't on the board is not
 discussed. `doctor` reports the board's age and warns once it is **over 45
 days old** — boards move fast in draft season, so refresh it.
 
+### `config/rivalries.yml` — who your league's rivals are
+
+Optional, and any league format. A rivalry is **your** call: Fantasy Pressbox
+never works one out from results, and it ships none. Copy the commented example
+that comes with the package (`config/rivalries.yml`; setup prints its path) into
+your league folder's `config/` and list the pairs:
+
+```yaml
+rivalries:
+  - teams:                  # exactly two, one per line
+      - Bye Week Blues      #   a team name as the platform shows it,
+      - Punt Intended       #   or a roster id such as 3
+    name: The Invented Cup  # optional, up to 60 characters
+    note: Started over a waiver claim.   # optional, one line, up to 200
+```
+
+- **A rename keeps the rivalry.** Teams are matched to rosters the same way
+  `guillotine.yml`'s are, so a team that changes its name is still the rival.
+  A roster id works too.
+- **A mistake stops the command, naming the rivalry** by its place in the list
+  (`rivalry 2`): a team that is not in the league, a name that has meant more
+  than one team, a pair of the same team, or the same pair written twice. The
+  message never repeats your name or note.
+- **Teams go one per line, not in `[brackets]`:** the file reader has no
+  bracket syntax and says so if you try. A name with a colon or `#` in it goes
+  in "double quotes".
+- **Your words stay yours.** The name and note are about real people, so they
+  live only in your league folder and in a league file you export yourself
+  (`export-league` carries `config/rivalries.yml`); they are never part of the
+  package.
+- **`doctor` checks them** against the league's teams and lists any rivalry
+  that no longer resolves (a team that left, a name that was misspelt).
+
 ### Trade values — fetched for you
 
 The trade report quotes market values from
@@ -1092,7 +1127,9 @@ fantasy-pressbox import-league my-league.fantasy-pressbox.json --workspace ~/lea
 ```
 
 The file holds `data/` (except the player list in `data/cache/`) and the
-league's settings from `.env` and `config/`. It never holds your AI keys, ESPN
+league's settings from `.env` and `config/` (including `config/rivalries.yml`,
+which is your own writing about real people, so send the file only to people you
+would tell). It never holds your AI keys, ESPN
 cookies, `AI_PROVIDER`, `AI_MODEL`, `DATA_DIR`, `OUTPUT_DIR` or `DEBUG`: those
 lines are dropped as `.env` is read, and `export-league` lists the ones it left
 out. For an ESPN league, the saved pages go in without their members' IDs and

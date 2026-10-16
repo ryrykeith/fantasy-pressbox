@@ -29,6 +29,7 @@ import {
   serializeLeagueFile,
   storeDataFromLeagueFile,
   stripEspnPersonalData,
+  validateLeagueFile,
   workspaceFromLeagueFile,
 } from '../src/leagueFile.mjs';
 import { LEAGUE_JSON_LIMITS } from '../src/lib/safeInput.mjs';
@@ -335,6 +336,61 @@ test('a folder with a file that cannot be read is refused whole, naming the file
   assert.throws(from({ path: 'data/raw/2026/week-2.json', text: '{ "__proto__": {} }' }), /data\/raw\/2026\/week-2\.json.*__proto__/);
   assert.throws(from({ path: 'config/rookie-draft.yml', text: 'order:\n  - teams: everyone\n' }), /rookie-draft/);
   assert.throws(() => leagueFileFromWorkspace([{ path: 'config/rankings.yml', text: '' }], { surface: 'cli' }), /no \.env/);
+});
+
+test('config/rivalries.yml travels in the league file and comes back as the same file content', () => {
+  const rivalries = [
+    'rivalries:',
+    '  - teams:',
+    '      - Bye Week Blues',
+    '      - Punt Intended',
+    '    name: The Invented Cup',
+    '    note: Started over an invented waiver claim.',
+    '  - teams:',
+    '      - Lowered Expectations',
+    '      - 1',
+    '',
+  ].join('\n');
+  const env = { path: '.env', text: `SLEEPER_LEAGUE_ID=${FAKE_LEAGUE_ID}\n` };
+  assert.ok(readsLeagueFolderPath('config/rivalries.yml'));
+  const { leagueFile, skipped } = leagueFileFromWorkspace([env, { path: 'config/rivalries.yml', text: rivalries }], { surface: 'cli' });
+  assert.deepEqual(skipped, []);
+  assert.deepEqual(leagueFile.settings.declared.rivalries, {
+    rivalries: [
+      { teams: ['Bye Week Blues', 'Punt Intended'], name: 'The Invented Cup', note: 'Started over an invented waiver claim.' },
+      { teams: ['Lowered Expectations', 1] },
+    ],
+  });
+  // Through the serialized file and back to a folder.
+  const written = workspaceFromLeagueFile(parseLeagueFile(serializeLeagueFile(leagueFile)));
+  const entry = written.find((file) => file.path === 'config/rivalries.yml');
+  assert.ok(entry, 'config/rivalries.yml is written');
+  assert.deepEqual(parseYaml(entry.text), parseYaml(rivalries));
+  const again = leagueFileFromWorkspace(written, { surface: 'cli' }).leagueFile;
+  assert.deepEqual(again.settings.declared.rivalries, leagueFile.settings.declared.rivalries);
+});
+
+test('a league that declares no rivalries writes no config/rivalries.yml, and the shipped example declares none', () => {
+  const env = { path: '.env', text: `SLEEPER_LEAGUE_ID=${FAKE_LEAGUE_ID}\n` };
+  const example = readFileSync(join(PACKAGE_ROOT, 'config', 'rivalries.yml'), 'utf8');
+  const { leagueFile } = leagueFileFromWorkspace([env, { path: 'config/rivalries.yml', text: example }], { surface: 'cli' });
+  assert.equal(leagueFile.settings.declared.rivalries, null);
+  assert.ok(!workspaceFromLeagueFile(leagueFile).some((file) => file.path === 'config/rivalries.yml'));
+  assert.equal(newLeagueFile({ provider: 'sleeper', leagueId: FAKE_LEAGUE_ID, surface: 'web' }).settings.declared.rivalries, null);
+});
+
+test('a league file with a bad rivalry is refused, naming the field and never echoing the note', () => {
+  const file = (rivalries) => {
+    const base = newLeagueFile({ provider: 'sleeper', leagueId: FAKE_LEAGUE_ID, surface: 'web' });
+    return { ...base, settings: { ...base.settings, declared: { ...base.settings.declared, rivalries } } };
+  };
+  assert.throws(() => validateLeagueFile(file({ rivalries: [{ teams: ['Only One'] }] })), /settings\.declared\.rivalries.*rivalry 1: teams must list exactly two/);
+  const note = 'private '.repeat(40);
+  assert.throws(
+    () => validateLeagueFile(file({ rivalries: [{ teams: ['A', 'B'], note }] })),
+    (error) => /note longer than 200 characters/.test(error.message) && !error.message.includes('private'),
+  );
+  assert.throws(() => validateLeagueFile(file('nope')), /settings\.declared\.rivalries must be a table/);
 });
 
 /* -------------------------------------------- the round trip, through the CLI */

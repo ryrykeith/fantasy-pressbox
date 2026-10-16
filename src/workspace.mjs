@@ -87,7 +87,7 @@ function leagueConfigFiles(configDir, { fromPackage }) {
 }
 
 /** League config files the package also ships, as empty templates. */
-const TEMPLATE_FILES = ['rookie-draft.yml', 'guillotine.yml'];
+const TEMPLATE_FILES = ['rookie-draft.yml', 'guillotine.yml', 'rivalries.yml'];
 
 /** True when a parsed config file sets at least one value: comments and empty keys are not a declaration. */
 function declaresAnything(value) {

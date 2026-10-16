@@ -296,6 +296,7 @@ function describeLocalSettings(config) {
     `  League settings    .env ${sources.env ? `read from ${sources.env}` : 'not found'}`,
     `                     rookie-draft.yml ${from(sources.rookieDraft)}`,
     `                     guillotine.yml ${from(sources.guillotine)}`,
+    `                     rivalries.yml ${from(sources.rivalries)}`,
   ];
   const overrides = [];
   if (sources.editorialOverride) overrides.push(`config/editorial.yml (${sources.editorialOverride})`);
@@ -407,11 +408,14 @@ async function commandDoctor(config) {
     weekOverride: config.week ?? null,
     espnRoute: league.provider === 'espn' ? config.league.route : null,
     live: espnRoute.imported ? null : { league, week, source },
+    // Declared in config/rivalries.yml; checked against the teams doctor just opened.
+    rivalries: config.rivalries,
+    teams,
   });
   const status = describeInspection(report);
   for (const line of status.week) say(line);
   const staleLeaguePage = reportSavedPages(ctx);
-  for (const line of [...status.coverage, ...status.next]) say(line);
+  for (const line of [...status.coverage, ...status.rivalries, ...status.next]) say(line);
   const mismatch = report.problems.find((problem) => problem.code === 'league-mismatch');
   if (mismatch) say(`  League ID          ✗ ${mismatch.message}`);
   if (espnRoute.imported) for (const line of describeImportToSave(config, { season: league.season, weeks: savedWeeks(ctx) })) say(line);

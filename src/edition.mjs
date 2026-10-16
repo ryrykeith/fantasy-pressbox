@@ -44,6 +44,7 @@ import {
 import { extractJsonBlock } from './validate.mjs';
 import { gradePredictions, withMovement, movementLabel } from './rankingGrades.mjs';
 import { createTeamIdentity, attachRosterIds, presentPreviousRankings, describeUnresolved } from './teamIdentity.mjs';
+import { resolveRivalries } from './rivalries.mjs';
 import { TANK_WATCH_TASK, refuseTankWatch, resolveTankWatchStartWeek } from './tankWatch.mjs';
 import { OPTIONS, editionNamed, optionNamed, quotedValues } from './options.mjs';
 import { ESPN_ROUTE_KEY, withRankEmojiMode } from './settings.mjs';
@@ -369,7 +370,9 @@ export function editionFileStem({ task, season, week }) {
  * - `options`      the edition's options, by OPTIONS name (format, early,
  *                  refreshPlayers, refreshMarket).
  * - `settings`     the league's resolved settings (the CLI's loadConfig
- *                  output); its provider is opened from them.
+ *                  output); its provider is opened from them. Its `rivalries`
+ *                  (src/rivalries.mjs, as declared) are resolved to roster ids
+ *                  once the league's teams are known.
  * - `store`        where the league's history lives (src/storeCore.mjs).
  * - `assets`       the shipped prompts and tables (src/assets.mjs).
  * - `prospectBoardFor(draftYear)`  the league's prospect board for a class,
@@ -382,7 +385,10 @@ export function editionFileStem({ task, season, week }) {
  * → `{ built: false, message }` for a transaction edition about a quiet week
  *   (nothing was built, and that is a result, not an error), or
  *   `{ built: true, task, week, prompt, context, fileStem, league, teams,
- *   store, previousRankings, recordsBlock, tankWatchPath }`.
+ *   store, previousRankings, rivalries, recordsBlock, tankWatchPath }`.
+ *   `rivalries` are the declared rivalries resolved to roster ids
+ *   (resolveRivalries); one naming a team the league does not have refuses
+ *   the edition.
  *   `recordsBlock` says whether the reply ends with a block recordEdition
  *   files; `tankWatchPath` is where a tank watch's projection was saved for
  *   the next one to measure movement from.
@@ -433,6 +439,9 @@ export async function prepareEdition({
   // Null for a provider with no traded future picks (ESPN); every use is gated on that capability.
   const tradedPicks = ctx.draftCapital?.tradedPicks ?? [];
   const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]));
+  // Declared in config/rivalries.yml by team name or roster id; resolved here,
+  // where the teams are known, the way config/guillotine.yml's teams are.
+  const rivalries = resolveRivalries(config.rivalries ?? [], teamIdentityFor({ teams, store, league }));
 
   // Not computed for a format without future picks: Sleeper can still report
   // picks traded for a redraft league's own upcoming draft, so the data being
@@ -739,6 +748,7 @@ export async function prepareEdition({
     teams,
     store,
     previousRankings,
+    rivalries,
     // A transaction edition, a tank watch and a future stock edition end with
     // no machine-readable block: there is no prediction to grade and no
     // ranking to carry movement from.
