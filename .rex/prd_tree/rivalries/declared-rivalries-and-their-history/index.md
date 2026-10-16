@@ -14,6 +14,6 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Declare rivalries in config/rivalries.yml](./declare-rivalries-in-config-rivalries.md) | pending |
+| [Declare rivalries in config/rivalries.yml](./declare-rivalries-in-config-rivalries.md) | completed |
 | [Head-to-head record from saved history](./head-to-head-record-from-saved-history.md) | pending |
 | [Rivalries in the preview, recap and trade report](./rivalries-in-the-preview-recap-and.md) | pending |
