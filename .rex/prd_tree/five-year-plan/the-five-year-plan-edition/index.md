@@ -15,5 +15,6 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Docs and README: presets, strength rating, rivalries, five-year plan](./docs-and-readme-presets-strength.md) | pending |
-| [Five-year plan facts for one team](./five-year-plan-facts-for-one-team.md) | pending |
+| [Five-year plan facts for one team](./five-year-plan-facts-for-one-team.md) | completed |
+| [Five-year plan says a draft is 'not issued yet' when it is only untraded and unpriced](./five-year-plan-says-a-draft-is-not.md) | pending |
 | [The five-year-plan edition and --team](./the-five-year-plan-edition-and-team.md) | pending |
