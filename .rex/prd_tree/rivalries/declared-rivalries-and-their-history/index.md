@@ -17,4 +17,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Declare rivalries in config/rivalries.yml](./declare-rivalries-in-config-rivalries.md) | completed |
 | [Head-to-head record counts a pre-0.1.0 snapshot with no settled flag as a finished week](./head-to-head-record-counts-a-pre-0-1-0.md) | pending |
 | [Head-to-head record from saved history](./head-to-head-record-from-saved-history.md) | completed |
-| [Rivalries in the preview, recap and trade report](./rivalries-in-the-preview-recap-and.md) | pending |
+| [Rivalries in the preview, recap and trade report](./rivalries-in-the-preview-recap-and.md) | completed |
