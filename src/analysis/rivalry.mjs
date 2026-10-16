@@ -8,7 +8,9 @@
  *
  * What counts:
  *   - A week counts only when it is settled, analysed, and both teams' sides
- *     were saved in it. A week still being played (`settled: false`), one with
+ *     were saved in it. A snapshot saved before the `settled` flag counts only
+ *     when the week is known to be over (see isResult). A week still being
+ *     played (`settled: false`), one with
  *     no scores (`played: false`) and a matchup period over several NFL weeks
  *     (ESPN; the snapshot has no analysis) are left out.
  *   - A meeting is a saved game whose two sides are the two teams. A format
@@ -59,9 +61,23 @@ export function readSavedSeasons(store, { through = {} } = {}) {
   return seasons;
 }
 
-/** Whether a saved week is a result: settled, scored, and analysed. */
-function isResult(snapshot) {
-  return snapshot.settled !== false && snapshot.played !== false && Boolean(snapshot.analysis);
+/**
+ * Whether a saved week is a result: settled, scored, and analysed.
+ *
+ * A snapshot written before the `settled` flag (0.1.0) may have been captured
+ * mid-week, so "played" alone is not proof the week was over. An unflagged one
+ * counts only when something else shows the week was final, the same rule as
+ * pipeline.mjs#isSettledSnapshot for the current season:
+ *   - current season (`lastScoredWeek` is a number): its week is at or before it;
+ *   - an earlier season (`lastScoredWeek` null): a later week of that season
+ *     was saved, so this one was certainly over by then.
+ * `settled: true` and `settled: false` are taken at their word.
+ */
+function isResult(snapshot, { lastScoredWeek, lastSavedWeek }) {
+  if (!snapshot.analysis || snapshot.played === false) return false;
+  if (typeof snapshot.settled === 'boolean') return snapshot.settled;
+  if (snapshot.played !== true) return false;
+  return lastScoredWeek === null ? lastSavedWeek > snapshot.week : lastScoredWeek >= snapshot.week;
 }
 
 /** Whether both teams have a side saved in an analysed week. */
@@ -87,6 +103,10 @@ function meetingIn(analysis, [a, b]) {
  * @param seasons  readSavedSeasons' result
  * @param teams    the two roster ids, `[a, b]`; every pair of numbers in the
  *                 result is in this order
+ * @param league   `{ season, lastScoredWeek }`: decides whether an unflagged
+ *                 (pre-0.1.0) snapshot was final; see isResult. Left out, no
+ *                 season is current, so an unflagged week counts only if a
+ *                 later week of its season was saved.
  * @returns `{ teams, covered, notCovered }` and either `unavailable` or:
  *   - `meetings`: how many saved games they played
  *   - `record`: `{ wins, losses, ties }`, the first team's
@@ -98,7 +118,7 @@ function meetingIn(analysis, [a, b]) {
  *   `covered` is `[{ season, weeks }]` (the weeks both teams' sides were saved);
  *   `notCovered` is `[{ season, reason }]`.
  */
-export function headToHead(seasons, teams) {
+export function headToHead(seasons, teams, league = {}) {
   const [a, b] = teams;
   if (a === b) throw new Error('A head-to-head record needs two different teams.');
 
@@ -111,8 +131,17 @@ export function headToHead(seasons, teams) {
       continue;
     }
     const weeks = [];
+    const finality = {
+      lastSavedWeek: Math.max(...snapshots.map((entry) => entry.week)),
+      // The current season's unflagged weeks are judged by the league's last
+      // scored week; with that unknown, none of them is final.
+      lastScoredWeek:
+        String(league.season) === season
+          ? Number.isInteger(league.lastScoredWeek) ? league.lastScoredWeek : -Infinity
+          : null,
+    };
     for (const snapshot of snapshots) {
-      if (!isResult(snapshot) || !bothSaved(snapshot.analysis, teams)) continue;
+      if (!isResult(snapshot, finality) || !bothSaved(snapshot.analysis, teams)) continue;
       weeks.push(snapshot.week);
       const points = meetingIn(snapshot.analysis, teams);
       if (points) meetings.push({ season, week: snapshot.week, points });

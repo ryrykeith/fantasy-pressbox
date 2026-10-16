@@ -147,6 +147,63 @@ test('a week still being played, unscored, or with no analysis is no result and 
   assert.deepEqual(h2h.notCovered, [{ season: '2026', reason: SEASON_NOT_COVERED.NO_WEEK_WITH_BOTH }]);
 });
 
+/** A snapshot as written before the `settled` flag existed. */
+const legacy = (week, games) => {
+  const { settled, ...rest } = snapshot(week, games);
+  return rest;
+};
+
+test('an unflagged snapshot of the current season counts only up to the last scored week', () => {
+  const store = createMemoryStore();
+  store.saveSnapshot('2026', 1, legacy(1, [[1, 100, 2, 90]]));
+  store.saveSnapshot('2026', 2, legacy(2, [[1, 20, 2, 5]])); // captured mid-week
+  const h2h = headToHead(readSavedSeasons(store), [1, 2], { season: '2026', lastScoredWeek: 1 });
+  assert.equal(h2h.meetings, 1);
+  assert.deepEqual(h2h.record, { wins: 1, losses: 0, ties: 0 });
+  assert.deepEqual(h2h.covered, [{ season: '2026', weeks: [1] }]);
+
+  const only = createMemoryStore();
+  only.saveSnapshot('2026', 2, legacy(2, [[1, 20, 2, 5]]));
+  const none = headToHead(readSavedSeasons(only), [1, 2], { season: '2026', lastScoredWeek: 1 });
+  assert.equal(none.unavailable, NO_MEETING_SAVED);
+  assert.deepEqual(none.covered, []);
+  assert.deepEqual(none.notCovered, [{ season: '2026', reason: SEASON_NOT_COVERED.NO_WEEK_WITH_BOTH }]);
+});
+
+test('with the last scored week unknown, no unflagged snapshot of the current season counts', () => {
+  const store = createMemoryStore();
+  store.saveSnapshot('2026', 1, legacy(1, [[1, 100, 2, 90]]));
+  const h2h = headToHead(readSavedSeasons(store), [1, 2], { season: '2026' });
+  assert.equal(h2h.unavailable, NO_MEETING_SAVED);
+  assert.deepEqual(h2h.covered, []);
+});
+
+test('an unflagged snapshot of an earlier season counts only when a later week of that season was saved', () => {
+  const store = createMemoryStore();
+  store.saveSnapshot('2025', 1, legacy(1, [[1, 100, 2, 90]]));
+  store.saveSnapshot('2025', 2, legacy(2, [[1, 70, 2, 80]]));
+  store.saveSnapshot('2025', 3, legacy(3, [[3, 70, 4, 80]])); // the season's last saved week
+  store.saveSnapshot('2026', 1, snapshot(1, [[1, 50, 2, 40]]));
+  const h2h = headToHead(readSavedSeasons(store), [1, 2], { season: '2026', lastScoredWeek: 1 });
+  assert.equal(h2h.meetings, 3);
+  assert.deepEqual(h2h.covered, [{ season: '2025', weeks: [1, 2] }, { season: '2026', weeks: [1] }]);
+
+  // The last saved week of an earlier season is the one that may have been mid-week.
+  const tail = createMemoryStore();
+  tail.saveSnapshot('2025', 1, legacy(1, [[1, 100, 2, 90]]));
+  tail.saveSnapshot('2025', 2, legacy(2, [[1, 1, 2, 0]]));
+  const after = headToHead(readSavedSeasons(tail), [1, 2], { season: '2026', lastScoredWeek: 1 });
+  assert.equal(after.meetings, 1);
+  assert.deepEqual(after.covered, [{ season: '2025', weeks: [1] }]);
+});
+
+test('a snapshot with settled: true counts whatever the last scored week says', () => {
+  const store = createMemoryStore();
+  store.saveSnapshot('2026', 5, snapshot(5, [[1, 100, 2, 90]]));
+  const h2h = headToHead(readSavedSeasons(store), [1, 2], { season: '2026', lastScoredWeek: 1 });
+  assert.equal(h2h.meetings, 1);
+});
+
 test('a guillotine league\'s weeks save no games, so they give no meetings', () => {
   const store = createMemoryStore();
   for (const week of [1, 2, 3]) {

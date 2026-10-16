@@ -697,7 +697,7 @@ export async function prepareEdition({
     const seasons = readSavedSeasons(store, { through });
     rivalryRecords = rivalries.map((rivalry) => ({
       ...rivalry,
-      headToHead: headToHead(seasons, rivalry.rosterIds),
+      headToHead: headToHead(seasons, rivalry.rosterIds, league),
       through,
     }));
   }
