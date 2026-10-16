@@ -28,8 +28,11 @@ import {
   readStrength,
   readTransactions,
   resolveWeek,
+  settledWeeks,
 } from './pipeline.mjs';
 import { FUTURE_STOCK_TASK, refuseFutureStock } from './futureStock.mjs';
+import { FIVE_YEAR_PLAN_TASK, refuseFiveYearPlan, refuseWithoutTeam, resolvePlanTeam } from './fiveYearPlan.mjs';
+import { buildFiveYearPlan } from './analysis/fiveYearPlan.mjs';
 import { normalizeFutureDraftCapital } from './league/draftCapital.mjs';
 import {
   TASKS,
@@ -49,7 +52,7 @@ import { resolveRivalries } from './rivalries.mjs';
 import { headToHead, readSavedSeasons } from './analysis/rivalry.mjs';
 import { TANK_WATCH_TASK, refuseTankWatch, resolveTankWatchStartWeek } from './tankWatch.mjs';
 import { OPTIONS, editionNamed, optionNamed, quotedValues } from './options.mjs';
-import { ESPN_ROUTE_KEY, withRankEmojiMode } from './settings.mjs';
+import { ESPN_ROUTE_KEY, resolveAgeCurves, withRankEmojiMode } from './settings.mjs';
 
 /** How a refusal names a command to run instead. The CLI passes its own, with the program in front. */
 const bareCommand = (name) => name;
@@ -356,11 +359,18 @@ export function teamIdentityFor({ teams, store, league }) {
   });
 }
 
-/** The name an edition's files share: `2026-week03-rankings`, or `2026-preseason-rankings`. */
-export function editionFileStem({ task, season, week }) {
-  return task === 'preseason-rankings'
-    ? `${season}-preseason-rankings`
-    : `${season}-week${String(week).padStart(2, '0')}-${task}`;
+/**
+ * The name an edition's files share: `2026-week03-rankings`, or
+ * `2026-preseason-rankings`. An edition about one team (`rosterId`) names it,
+ * `2026-week03-five-year-plan-team7`, so two teams' plans for the same week
+ * do not overwrite each other.
+ */
+export function editionFileStem({ task, season, week, rosterId = null }) {
+  const stem =
+    task === 'preseason-rankings'
+      ? `${season}-preseason-rankings`
+      : `${season}-week${String(week).padStart(2, '0')}-${task}`;
+  return rosterId === null ? stem : `${stem}-team${rosterId}`;
 }
 
 /**
@@ -370,7 +380,7 @@ export function editionFileStem({ task, season, week }) {
  * - `task`         the edition (EDITIONS in src/options.mjs).
  * - `week`         the week asked for, or undefined to work it out.
  * - `options`      the edition's options, by OPTIONS name (format, early,
- *                  refreshPlayers, refreshMarket).
+ *                  refreshPlayers, refreshMarket, team).
  * - `settings`     the league's resolved settings (the CLI's loadConfig
  *                  output); its provider is opened from them. Its `rivalries`
  *                  (src/rivalries.mjs, as declared) are resolved to roster ids
@@ -425,6 +435,14 @@ export async function prepareEdition({
   // Same two-step as the tank watch: the declared format refuses before
   // Sleeper is contacted, the resolved one once the league is open.
   if (isFutureStock) refuseFutureStock({ formatType: config.leagueFormat });
+  const isFiveYearPlan = task === FIVE_YEAR_PLAN_TASK;
+  // The declared format refuses before the provider is contacted, and so does
+  // a missing --team. Whether the team exists needs the league's teams, so an
+  // unknown or ambiguous one is refused once the league is open.
+  if (isFiveYearPlan) {
+    refuseFiveYearPlan({ formatType: config.leagueFormat });
+    refuseWithoutTeam(options.team, { commandFor });
+  }
   const format = outputFormat(options);
 
   // Without allowStaleLeague: a provider with an import route refuses a saved
@@ -444,6 +462,9 @@ export async function prepareEdition({
   // Declared in config/rivalries.yml by team name or roster id; resolved here,
   // where the teams are known, the way config/guillotine.yml's teams are.
   const rivalries = resolveRivalries(config.rivalries ?? [], teamIdentityFor({ teams, store, league }));
+  if (isFiveYearPlan) refuseFiveYearPlan({ formatType: league.format.type });
+  // Before the week is captured: a typo'd team costs no fetch and writes nothing.
+  const planTeam = isFiveYearPlan ? resolvePlanTeam(options.team, teamIdentityFor({ teams, store, league })) : null;
 
   // Not computed for a format without future picks: Sleeper can still report
   // picks traded for a redraft league's own upcoming draft, so the data being
@@ -500,6 +521,7 @@ export async function prepareEdition({
   let pickCapital = null;
   let strength = null;
   let rivalryRecords = null;
+  let fiveYearPlan = null;
 
   /**
    * The team strength rating, for an edition in STRENGTH_TASKS, from what is
@@ -619,6 +641,32 @@ export async function prepareEdition({
         warn(`Week ${week} has no completed week on disk: production by age cannot be reported yet.`);
       }
       strength = await rateStrength();
+    } else if (isFiveYearPlan) {
+      // The future stock's inputs, for one team: the week's market (a market
+      // that cannot be fetched leaves picks and the roster unpriced, saying
+      // so), the league's pick capital, and the settled weeks today's
+      // starters scored in. Nothing is projected.
+      marketValues = await readMarketValues({ store, league, teams, week, refresh: options.refreshMarket });
+      if (marketValues.unavailable) {
+        warn(`Trade values could not be fetched (${marketValues.unavailable}). Picks and the roster will not be priced.`);
+      }
+      pickCapital = readPickCapital({ league, teams, tradedPicks, market: marketValues, config });
+      draftOrder = captured.draftOrder ?? null;
+      const weeks = settledWeeks({ store, assets, league, teams, players, throughWeek: week });
+      if (!weeks.length) warn(`No settled week is on disk through week ${week}: today's starters have no production to report.`);
+      strength = await rateStrength();
+      fiveYearPlan = buildFiveYearPlan({
+        league,
+        team: planTeam,
+        teams,
+        players,
+        weeks,
+        ageCurves: resolveAgeCurves(config.rankings),
+        pickCapital,
+        strength,
+        market: marketValues,
+      });
+      say(`Planning ${planTeam.name}'s seasons ${fiveYearPlan.seasons[0]} to ${fiveYearPlan.seasons.at(-1)}.`);
     } else if (task === 'preview') {
       // The week has not been played, so the preview gets the pairings plus
       // last week's results — never this week's partial scores.
@@ -706,7 +754,7 @@ export async function prepareEdition({
   // name kept as `formerly`, so a rename reads as a rename and not as a team
   // that appeared from nowhere while another vanished.
   const previousRankings =
-    task === 'preseason-rankings' || isTransactionEdition || isTankWatch || isFutureStock
+    task === 'preseason-rankings' || isTransactionEdition || isTankWatch || isFutureStock || isFiveYearPlan
       ? null
       : presentPreviousRankings(store.loadPreviousRankings(league.season, week), teamIdentityFor(ctx));
   if (previousRankings) {
@@ -745,6 +793,7 @@ export async function prepareEdition({
     pickCapital,
     strength,
     rivalryRecords,
+    fiveYearPlan,
     format,
   });
 
@@ -762,16 +811,16 @@ export async function prepareEdition({
     format,
     prompt,
     context,
-    fileStem: editionFileStem({ task, season: league.season, week }),
+    fileStem: editionFileStem({ task, season: league.season, week, rosterId: planTeam?.rosterId ?? null }),
     league,
     teams,
     store,
     previousRankings,
     rivalries,
-    // A transaction edition, a tank watch and a future stock edition end with
-    // no machine-readable block: there is no prediction to grade and no
-    // ranking to carry movement from.
-    recordsBlock: !(isTransactionEdition || isTankWatch || isFutureStock),
+    // A transaction edition, a tank watch, a future stock edition and a
+    // five-year plan end with no machine-readable block: there is no
+    // prediction to grade and no ranking to carry movement from.
+    recordsBlock: !(isTransactionEdition || isTankWatch || isFutureStock || isFiveYearPlan),
     tankWatchPath,
   };
 }

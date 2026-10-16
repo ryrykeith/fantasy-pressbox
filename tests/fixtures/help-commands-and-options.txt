@@ -13,6 +13,7 @@ Commands
 
   tank-watch                    Build the rookie draft tank watch (dynasty leagues, second half)
   future-stock                  Rank teams on the next three seasons: age, production, picks (dynasty leagues)
+  five-year-plan                Plan one team's next five seasons, chosen with --team (dynasty leagues)
 
   survival-preview              Build the weekly survival preview (guillotine leagues)
   chop-recap                    Build the weekly chop recap and awards (guillotine leagues)
@@ -36,6 +37,7 @@ Options
   --refresh-players             Re-download the NFL player list instead of using the cache
   --refresh-market              Fetch trade values again instead of reusing the week's saved ones
   --early                       Run the tank watch before its start week
+  --team <name|id>              Which team a five-year plan is about: its name or roster id
   --workspace <folder>          The league folder: its .env, config, data and output
                                 (default: $PRESSBOX_WORKSPACE, else the current folder)
   --help                        Show this message

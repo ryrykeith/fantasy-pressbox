@@ -36,6 +36,7 @@ import { describeDraftOrder } from './rookieDraft.mjs';
 import { describeProspectBoard } from './prospectBoard.mjs';
 import { resolveWeek, captureWeek, importSavedFiles, readEliminationLedger } from './pipeline.mjs';
 import { FUTURE_STOCK_TASK } from './futureStock.mjs';
+import { FIVE_YEAR_PLAN_TASK } from './fiveYearPlan.mjs';
 import { describeInspection, inspectLeague } from './inspect.mjs';
 import { PACKAGE_NAME, PACKAGE_VERSION } from './version.mjs';
 import { systemPromptOnly, taskPromptOnly } from './promptContext.mjs';
@@ -212,6 +213,7 @@ Examples
   ${cli} transactions --week 3 --generate
   ${cli} tank-watch --week 9
   ${cli} future-stock --week 9 --generate
+  ${cli} five-year-plan --team 3
 `;
 }
 
@@ -1108,6 +1110,7 @@ async function main() {
     case 'transactions':
     case TANK_WATCH_TASK:
     case FUTURE_STOCK_TASK:
+    case FIVE_YEAR_PLAN_TASK:
       return commandEdition(config, args, editionForCommand(command).name);
     case 'record':
       return commandRecord(config, args);

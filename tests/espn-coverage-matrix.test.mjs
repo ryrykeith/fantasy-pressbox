@@ -10,6 +10,7 @@ import { normalizeLeague } from '../src/espn/normalize.mjs';
 import { espnProvider } from '../src/espn/provider.mjs';
 import { capabilityGap, EDITION_CAPABILITIES, refuseEditionWithoutCapability } from '../src/format.mjs';
 import { FUTURE_STOCK_TASK } from '../src/futureStock.mjs';
+import { FIVE_YEAR_PLAN_TASK } from '../src/fiveYearPlan.mjs';
 import { captureWeek, readMarketValues, readStrength, readTransactions } from '../src/pipeline.mjs';
 import { buildContext, describePlayer, STRENGTH_TASKS, TASKS } from '../src/promptContext.mjs';
 import { resolveSettings } from '../src/settings.mjs';
@@ -94,7 +95,7 @@ function cliCommands() {
   const source = read(join(SRC, 'cli.mjs'));
   const main = source.slice(source.indexOf('async function main()'));
   assert.ok(main.length < source.length, 'src/cli.mjs has no main()');
-  const constants = { TANK_WATCH_TASK, FUTURE_STOCK_TASK };
+  const constants = { TANK_WATCH_TASK, FUTURE_STOCK_TASK, FIVE_YEAR_PLAN_TASK };
   const commands = new Set();
   for (const [, name] of main.matchAll(/case '([a-z-]+)':/g)) commands.add(name);
   for (const [, constant] of main.matchAll(/case ([A-Z_]+):/g)) {

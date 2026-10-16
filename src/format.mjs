@@ -110,6 +110,7 @@ export function hasFutureDraftCapital(format, capabilities = null) {
 export const EDITION_CAPABILITIES = Object.freeze({
   'tank-watch': 'futurePicks',
   'future-stock': 'futurePicks',
+  'five-year-plan': 'futurePicks',
   'survival-preview': 'guillotine',
   'chop-recap': 'guillotine',
   'survival-rankings': 'guillotine',

@@ -1008,6 +1008,7 @@ editions that no command builds yet.
 | `waiver-report` | **Supported** by `buildContext`, but no command builds it yet: the `transactions` command builds trade reports only. Under rolling waivers, bids get the `waiverBids` entry. | **assumed**: open questions 6 and 24. Built in process by `tests/espn-editions.test.mjs`. |
 | `tank-watch` | **Refused**: "ESPN traded picks are not read in this version, so who holds which future draft pick is not known". Refused before ESPN is contacted, again with the opened league, and again in `buildContext`. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `future-stock` | **Refused**: "ESPN traded picks are not read in this version, so who holds which future draft pick is not known". Refused in the same three places as `tank-watch`. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `five-year-plan` | **Refused**: "ESPN traded picks are not read in this version, so who holds which future draft pick is not known". Refused in the same three places as `tank-watch`, before `--team` is resolved. | **verified**: `tests/espn-capability-gates.test.mjs`, `tests/five-year-plan-edition.test.mjs`. |
 | `survival-preview` | **Refused**: "guillotine leagues are not supported on ESPN in this version (v1)" (decision 9). Refused before ESPN is contacted, whatever the declared format. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `chop-recap` | **Refused**: "guillotine leagues are not supported on ESPN in this version (v1)" (decision 9). | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `survival-rankings` | **Refused**: "guillotine leagues are not supported on ESPN in this version (v1)" (decision 9). | **verified**: `tests/espn-capability-gates.test.mjs`. |
@@ -1053,7 +1054,7 @@ never null.
 | `marketValues`, `marketCredit` | **Supported**: priced by `espnId` when FantasyCalc can be reached; a player with no `espnId` is unpriced. When it cannot be reached the edition carries the ordinary `marketValues` unavailable entry and no credit: the credit goes only with values. | **verified**: `tests/espn-editions.test.mjs`. |
 | `futureDraftCapital` | **Unavailable** in the ranking editions (the `futureDraftCapital` entry): ESPN traded picks are not read, and a redraft league has none. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `strength` | **Supported** in the ranking editions: the team strength rating from lineup, depth and market value. In a declared dynasty, `draft_capital` (ESPN traded picks are not read) and `age_window` (no player age is read from ESPN) are always in `strength.unavailable`, and market value is too when FantasyCalc cannot be reached; the other weights are scaled back up to 1.0. | **verified**: `tests/espn-coverage-matrix.test.mjs`, `tests/strength.test.mjs`. |
-| `draftCapital`, `draftProjection`, `prospectBoard`, `rosterWindow`, `tankWatch` | **Refused**: only `tank-watch`, `future-stock` and a trade report's traded picks carry them. The first two are refused, and an ESPN trade carries no picks. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `draftCapital`, `draftProjection`, `prospectBoard`, `rosterWindow`, `tankWatch`, `fiveYearPlan` | **Refused**: only `tank-watch`, `future-stock`, `five-year-plan` and a trade report's traded picks carry them. The first three are refused, and an ESPN trade carries no picks. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `survivorCount`, `eliminationHistory`, `faabMarket`, `dangerBoard`, `byeExposure` | **Refused**: guillotine facts, and guillotine is refused on ESPN (decision 9). | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `unavailable` | **Supported**: always present, holding the entries below. | **verified**: `tests/espn-coverage-matrix.test.mjs`. |
 
@@ -1094,9 +1095,11 @@ reason.
 | `faabMarket` | **Never**: survival editions only, refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 | `marketValuesAtTradeTime` | **Emitted** beside market values: values from the moment each trade was made are not available. | **verified**: `tests/espn-editions.test.mjs`. |
 | `previousTankWatch` | **Never**: `tank-watch` only, refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
-| `pickTradeHistory` | **Never**: `tank-watch` and `future-stock` only, both refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
-| `finalDraftOrder`, `laterRoundPickNumbers`, `projectedDraftSlot`, `projectedSlotAtTradeTime`, `boardRankIsNotAvailability`, `prospectBoard`, `prospectsNotOnBoard` | **Never**: they describe future picks, which only `tank-watch`, `future-stock` and a trade report's traded picks carry. The first two are refused, and an ESPN trade carries no picks because ESPN traded picks are not read. | **verified**: `tests/espn-capability-gates.test.mjs`. |
-| `previousFutureStock`, `playerProjections`, `productionByAge`, `pickValues` | **Never**: `future-stock` only, refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `pickTradeHistory` | **Never**: `tank-watch`, `future-stock` and `five-year-plan` only, all refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `finalDraftOrder`, `laterRoundPickNumbers`, `projectedDraftSlot`, `projectedSlotAtTradeTime`, `boardRankIsNotAvailability`, `prospectBoard`, `prospectsNotOnBoard` | **Never**: they describe future picks, which only `tank-watch`, `future-stock`, `five-year-plan` and a trade report's traded picks carry. The first three are refused, and an ESPN trade carries no picks because ESPN traded picks are not read. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `previousFutureStock`, `playerProjections`, `productionByAge` | **Never**: `future-stock` only, refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `pickValues` | **Never**: `future-stock` and `five-year-plan` only, both refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
+| `futureSeasons`, `otherRosters`, `starterProduction` | **Never**: `five-year-plan` only, refused on ESPN. | **verified**: `tests/espn-capability-gates.test.mjs`. |
 
 ## Open questions
 

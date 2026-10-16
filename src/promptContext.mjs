@@ -26,6 +26,13 @@ import { prospectBoardView } from './prospectBoard.mjs';
 import { TANK_WATCH_TASK, tankWatchPrize, tankWatchUnavailable, tankWatchView } from './tankWatch.mjs';
 import { draftProjectionView, pickProjection, tradePicksUnavailable, tradeProspectBoard } from './tradePicks.mjs';
 import { FUTURE_STOCK_TASK, futureStockUnavailable, futureStockView, refuseFutureStock } from './futureStock.mjs';
+import {
+  FIVE_YEAR_PLAN_TASK,
+  fiveYearPlanUnavailable,
+  fiveYearPlanView,
+  planQuotesMarket,
+  refuseFiveYearPlan,
+} from './fiveYearPlan.mjs';
 
 const TASK_PROMPTS = {
   'preseason-rankings': 'preseason-power-rankings.md',
@@ -40,6 +47,7 @@ const TASK_PROMPTS = {
   'waiver-report': 'waiver-report.md',
   [TANK_WATCH_TASK]: 'tank-watch.md',
   [FUTURE_STOCK_TASK]: 'future-stock.md',
+  [FIVE_YEAR_PLAN_TASK]: 'five-year-plan.md',
 };
 
 export const TASKS = Object.keys(TASK_PROMPTS);
@@ -56,9 +64,10 @@ export const TRANSACTION_TASKS = ['trade-report', 'waiver-report'];
  * Editions that get no incidental `transactions` colour. A transaction edition
  * carries the full structure instead. A tank watch and a future stock edition
  * are about who holds which pick, and the generic "do not mention trades"
- * absence would forbid the very ownership they report.
+ * absence would forbid the very ownership they report. A five-year plan is
+ * the same, and its options (who to sell, which picks to spend) are trades.
  */
-const WITHOUT_TRANSACTION_COLOUR = [...TRANSACTION_TASKS, TANK_WATCH_TASK, FUTURE_STOCK_TASK];
+const WITHOUT_TRANSACTION_COLOUR = [...TRANSACTION_TASKS, TANK_WATCH_TASK, FUTURE_STOCK_TASK, FIVE_YEAR_PLAN_TASK];
 
 /**
  * Editions about a week that has not been played yet.
@@ -1074,6 +1083,7 @@ export function buildContext({
   pickCapital = null,
   strength = null,
   rivalryRecords = null,
+  fiveYearPlan = null,
   format = 'sleeper',
 }) {
   // What the league's provider can supply. Third line of defence for an
@@ -1172,12 +1182,13 @@ export function buildContext({
       });
     }
     if (byeExposure?.length) context.byeExposure = byeExposureView(byeExposure, players);
-  } else if (!ranking && task !== TANK_WATCH_TASK && task !== FUTURE_STOCK_TASK) {
+  } else if (!ranking && ![TANK_WATCH_TASK, FUTURE_STOCK_TASK, FIVE_YEAR_PLAN_TASK].includes(task)) {
     // A tank watch is left out: its draft order already carries every team's
     // record and points, and a second ordering on a different key (wins
     // first, not the rule's sort) invites the model to print that one instead.
     // A future stock edition's `teams` carries every record too, and a
-    // standings table would invite ranking on this season alone.
+    // standings table would invite ranking on this season alone. A five-year
+    // plan carries its team's place (`standing`) and nothing about the rest.
     context.standings = teams
       .slice()
       .sort(
@@ -1387,6 +1398,21 @@ export function buildContext({
     if (prize) context.prospectBoard = prospectBoardView(prize);
   }
 
+  // One team's five seasons. Its strength rating, standing and market value
+  // ride inside the plan, for that team alone: the edition is about nobody
+  // else. Absent outside dynasty; buildPrompt refuses the edition then.
+  if (task === FIVE_YEAR_PLAN_TASK && fiveYearPlan && holdsFuturePicks && !eliminates) {
+    context.fiveYearPlan = fiveYearPlanView(fiveYearPlan);
+    if (draftOrder && fiveYearPlan.bySeason.some(({ season }) => season === draftOrder.draftSeason)) {
+      context.draftProjection = draftProjectionView(draftOrder, {
+        rule: config.rookieDraft?.order,
+        teamCount: teams.length,
+        playoffTeams: league.playoffTeams,
+        asOfWeek: league.lastScoredWeek ?? week,
+      });
+    }
+  }
+
   // The rating the code computed. Not for a format where teams are chopped:
   // the survival rankings judge the floor, a different question.
   if (strength && STRENGTH_TASKS.includes(task) && !eliminates) context.strength = strengthView(strength);
@@ -1402,7 +1428,12 @@ export function buildContext({
   }
 
   // Only an edition that actually received FantasyCalc values owes the credit.
-  if (context.marketValues || context.draftCapital?.valueSource || context.strength?.valueSource) {
+  if (
+    context.marketValues ||
+    context.draftCapital?.valueSource ||
+    context.strength?.valueSource ||
+    (context.fiveYearPlan && planQuotesMarket(fiveYearPlan))
+  ) {
     context.marketCredit = marketCreditView();
   }
 
@@ -1420,6 +1451,7 @@ export function buildContext({
     prize,
     tradedPicks,
     futureStock,
+    fiveYearPlan: context.fiveYearPlan ? fiveYearPlan : null,
     pickMarketUnavailable: pickCapital?.marketUnavailable ?? null,
     transactionsUnavailable,
     league,
@@ -1460,6 +1492,7 @@ function describeMissingContext({
   prize = null,
   tradedPicks = [],
   futureStock = null,
+  fiveYearPlan = null,
   pickMarketUnavailable = null,
   transactionsUnavailable = false,
   league = null,
@@ -1646,6 +1679,16 @@ function describeMissingContext({
           draftProjection: context.draftProjection ?? null,
           prize,
           marketUnavailable: pickMarketUnavailable,
+        }),
+      );
+    }
+  } else if (task === FIVE_YEAR_PLAN_TASK) {
+    if (fiveYearPlan) {
+      missing.push(
+        ...fiveYearPlanUnavailable({
+          plan: fiveYearPlan,
+          draftProjection: context.draftProjection ?? null,
+          marketUnavailable: pickMarketUnavailable ?? marketUnavailable,
         }),
       );
     }
@@ -2060,6 +2103,19 @@ export function buildPrompt({ task, context, assets }) {
       throw new Error(
         `Cannot build a ${FUTURE_STOCK_TASK}: the roster window and the draft capital are not in the context. ` +
           'Pass readRosterWindow and readPickCapital (src/pipeline.mjs) to buildContext.',
+      );
+    }
+  }
+
+  // A five-year plan is about one dynasty team's seasons. prepareEdition
+  // refuses the format and an unknown team first; this catches a caller that
+  // reaches here directly.
+  if (task === FIVE_YEAR_PLAN_TASK) {
+    refuseFiveYearPlan({ formatType: context.league.format?.type ?? 'unknown' });
+    if (!context.fiveYearPlan) {
+      throw new Error(
+        `Cannot build a ${FIVE_YEAR_PLAN_TASK}: the plan is not in the context. Pass buildFiveYearPlan's ` +
+          '(src/analysis/fiveYearPlan.mjs) output to buildContext as `fiveYearPlan`.',
       );
     }
   }

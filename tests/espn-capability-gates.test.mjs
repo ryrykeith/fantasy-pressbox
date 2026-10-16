@@ -108,7 +108,7 @@ function assertEntry(context, field, reason) {
 
 // --- Refusals -------------------------------------------------------------------
 
-for (const task of ['tank-watch', 'future-stock']) {
+for (const task of ['tank-watch', 'future-stock', 'five-year-plan']) {
   test(`${task} is refused on ESPN: its traded picks are not read in this version`, () => {
     for (const formatType of [null, 'dynasty', 'redraft']) {
       assert.throws(
@@ -152,6 +152,7 @@ test('a declared guillotine on ESPN refuses every edition, naming the reason', (
 test('a Sleeper league is refused none of the capability-gated editions', () => {
   assert.deepEqual(Object.keys(EDITION_CAPABILITIES).sort(), [
     'chop-recap',
+    'five-year-plan',
     'future-stock',
     'survival-preview',
     'survival-rankings',
@@ -168,6 +169,7 @@ test('the opened ESPN league is refused again when a context is built for a refu
   const week = await espnWeek(t, { leagueFormat: 'dynasty' });
   assert.throws(() => espnContext('tank-watch', week), /ESPN traded picks are not read in this version/);
   assert.throws(() => espnContext('future-stock', week), /ESPN traded picks are not read in this version/);
+  assert.throws(() => espnContext('five-year-plan', week), /ESPN traded picks are not read in this version/);
   assert.throws(() => espnContext('chop-recap', week), /guillotine leagues are not supported on ESPN/);
 });
 
@@ -206,6 +208,8 @@ function runCli(args, root, log) {
 const CLI_REFUSALS = [
   { command: 'tank-watch', format: 'dynasty', reason: /ESPN traded picks are not read in this version/ },
   { command: 'future-stock', format: 'dynasty', reason: /ESPN traded picks are not read in this version/ },
+  // Refused for ESPN ahead of the missing --team: the provider gap is the reason.
+  { command: 'five-year-plan', format: 'dynasty', reason: /ESPN traded picks are not read in this version/ },
   // Undeclared: told ESPN cannot run one, not to declare LEAGUE_FORMAT=guillotine.
   { command: 'survival-preview', format: null, reason: /guillotine leagues are not supported on ESPN in this version/ },
   { command: 'chop-recap', format: null, reason: /guillotine leagues are not supported on ESPN in this version/ },
