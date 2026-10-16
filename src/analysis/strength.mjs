@@ -135,8 +135,12 @@ function lineupAndDepth(rosterId, { window, players, slots, shortWeekStarters })
   };
 }
 
-/** `market_value` for one team: today's roster at the snapshot's prices. */
-function marketValue(team, market) {
+/**
+ * `market_value` for one team: today's roster at the snapshot's prices.
+ * `{ value, pricedPlayers, unpricedPlayers }`, or `{ value: null, reason }`
+ * when the market prices no one on it. The five-year plan reads it too.
+ */
+export function rosterMarketValue(team, market) {
   let value = 0;
   let priced = 0;
   let unpriced = 0;
@@ -311,7 +315,7 @@ export function buildStrength({
     }
   }
   if (wanted('market_value')) {
-    for (const team of teams) values.get(team.rosterId).market_value = marketValue(team, market);
+    for (const team of teams) values.get(team.rosterId).market_value = rosterMarketValue(team, market);
   }
   if (wanted('age_window')) {
     const ages = ageWindows(teams, { window, players });

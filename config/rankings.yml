@@ -225,6 +225,48 @@ strength_inputs:
   short_week_starters: 2   # how many of a week's best starters a short week
                             # loses, for depth
 
+# Age curves: where a player sits in his career at a given age, by position.
+# Read by the five-year plan (src/analysis/fiveYearPlan.mjs), which places
+# each rostered player on his position's curve in each of the next five
+# seasons. Like the weights above these are EDITORIAL JUDGEMENT, not a fact
+# about any player: football careers do not end on a birthday, and a league
+# that reads its positions differently should change them.
+#
+# Each position has three ages, each the first age of a stage:
+#
+#   peak      the first peak season; younger is `rising`
+#   decline   the first declining season (the "decline age")
+#   cliff     the first season past the cliff, when production usually stops
+#
+# so a player is rising below `peak`, at peak from `peak` to `decline` - 1,
+# declining from `decline` to `cliff` - 1, and at the cliff from `cliff` on.
+# They must rise strictly: peak < decline < cliff.
+#
+# The shipped curves say what the future stock prompt says about positions:
+# running backs age out first (a 29-year-old is near the end), quarterbacks
+# last (a 29-year-old can have five good years left), and wide receivers and
+# tight ends sit in between. A position with no curve here (a kicker, any
+# defensive player) gets no stage, and says so; a team defense has no age.
+# A league's own config/rankings.yml may add a position or change one age;
+# the ages it leaves out keep the values below.
+age_curves:
+  QB:
+    peak: 26
+    decline: 34       # 29 through 33 at peak: five good years at 29
+    cliff: 37
+  RB:
+    peak: 23
+    decline: 27       # the earliest decline of any position
+    cliff: 30         # 29 is the last season before the cliff: near the end
+  WR:
+    peak: 24
+    decline: 29
+    cliff: 32
+  TE:
+    peak: 25          # tight ends take longest to arrive
+    decline: 30
+    cliff: 33
+
 weekly:
   # How far a team should normally move in one week. One Sunday is a very
   # small sample and the rankings should act like it.

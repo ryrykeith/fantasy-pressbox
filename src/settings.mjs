@@ -190,11 +190,29 @@ const DEFAULT_STRENGTH_WEIGHTS = {
  */
 const DEFAULT_STRENGTH_INPUTS = { lineup_weeks: 4, short_week_starters: 2 };
 
+/**
+ * Per-position age curves for the five-year plan (src/analysis/fiveYearPlan.mjs):
+ * the first age of the peak, declining and cliff stages. Editorial judgement,
+ * kept in step with config/rankings.yml, which says why (the five-year plan
+ * test holds the two together and checks them against the future stock
+ * prompt's statements about positions).
+ */
+const DEFAULT_AGE_CURVES = {
+  QB: { peak: 26, decline: 34, cliff: 37 },
+  RB: { peak: 23, decline: 27, cliff: 30 },
+  WR: { peak: 24, decline: 29, cliff: 32 },
+  TE: { peak: 25, decline: 30, cliff: 33 },
+};
+
+/** The ages an age curve has, in the order they must rise. */
+export const AGE_CURVE_KEYS = Object.freeze(['peak', 'decline', 'cliff']);
+
 export const DEFAULT_RANKINGS = {
   weights: DEFAULT_RANKING_WEIGHTS,
   presets: DEFAULT_RANKING_PRESETS,
   strength: DEFAULT_STRENGTH_WEIGHTS,
   strength_inputs: DEFAULT_STRENGTH_INPUTS,
+  age_curves: DEFAULT_AGE_CURVES,
   weekly: { max_normal_movement: 3, allow_exceptional_movement: true },
 };
 
@@ -567,6 +585,53 @@ function validateStrengthSettings(rankings) {
   }
 }
 
+/** What an age curve's position key may look like: Sleeper's position codes (QB, RB, DL, K). */
+const POSITION_KEY = /^[A-Z][A-Z0-9_]*$/;
+
+/**
+ * Checks `age_curves` at load: a table of positions, each holding only
+ * `peak`, `decline` and `cliff`, every one a whole-number age from 15 to 50,
+ * rising strictly. A team defense is refused: it has no age.
+ */
+function validateAgeCurves(rankings) {
+  const curves = rankings.age_curves ?? {};
+  if (!isTable(curves)) throw new Error('age_curves in config/rankings.yml must be a table of curves by position');
+  for (const [position, curve] of Object.entries(curves)) {
+    const path = `age_curves.${position} in config/rankings.yml`;
+    if (!POSITION_KEY.test(position)) {
+      throw new Error(`${path} is not a position: use the position code in capitals, such as QB or RB.`);
+    }
+    if (position === 'DEF') throw new Error(`${path} cannot have an age curve: a team defense has no age.`);
+    if (!isTable(curve)) throw new Error(`${path} must be a table of ${AGE_CURVE_KEYS.join(', ')}`);
+    const unknown = Object.keys(curve).filter((key) => !AGE_CURVE_KEYS.includes(key));
+    if (unknown.length) {
+      throw new Error(`${path} has ${unknown.join(', ')}, which it does not read. A curve has: ${AGE_CURVE_KEYS.join(', ')}.`);
+    }
+    for (const key of AGE_CURVE_KEYS) {
+      const age = curve[key];
+      if (!Number.isInteger(age) || age < 15 || age > 50) {
+        throw new Error(`age_curves.${position}.${key} in config/rankings.yml is ${JSON.stringify(age)}, not a whole-number age from 15 to 50.`);
+      }
+    }
+    if (!(curve.peak < curve.decline && curve.decline < curve.cliff)) {
+      throw new Error(
+        `${path} has peak ${curve.peak}, decline ${curve.decline} and cliff ${curve.cliff}; ` +
+          'each stage must start later than the one before (peak < decline < cliff).',
+      );
+    }
+  }
+}
+
+/**
+ * The age curves the five-year plan places players on, by position:
+ * `{ QB: { peak, decline, cliff }, ... }`. Checked at load (validateAgeCurves).
+ */
+export function resolveAgeCurves(rankings) {
+  return Object.fromEntries(
+    Object.entries(rankings?.age_curves ?? DEFAULT_AGE_CURVES).map(([position, curve]) => [position, { ...curve }]),
+  );
+}
+
 /**
  * Checks the `preset` setting and the `presets` table at load, before any
  * league format is known: the name is a word, `balanced` is not redefined
@@ -794,6 +859,7 @@ export function resolveSettings({ defaults = {}, league = {}, overrides = {}, so
   validateRankingWeights(rankings.weights);
   validateRankingPresets(rankings);
   validateStrengthSettings(rankings);
+  validateAgeCurves(rankings);
 
   // Checked even for a league that is not guillotine: a typo in a ledger nobody
   // is running today is still a typo, found before any command runs.
