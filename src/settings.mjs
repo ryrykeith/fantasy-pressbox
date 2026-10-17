@@ -118,10 +118,129 @@ const DEFAULT_RANKING_WEIGHTS = {
   },
 };
 
+/**
+ * The ranking presets other than `balanced`, keyed by preset name and then by
+ * league format. `balanced` is not in this table: it is the per-format sets
+ * above, so a league that names no preset ranks exactly as it always has.
+ *
+ * The values are editorial choices, not facts, and kept in step with
+ * config/rankings.yml, which says why each one is what it is; this is only the
+ * fallback for a missing file (tests/rankings-presets.test.mjs holds the two
+ * together). A preset also carries the strength rating's weights, as
+ * `presets.<name>.strength.<format>`, beside its `weights`.
+ */
+const DEFAULT_RANKING_PRESETS = {
+  'win-now': {
+    weights: {
+      dynasty: {
+        starting_lineup: 0.4,
+        dynasty_value: 0.1,
+        depth: 0.2,
+        quarterback: 0.1,
+        future_draft_capital: 0.05,
+        roster_flexibility: 0.05,
+        contender_viability: 0.1,
+      },
+      redraft: {
+        starting_lineup: 0.5,
+        depth: 0.15,
+        quarterback: 0.1,
+        roster_flexibility: 0.05,
+        contender_viability: 0.2,
+      },
+    },
+    strength: {
+      dynasty: { lineup: 0.45, depth: 0.15, market_value: 0.2, age_window: 0.1, draft_capital: 0.1 },
+      redraft: { lineup: 0.7, depth: 0.1, market_value: 0.2 },
+    },
+  },
+  rebuild: {
+    weights: {
+      dynasty: {
+        starting_lineup: 0.15,
+        dynasty_value: 0.35,
+        depth: 0.1,
+        quarterback: 0.1,
+        future_draft_capital: 0.25,
+        roster_flexibility: 0.05,
+      },
+    },
+    strength: {
+      dynasty: { lineup: 0.15, depth: 0.05, market_value: 0.3, age_window: 0.25, draft_capital: 0.25 },
+    },
+  },
+};
+
+/**
+ * The team strength rating's weights (src/analysis/strength.mjs) for the
+ * `balanced` preset, by league format. Editorial choices like the ranking
+ * weights, kept in step with config/rankings.yml, which says why (the presets
+ * test holds the two together). Guillotine has no set: its leagues get no
+ * strength rating.
+ */
+const DEFAULT_STRENGTH_WEIGHTS = {
+  dynasty: { lineup: 0.35, depth: 0.1, market_value: 0.25, age_window: 0.15, draft_capital: 0.15 },
+  redraft: { lineup: 0.6, depth: 0.2, market_value: 0.2 },
+};
+
+/**
+ * What the strength rating reads: how many of the latest settled weeks
+ * (`lineup_weeks`) and how many of a week's top starters a short week loses
+ * (`short_week_starters`, for `depth`).
+ */
+const DEFAULT_STRENGTH_INPUTS = { lineup_weeks: 4, short_week_starters: 2 };
+
+/**
+ * Per-position age curves for the five-year plan (src/analysis/fiveYearPlan.mjs):
+ * the first age of the peak, declining and cliff stages. Editorial judgement,
+ * kept in step with config/rankings.yml, which says why (the five-year plan
+ * test holds the two together and checks them against the future stock
+ * prompt's statements about positions).
+ */
+const DEFAULT_AGE_CURVES = {
+  QB: { peak: 26, decline: 34, cliff: 37 },
+  RB: { peak: 23, decline: 27, cliff: 30 },
+  WR: { peak: 24, decline: 29, cliff: 32 },
+  TE: { peak: 25, decline: 30, cliff: 33 },
+};
+
+/** The ages an age curve has, in the order they must rise. */
+export const AGE_CURVE_KEYS = Object.freeze(['peak', 'decline', 'cliff']);
+
 export const DEFAULT_RANKINGS = {
   weights: DEFAULT_RANKING_WEIGHTS,
+  presets: DEFAULT_RANKING_PRESETS,
+  strength: DEFAULT_STRENGTH_WEIGHTS,
+  strength_inputs: DEFAULT_STRENGTH_INPUTS,
+  age_curves: DEFAULT_AGE_CURVES,
   weekly: { max_normal_movement: 3, allow_exceptional_movement: true },
 };
+
+/**
+ * The strength rating's components, by the league formats that have each. A
+ * redraft roster has no age window to look through and no future pick to hold.
+ * Guillotine is absent: its leagues get no strength rating, because their
+ * survival rankings already judge the floor, which is a different question.
+ */
+export const STRENGTH_COMPONENTS_BY_FORMAT = Object.freeze({
+  dynasty: Object.freeze(['lineup', 'depth', 'market_value', 'age_window', 'draft_capital']),
+  redraft: Object.freeze(['lineup', 'depth', 'market_value']),
+});
+
+/** The formats a strength rating exists for. */
+export const STRENGTH_FORMATS = Object.freeze(Object.keys(STRENGTH_COMPONENTS_BY_FORMAT));
+
+/** The preset a league ranks under when it names none: the per-format sets under `weights`. */
+export const DEFAULT_RANKING_PRESET = 'balanced';
+
+/**
+ * Weight sets under `weights` that belong to an edition, not to a league
+ * format. A preset never chooses them: the future stock edition has one set.
+ */
+const EDITION_WEIGHT_SETS = ['future_stock'];
+
+/** What a preset name may look like: it is a key in a dotted settings path, so no dots. */
+const PRESET_NAME = /^[a-z][a-z0-9-]*$/;
 
 /**
  * The guillotine settings, before an operator has written any.
@@ -148,6 +267,8 @@ export const RANKING_WEIGHT_REPLACE_KEYS = [
   'weights.redraft',
   'weights.guillotine',
   'weights.future_stock',
+  'strength.dynasty',
+  'strength.redraft',
 ];
 
 /** The editorial tables: a layer that writes one out replaces it, never merges into it. */
@@ -241,12 +362,12 @@ function sumWeights(weights) {
  * current league happens to use: a typo in a set nobody is running today is
  * still a typo.
  */
-export function validateRankingWeights(weights) {
+export function validateRankingWeights(weights, { path = 'weights' } = {}) {
   for (const [formatType, set] of Object.entries(weights ?? {})) {
     const sum = sumWeights(set);
     if (Math.abs(sum - 1) > WEIGHT_SUM_TOLERANCE) {
       throw new Error(
-        `config/rankings.yml weights.${formatType} sums to ${sum}, not 1.0. ` +
+        `config/rankings.yml ${path}.${formatType} sums to ${sum}, not 1.0. ` +
           'Fix the weights (or the keys under it) so they add up to exactly 1.0.',
       );
     }
@@ -254,35 +375,342 @@ export function validateRankingWeights(weights) {
 }
 
 /**
- * Picks the weight set for a resolved league format.
- *
- * There is no fallback to another format's set. A format with no set of its
- * own in config/rankings.yml is a loud error naming the missing key, because
- * silently reusing another format's weights would rank that league on
- * criteria that do not apply to it, with nothing saying so. That is the case
- * an operator who trims a set out of the file lands in, and the case a newly
- * added format lands in before its own set is written.
+ * The presets each league format has, `balanced` first:
+ * `{ dynasty: ['balanced', 'win-now', 'rebuild'], ... }`. `balanced` is a
+ * format's set under `weights`; every other preset is in `presets`.
  */
-export function resolveRankingWeights(rankings, formatType) {
-  const weights = rankings?.weights?.[formatType];
+export function rankingPresetsByFormat(rankings) {
+  const byFormat = {};
+  const add = (formatType, name) => {
+    byFormat[formatType] ??= [];
+    if (!byFormat[formatType].includes(name)) byFormat[formatType].push(name);
+  };
+  for (const formatType of Object.keys(rankings?.weights ?? {})) {
+    if (!EDITION_WEIGHT_SETS.includes(formatType)) add(formatType, DEFAULT_RANKING_PRESET);
+  }
+  for (const [name, preset] of Object.entries(rankings?.presets ?? {})) {
+    for (const formatType of Object.keys(preset?.weights ?? {})) add(formatType, name);
+  }
+  return byFormat;
+}
+
+/** "dynasty: balanced, win-now, rebuild; redraft: balanced, win-now", for messages. */
+function describePresetsByFormat(byFormat) {
+  const entries = Object.entries(byFormat);
+  if (!entries.length) return 'No presets are defined at all.';
+  return `Presets by format: ${entries.map(([formatType, names]) => `${formatType}: ${names.join(', ')}`).join('; ')}.`;
+}
+
+/** A format's set under `weights`, or a loud error naming the missing key. */
+function weightSet(rankings, key) {
+  const weights = rankings?.weights?.[key];
   if (weights) return weights;
 
   const known = Object.keys(rankings?.weights ?? {});
   throw new Error(
-    `No ranking weight set for format "${formatType}" (missing weights.${formatType} in ` +
+    `No ranking weight set for format "${key}" (missing weights.${key} in ` +
       `config/rankings.yml). ${known.length ? `Sets defined: ${known.join(', ')}.` : 'No sets are defined at all.'} ` +
-      `Add weights.${formatType} to config/rankings.yml — write out every key it needs; a partial ` +
+      `Add weights.${key} to config/rankings.yml — write out every key it needs; a partial ` +
       'set is not accepted.',
   );
+}
+
+/**
+ * Which weights rank a league of a resolved format, and which preset chose
+ * them: `{ preset, weights }`. `preset` is null when the league wrote its own
+ * `weights.<format>` and named no preset.
+ *
+ * - No preset named: the league's own set if it wrote one, otherwise
+ *   `balanced` (the set under `weights`), exactly as before presets existed.
+ * - A preset named together with the league's own `weights.<format>` is
+ *   refused, naming both: nothing silently wins.
+ * - An unknown preset, or one this format does not have, is refused, naming
+ *   the presets this format does have.
+ *
+ * There is no fallback to another format's set. A format with no set of its
+ * own in config/rankings.yml is a loud error naming the missing key, because
+ * silently reusing another format's weights would rank that league on
+ * criteria that do not apply to it, with nothing saying so.
+ */
+export function resolveRankingChoice(rankings, formatType) {
+  const preset = rankings?.preset ?? null;
+  const ownWeights = rankings?.ownWeights ?? [];
+  if (preset === null) {
+    const weights = weightSet(rankings, formatType);
+    return { preset: ownWeights.includes(formatType) ? null : DEFAULT_RANKING_PRESET, weights };
+  }
+  if (ownWeights.includes(formatType)) {
+    throw new Error(
+      `config/rankings.yml sets both preset: ${preset} and its own weights.${formatType}, so it does not say ` +
+        `which should rank this ${formatType} league. Remove one: the preset, or weights.${formatType}.`,
+    );
+  }
+  const available = rankingPresetsByFormat(rankings)[formatType] ?? [];
+  if (!available.includes(preset)) {
+    const known = Object.values(rankingPresetsByFormat(rankings)).some((names) => names.includes(preset));
+    throw new Error(
+      `preset: ${preset} in config/rankings.yml is ${known ? `not a preset a ${formatType} league has` : 'not a ranking preset'}. ` +
+        (available.length
+          ? `A ${formatType} league's presets are: ${available.join(', ')}.`
+          : `A ${formatType} league has no presets: there is no weights.${formatType} in config/rankings.yml.`),
+    );
+  }
+  const weights =
+    preset === DEFAULT_RANKING_PRESET ? weightSet(rankings, formatType) : rankings.presets[preset].weights[formatType];
+  return { preset, weights };
+}
+
+/** The weight set that ranks a league of a resolved format — see resolveRankingChoice. */
+export function resolveRankingWeights(rankings, formatType) {
+  return resolveRankingChoice(rankings, formatType).weights;
 }
 
 /**
  * The weight set for the future stock edition. Like resolveRankingWeights it
  * never borrows another set: trimming `weights.future_stock` out of
  * config/rankings.yml is an error naming it, not a quiet fall back to dynasty.
+ * No preset chooses it: the edition has one set.
  */
 export function resolveFutureStockWeights(rankings) {
-  return resolveRankingWeights(rankings, 'future_stock');
+  return weightSet(rankings, 'future_stock');
+}
+
+/**
+ * Which weights compute a league's team strength rating, and which preset
+ * chose them: `{ preset, weights, inputs }`, or null for a format with no
+ * strength rating (guillotine).
+ *
+ * The preset is the ranking preset (resolveRankingChoice), so it is checked
+ * the same way, and it picks `strength.<format>` for `balanced` or
+ * `presets.<name>.strength.<format>` for any other. A preset named beside the
+ * league's own `strength.<format>` is refused, naming both, as weights are.
+ * `preset` is null when the league wrote its own strength set and named no
+ * preset. `inputs` is `strength_inputs` (`lineupWeeks`, `shortWeekStarters`).
+ */
+export function resolveStrengthChoice(rankings, formatType) {
+  if (!STRENGTH_FORMATS.includes(formatType)) return null;
+  const preset = rankings?.preset ?? null;
+  const ownStrength = rankings?.ownStrength ?? [];
+  const inputs = {
+    lineupWeeks: rankings?.strength_inputs?.lineup_weeks ?? DEFAULT_STRENGTH_INPUTS.lineup_weeks,
+    shortWeekStarters: rankings?.strength_inputs?.short_week_starters ?? DEFAULT_STRENGTH_INPUTS.short_week_starters,
+  };
+  const topLevel = () => {
+    const weights = rankings?.strength?.[formatType];
+    if (weights) return weights;
+    throw new Error(
+      `No strength rating weights for format "${formatType}" (missing strength.${formatType} in config/rankings.yml). ` +
+        `Add strength.${formatType} with every component a ${formatType} league has: ` +
+        `${STRENGTH_COMPONENTS_BY_FORMAT[formatType].join(', ')}.`,
+    );
+  };
+  if (preset === null) {
+    return { preset: ownStrength.includes(formatType) ? null : DEFAULT_RANKING_PRESET, weights: topLevel(), inputs };
+  }
+  if (ownStrength.includes(formatType)) {
+    throw new Error(
+      `config/rankings.yml sets both preset: ${preset} and its own strength.${formatType}, so it does not say ` +
+        `which should rate this ${formatType} league. Remove one: the preset, or strength.${formatType}.`,
+    );
+  }
+  // The same refusals a ranking under this preset meets: an unknown preset,
+  // or one this format does not have.
+  resolveRankingChoice({ ...rankings, ownWeights: [] }, formatType);
+  if (preset === DEFAULT_RANKING_PRESET) return { preset, weights: topLevel(), inputs };
+  const weights = rankings.presets?.[preset]?.strength?.[formatType];
+  if (!weights) {
+    throw new Error(
+      `preset: ${preset} has ranking weights for a ${formatType} league but no strength rating weights ` +
+        `(missing presets.${preset}.strength.${formatType} in config/rankings.yml). Add it with every component a ` +
+        `${formatType} league has: ${STRENGTH_COMPONENTS_BY_FORMAT[formatType].join(', ')}.`,
+    );
+  }
+  return { preset, weights, inputs };
+}
+
+/**
+ * Checks one table of strength weight sets (`strength`, or a preset's
+ * `strength`): only formats that have a rating, only components that format
+ * has, every weight a number from 0 to 1, and every set summing to 1.0.
+ */
+function validateStrengthSets(sets, path) {
+  if (!isTable(sets)) throw new Error(`${path} in config/rankings.yml must be a table of weight sets by league format`);
+  for (const [formatType, set] of Object.entries(sets)) {
+    const components = STRENGTH_COMPONENTS_BY_FORMAT[formatType];
+    if (!components) {
+      throw new Error(
+        `config/rankings.yml has ${path}.${formatType}, but ${formatType} leagues get no strength rating. ` +
+          `Strength weights exist for: ${STRENGTH_FORMATS.join(', ')}.`,
+      );
+    }
+    if (!isTable(set)) throw new Error(`${path}.${formatType} in config/rankings.yml must be a table of component weights`);
+    for (const [component, weight] of Object.entries(set)) {
+      if (!components.includes(component)) {
+        throw new Error(
+          `${path}.${formatType}.${component} in config/rankings.yml is not a strength component a ${formatType} ` +
+            `league has. Its components are: ${components.join(', ')}.`,
+        );
+      }
+      if (typeof weight !== 'number' || !Number.isFinite(weight) || weight < 0 || weight > 1) {
+        throw new Error(`${path}.${formatType}.${component} in config/rankings.yml is ${JSON.stringify(weight)}, not a weight from 0 to 1.`);
+      }
+    }
+  }
+  validateRankingWeights(sets, { path });
+}
+
+/** Checks `strength`, every preset's `strength`, and `strength_inputs`, at load. */
+function validateStrengthSettings(rankings) {
+  validateStrengthSets(rankings.strength ?? {}, 'strength');
+  for (const [name, table] of Object.entries(rankings.presets ?? {})) {
+    if (table?.strength !== undefined && table?.strength !== null) {
+      validateStrengthSets(table.strength, `presets.${name}.strength`);
+    }
+  }
+  const inputs = rankings.strength_inputs ?? {};
+  if (!isTable(inputs)) throw new Error('strength_inputs in config/rankings.yml must be a table');
+  for (const [key, max] of [['lineup_weeks', 18], ['short_week_starters', 10]]) {
+    const value = inputs[key];
+    if (value === undefined || value === null) continue;
+    if (!Number.isInteger(value) || value < 1 || value > max) {
+      throw new Error(`strength_inputs.${key} in config/rankings.yml is ${JSON.stringify(value)}, not a whole number from 1 to ${max}.`);
+    }
+  }
+  const unknown = Object.keys(inputs).filter((key) => !(key in DEFAULT_STRENGTH_INPUTS));
+  if (unknown.length) {
+    throw new Error(
+      `strength_inputs in config/rankings.yml has ${unknown.join(', ')}, which it does not read. ` +
+        `It reads: ${Object.keys(DEFAULT_STRENGTH_INPUTS).join(', ')}.`,
+    );
+  }
+}
+
+/** What an age curve's position key may look like: Sleeper's position codes (QB, RB, DL, K). */
+const POSITION_KEY = /^[A-Z][A-Z0-9_]*$/;
+
+/**
+ * Checks `age_curves` at load: a table of positions, each holding only
+ * `peak`, `decline` and `cliff`, every one a whole-number age from 15 to 50,
+ * rising strictly. A team defense is refused: it has no age.
+ */
+function validateAgeCurves(rankings) {
+  const curves = rankings.age_curves ?? {};
+  if (!isTable(curves)) throw new Error('age_curves in config/rankings.yml must be a table of curves by position');
+  for (const [position, curve] of Object.entries(curves)) {
+    const path = `age_curves.${position} in config/rankings.yml`;
+    if (!POSITION_KEY.test(position)) {
+      throw new Error(`${path} is not a position: use the position code in capitals, such as QB or RB.`);
+    }
+    if (position === 'DEF') throw new Error(`${path} cannot have an age curve: a team defense has no age.`);
+    if (!isTable(curve)) throw new Error(`${path} must be a table of ${AGE_CURVE_KEYS.join(', ')}`);
+    const unknown = Object.keys(curve).filter((key) => !AGE_CURVE_KEYS.includes(key));
+    if (unknown.length) {
+      throw new Error(`${path} has ${unknown.join(', ')}, which it does not read. A curve has: ${AGE_CURVE_KEYS.join(', ')}.`);
+    }
+    for (const key of AGE_CURVE_KEYS) {
+      const age = curve[key];
+      if (!Number.isInteger(age) || age < 15 || age > 50) {
+        throw new Error(`age_curves.${position}.${key} in config/rankings.yml is ${JSON.stringify(age)}, not a whole-number age from 15 to 50.`);
+      }
+    }
+    if (!(curve.peak < curve.decline && curve.decline < curve.cliff)) {
+      throw new Error(
+        `${path} has peak ${curve.peak}, decline ${curve.decline} and cliff ${curve.cliff}; ` +
+          'each stage must start later than the one before (peak < decline < cliff).',
+      );
+    }
+  }
+}
+
+/**
+ * The age curves the five-year plan places players on, by position:
+ * `{ QB: { peak, decline, cliff }, ... }`. Checked at load (validateAgeCurves).
+ */
+export function resolveAgeCurves(rankings) {
+  return Object.fromEntries(
+    Object.entries(rankings?.age_curves ?? DEFAULT_AGE_CURVES).map(([position, curve]) => [position, { ...curve }]),
+  );
+}
+
+/**
+ * Checks the `preset` setting and the `presets` table at load, before any
+ * league format is known: the name is a word, `balanced` is not redefined
+ * (it is the sets under `weights`), every preset set sums to 1.0, and the
+ * named preset exists for some format. Whether the league's own format has
+ * it is resolveRankingChoice's question.
+ */
+function validateRankingPresets(rankings) {
+  const { preset = null, presets = {} } = rankings;
+  if (!isTable(presets)) throw new Error('presets in config/rankings.yml must be a table of presets');
+  for (const [name, table] of Object.entries(presets)) {
+    if (name === DEFAULT_RANKING_PRESET) {
+      throw new Error(
+        `config/rankings.yml defines presets.${name}, but ${name} is the sets under weights. ` +
+          `Change weights.<format> to change it, and remove presets.${name}.`,
+      );
+    }
+    if (!PRESET_NAME.test(name)) {
+      throw new Error(`presets.${name} in config/rankings.yml is not a preset name: use lower-case letters, digits and hyphens.`);
+    }
+    if (!isTable(table) || !isTable(table.weights ?? {})) {
+      throw new Error(`presets.${name} in config/rankings.yml must be a table holding weights.<format>`);
+    }
+    validateRankingWeights(table.weights, { path: `presets.${name}.weights` });
+  }
+  if (preset === null) return;
+  if (typeof preset !== 'string' || !PRESET_NAME.test(preset)) {
+    throw new Error(
+      `preset in config/rankings.yml is ${JSON.stringify(preset)}, which is not a preset name. ` +
+        describePresetsByFormat(rankingPresetsByFormat(rankings)),
+    );
+  }
+  const byFormat = rankingPresetsByFormat(rankings);
+  if (!Object.values(byFormat).some((names) => names.includes(preset))) {
+    throw new Error(`preset: ${preset} in config/rankings.yml is not a ranking preset. ${describePresetsByFormat(byFormat)}`);
+  }
+}
+
+/**
+ * The replace-wholesale paths for every preset weight set any layer writes
+ * (`presets.rebuild.weights.dynasty`), so a partial preset set replaces the
+ * shipped one exactly as a partial `weights.<format>` does.
+ */
+function presetReplaceKeys(layers) {
+  const keys = new Set();
+  for (const layer of layers) {
+    if (!isTable(layer?.presets)) continue;
+    for (const [name, table] of Object.entries(layer.presets)) {
+      for (const part of ['weights', 'strength']) {
+        if (!isTable(table?.[part])) continue;
+        for (const formatType of Object.keys(table[part])) keys.add(`presets.${name}.${part}.${formatType}`);
+      }
+    }
+  }
+  return [...keys];
+}
+
+/** The league formats whose strength weights a league (or the caller's overrides) wrote itself. */
+function ownStrengthFormats(layers) {
+  const formats = new Set();
+  for (const layer of layers) {
+    for (const [key, set] of Object.entries(isTable(layer?.strength) ? layer.strength : {})) {
+      if (set !== null && set !== undefined) formats.add(key);
+    }
+  }
+  return [...formats];
+}
+
+/** The league formats whose weight set a league (or the caller's overrides) wrote itself. */
+function ownWeightFormats(layers) {
+  const formats = new Set();
+  for (const layer of layers) {
+    for (const key of Object.keys(isTable(layer?.weights) ? layer.weights : {})) {
+      if (!EDITION_WEIGHT_SETS.includes(key) && layer.weights[key] !== null && layer.weights[key] !== undefined) {
+        formats.add(key);
+      }
+    }
+  }
+  return [...formats];
 }
 
 /** Reads a dotted path (`"weights.redraft"`) out of a plain object. */
@@ -405,18 +833,33 @@ export function resolveSettings({ defaults = {}, league = {}, overrides = {}, so
     ],
     { replaceKeys: EDITORIAL_REPLACE_KEYS },
   );
-  const rankings = foldLayers(
+  const rankingLayers = [defaults.rankings, league.rankings, overrides.rankings];
+  const merged = foldLayers(
     DEFAULT_RANKINGS,
     [
       { layer: defaults.rankings, source: from('defaults', 'rankings') },
       { layer: league.rankings, source: from('league', 'rankings') },
       { layer: overrides.rankings, source: from('overrides', 'rankings') },
     ],
-    { replaceKeys: RANKING_WEIGHT_REPLACE_KEYS },
+    { replaceKeys: [...RANKING_WEIGHT_REPLACE_KEYS, ...presetReplaceKeys([DEFAULT_RANKINGS, ...rankingLayers])] },
   );
+  // `preset` is the league's choice (null: balanced). `ownWeights` lists the
+  // formats whose set the league wrote itself, rather than the package
+  // shipping it: a preset named beside one of those is refused when that
+  // format is ranked (resolveRankingChoice).
+  const rankings = {
+    ...merged,
+    preset: merged.preset ?? null,
+    ownWeights: ownWeightFormats([league.rankings, overrides.rankings]),
+    // The same for the strength rating's weights (resolveStrengthChoice).
+    ownStrength: ownStrengthFormats([league.rankings, overrides.rankings]),
+  };
   // Every set is checked, not only the one this league uses — see the comment
   // on validateRankingWeights.
   validateRankingWeights(rankings.weights);
+  validateRankingPresets(rankings);
+  validateStrengthSettings(rankings);
+  validateAgeCurves(rankings);
 
   // Checked even for a league that is not guillotine: a typo in a ledger nobody
   // is running today is still a typo, found before any command runs.

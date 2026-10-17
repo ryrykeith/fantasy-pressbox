@@ -16,6 +16,7 @@ import { FORWARD_LOOKING_TASKS, RANKING_TASKS } from './promptContext.mjs';
 import { DEFAULT_ESPN_ROUTE, ESPN_ROUTE_KEY, ESPN_ROUTES, RANK_EMOJI_RUN_MODES } from './settings.mjs';
 import { TANK_WATCH_EARLY_FLAG, TANK_WATCH_TASK } from './tankWatch.mjs';
 import { FUTURE_STOCK_TASK } from './futureStock.mjs';
+import { FIVE_YEAR_PLAN_TASK, TEAM_FLAG } from './fiveYearPlan.mjs';
 
 /**
  * The editions whose machine-readable tail can be filed (recordEdition):
@@ -34,8 +35,8 @@ const ORDINARY_FORMATS = ['dynasty', 'redraft'];
  *   yet (`postseason` can still be recorded from a reply).
  * - `summary` is its line in `--help`; `group` is the block of `--help` it sits in.
  * - `formats` are the league formats that allow it. The refusals that enforce
- *   this (src/edition.mjs, src/tankWatch.mjs, src/futureStock.mjs) keep their
- *   own wording; tests/options.test.mjs checks they agree with this list.
+ *   this (src/edition.mjs, src/tankWatch.mjs, src/futureStock.mjs,
+ *   src/fiveYearPlan.mjs) keep their own wording; tests/options.test.mjs checks they agree with this list.
  * - `recordable`: its reply can be filed for next week (RECORDABLE_TASKS).
  * - `forwardLooking`: it is about the week about to be played, not the one
  *   that just finished.
@@ -71,6 +72,13 @@ const EDITION_LIST = [
     group: 'dynasty',
     formats: ['dynasty'],
     summary: 'Rank teams on the next three seasons: age, production, picks (dynasty leagues)',
+  },
+  {
+    name: FIVE_YEAR_PLAN_TASK,
+    command: FIVE_YEAR_PLAN_TASK,
+    group: 'dynasty',
+    formats: ['dynasty'],
+    summary: "Plan one team's next five seasons, chosen with --team (dynasty leagues)",
   },
   {
     name: 'survival-preview',
@@ -229,7 +237,7 @@ const OPTION_LIST = [
     kind: 'boolean',
     default: false,
     help: "Fetch trade values again instead of reusing the week's saved ones",
-    editions: ['trade-report', FUTURE_STOCK_TASK],
+    editions: ['trade-report', FUTURE_STOCK_TASK, FIVE_YEAR_PLAN_TASK],
     commands: [],
   },
   {
@@ -239,6 +247,18 @@ const OPTION_LIST = [
     default: false,
     help: 'Run the tank watch before its start week',
     editions: [TANK_WATCH_TASK],
+    commands: [],
+  },
+  {
+    name: 'team',
+    flag: TEAM_FLAG,
+    kind: 'text',
+    value: '<name|id>',
+    values: null,
+    default: null,
+    help: 'Which team a five-year plan is about: its name or roster id',
+    missing: `${TEAM_FLAG} needs a team name or roster id, e.g. ${TEAM_FLAG} 3`,
+    editions: [FIVE_YEAR_PLAN_TASK],
     commands: [],
   },
   {

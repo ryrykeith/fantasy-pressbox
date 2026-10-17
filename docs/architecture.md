@@ -236,11 +236,16 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/analysis/transactions.mjs` | A transaction's grading context: each side's roster shape before and after, a claim's cost against budget, moved players' weekly points |
 | `src/analysis/rosterWindow.mjs` | Per-position age summaries, starter age, and season points by age band, for a dynasty roster |
 | `src/analysis/pickCapital.mjs` | Future pick capital across the tradeable drafts: each held pick priced (projected Early/Mid/Late tier for the draft the standings decide, generic round value otherwise, unpriced when the market lists none), per season and summed, net against each team's own picks |
+| `src/analysis/strength.mjs` | The team strength rating, 0 to 100 and relative to the league: `lineup`, `depth`, `market_value`, `age_window` and `draft_capital`, each ranked across the teams that have it and scored by rank, then weighted by `strength.<format>` in `config/rankings.yml` (set by the preset). A component the league cannot supply is in `unavailable` with its reason and the other weights are rescaled; nothing missing counts as 0. `src/pipeline.mjs#readStrength` feeds it saved weeks, the market and pick capital, and the editions in `STRENGTH_TASKS` carry it. Formula in `docs/editorial-model.md`. No `node:` imports |
+| `src/analysis/fiveYearPlan.mjs` | One dynasty team's facts for seasons S to S+4: each player's age (today's age plus one a season) and stage on the editorial `age_curves` in `config/rankings.yml`, today's starters past their decline age and the share of their points from players before the cliff, picks held per draft (`unavailable` for a draft held, or one beyond every traded or priced draft: whether Sleeper issues it is not known, so it is never called "not issued"), and today's strength, standing and market value. No projected points, records or titles. No `node:` imports |
 | `src/analysis/standings.mjs` | Current seeds: wins, then points-for |
 | `src/analysis/playoffField.mjs` | The projected playoff field and the bubble that decides it |
+| `src/rivalries.mjs` | The declared rivalries (`config/rivalries.yml`): parsing, limits through the safe-input rules, and each team resolved to a roster id through `src/teamIdentity.mjs`. No `node:` imports |
+| `src/analysis/rivalry.mjs` | Two teams' head-to-head record from saved snapshots across every saved season, read through the store: record, total points, last meeting, streak and biggest margin, matched by roster id. Counts only settled weeks with both teams' sides saved, says which seasons and weeks that covers, names the seasons it does not, and is `unavailable` ("no meeting saved"), never 0-0, without a meeting. Pure, no `node:` imports |
 | `src/tankWatch.mjs` | The tank-watch edition: its refusals (dynasty only, declared rule, start week) and the race/stakes/cliff/movement view of the projected draft order |
 | `src/analysis/draftOrder.mjs` | The projected rookie draft order: each slot's original team and current owner, the cliff a bubble team's pick falls off, week-over-week movement |
 | `src/tradePicks.mjs` | A traded pick at its projected slot for the trade report: slot, cliff, the board prospects around it, and what is still unknown |
+| `src/fiveYearPlan.mjs` | The five-year-plan edition: its refusals (dynasty only; a missing, blank or over-long `--team`), `--team` resolved through `src/teamIdentity.mjs` (name now or before, manager username, roster id; unknown or ambiguous is refused, listing the teams), and the plan's facts as the compact view the prompt reads, one line per player across the seasons. No `node:` imports |
 | `src/futureStock.mjs` | The future-stock edition: its refusal (dynasty only) and each team's age, production-by-age and priced pick capital, with held picks placed at their projected slot |
 | `src/fantasycalc/client.mjs` | FantasyCalc trade values: query from the league's format and scoring, fetch, normalize. FantasyCalc field names stop here, as Sleeper's stop at `src/sleeper/` |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
@@ -1073,6 +1078,62 @@ entries some held 1st is around (`tradeProspectBoard`).
 The edition gets no standings table and no transaction colour. Its `teams`
 already carries every record, and its subject is who holds which pick. It is
 not recorded, so it has no movement.
+
+### Five-year plan
+
+`src/fiveYearPlan.mjs` holds the `five-year-plan` edition's gate and view;
+`src/analysis/fiveYearPlan.mjs` builds the facts. `--team` is an entry in
+`OPTIONS` (`src/options.mjs`) that applies to this edition only.
+`prepareEdition` refuses a declared non-dynasty format and a missing `--team`
+before the league is opened, and an ESPN league through the capability gate
+(`futurePicks`, so before ESPN is contacted). After the league opens it
+refuses a resolved non-dynasty format and a `--team` that is unknown or
+ambiguous, before any week is captured. It then reads the market, the pick
+capital, the settled weeks and the strength rating, and the output file name
+carries `-team<rosterId>`.
+
+`buildContext` puts the plan in `context.fiveYearPlan` (and `draftProjection`
+when the projected draft falls inside the five seasons). The edition has no
+`teams`, standings or strength block of its own: the team's strength, standing
+and market value ride inside the plan. Its field for the seasons is
+`futureSeasons`, not `projections`, because `projections` already means a
+trade-report entry in the ESPN matrix. Every absence stays an `unavailable`
+entry with its reason: a season's picks (draft held, or issuance not known), the
+strength rating, `otherRosters`, `starterProduction`, `pickValues`.
+
+Ages are today's age plus one per season. Stages come from `age_curves`
+(`rising` below `peak`, `peak` from `peak`, `declining` from `decline`, `cliff`
+from `cliff`), merged per position over the shipped defaults and validated in
+`src/settings.mjs`. "Today's starter points" are the points today's starters
+scored as starters in the settled weeks; a player with no known age or no
+curve is counted in `pointsWithoutStage` rather than in the share. The
+edition is not recorded, so it has no movement.
+
+### Rivalries in the editions
+
+`prepareEdition` resolves the declared rivalries once the league's teams are
+known (`resolveRivalries`). For an edition in `RIVALRY_TASKS` (preview, recap,
+trade report) it reads every saved season once (`readSavedSeasons`) and gives
+each rivalry its `headToHead` record and the week it reads `through`. A
+preview reads up to the week before its own, since its game has not been
+played. A recap and a trade report read through their own week, so a recap's
+record counts the game it is about once that week is settled;
+`throughWeekCounted` says whether it is, and the recap prompt calls an
+unsettled week's record the one coming into the game. These `rivalryRecords`
+go to `buildContext`.
+
+`buildContext` attaches `rivalryView` where both teams of a rivalry appear:
+`rivalry` on an `upcomingMatchups` entry or a `thisWeek.games` entry, and
+`rivalries` (a list, since a trade of three teams can hold two pairs) on a
+trade. The view names teams as they go by now, carries the operator's `name`
+and `note` only when written, and gives the record by team name, with
+`covered`, `notCovered` and `through`. A pair with no saved meeting carries
+`unavailable: "no meeting saved"` instead of a record. A format with no
+matchups gets no rivalry blocks, whatever is passed in.
+
+How hot a rivals' matchup is written is editorial: the preview and recap
+prompts take it one step above `roast_intensity`, for that post only, and
+`config/editorial.yml` says so. The code does not compute an intensity.
 
 ## State
 

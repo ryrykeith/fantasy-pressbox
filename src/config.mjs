@@ -45,6 +45,7 @@ import { providerDisplayName } from './providers.mjs';
 import { loadAssets } from './assets.mjs';
 import { createDiskPlayerCache } from './diskPlayerCache.mjs';
 import { parseProspectBoard } from './prospectBoard.mjs';
+import { parseRivalries } from './rivalries.mjs';
 import { firstSet, leagueSettingsFromEnv, mergeSettingsLayer, resolveSettings } from './settings.mjs';
 
 // The pure half moved to src/settings.mjs. Re-exported so existing importers
@@ -61,7 +62,9 @@ export {
   rankEmoji,
   rankEmojiOf,
   resolveFutureStockWeights,
+  resolveRankingChoice,
   resolveRankingWeights,
+  resolveStrengthChoice,
   resolveSettings,
   validateRankingWeights,
 } from './settings.mjs';
@@ -262,6 +265,7 @@ export function loadConfig({
   editorialPath = join(PACKAGE_ROOT, 'config', 'editorial.yml'),
   guillotinePath = join(workspaceConfigDir(workspaceRoot), 'guillotine.yml'),
   rookieDraftPath = join(workspaceConfigDir(workspaceRoot), 'rookie-draft.yml'),
+  rivalriesPath = join(workspaceConfigDir(workspaceRoot), 'rivalries.yml'),
   workspaceEditorialPath = join(workspaceConfigDir(workspaceRoot), 'editorial.yml'),
   workspaceRankingsPath = join(workspaceConfigDir(workspaceRoot), 'rankings.yml'),
   workspacePromptsPath = workspacePromptsDir(workspaceRoot),
@@ -313,6 +317,7 @@ export function loadConfig({
       env: existsSync(envPath) ? envPath : null,
       rookieDraft: existsSync(rookieDraftPath) ? rookieDraftPath : null,
       guillotine: existsSync(guillotinePath) ? guillotinePath : null,
+      rivalries: existsSync(rivalriesPath) ? rivalriesPath : null,
       editorialOverride,
       rankingsOverride,
     },
@@ -354,7 +359,18 @@ export function loadConfig({
     // watch's start week is null unless declared, meaning the regular
     // season's midpoint (src/tankWatch.mjs#resolveTankWatchStartWeek).
     rookieDraft: settings.rookieDraft,
+    // The rivalries the league declared, as written (src/rivalries.mjs); [] when
+    // there is no config/rivalries.yml. They name teams, which are only known
+    // once the league is open, so prepareEdition resolves them to roster ids.
+    // Read here as text and kept out of resolveSettings, which stays pure.
+    rivalries: readRivalries(rivalriesPath),
   };
+}
+
+/** A league's declared rivalries from its config/rivalries.yml, or [] when it has none. */
+function readRivalries(path) {
+  if (!existsSync(path)) return [];
+  return parseRivalries(readFileSync(path, 'utf8'), { source: path });
 }
 
 // A season's bye-week table is `assets.byeWeekTable(season)` (src/assets.mjs).

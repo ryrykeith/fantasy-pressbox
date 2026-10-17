@@ -72,6 +72,32 @@ export function createTeamIdentity({ teams, history = [] }) {
       return null;
     },
 
+    /**
+     * What an operator's reference to a team means: a name (now, past, or a
+     * manager's username) or a roster id, as config/guillotine.yml and
+     * config/rivalries.yml allow. Unlike rosterIdFor it says WHY it could not
+     * tell, so a refusal can name the problem.
+     *
+     * A name wins over a roster id when both could match, since a team really
+     * called "7" is the likelier intent than a roster number typed as text.
+     *
+     * @returns `{ status: 'found', rosterId }`, `{ status: 'ambiguous' }` (the
+     *          name has meant more than one roster), or `{ status: 'unknown' }`
+     */
+    lookup(reference) {
+      const key = normalise(reference);
+      if (key) {
+        for (const index of [byCurrentName, byPastName, byManager]) {
+          const hit = index.get(key);
+          if (hit === null) return { status: 'ambiguous' };
+          if (hit !== undefined) return { status: 'found', rosterId: hit };
+        }
+      }
+      const asId = typeof reference === 'number' ? reference : /^\d+$/.test(key) ? Number(key) : null;
+      if (asId !== null && current.has(asId)) return { status: 'found', rosterId: asId };
+      return { status: 'unknown' };
+    },
+
     /** The name a roster goes by now. */
     currentNameOf(rosterId) {
       return current.get(rosterId)?.name ?? null;

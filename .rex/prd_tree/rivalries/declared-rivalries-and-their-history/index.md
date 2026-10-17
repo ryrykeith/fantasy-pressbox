@@ -1,0 +1,23 @@
+---
+id: "aeb60d29-cd7e-4464-bb13-ead2880dd65a"
+level: "feature"
+title: "Declared rivalries and their history"
+status: "completed"
+priority: "high"
+startedAt: "2026-10-16T19:34:08.621Z"
+completedAt: "2026-10-16T19:34:08.621Z"
+endedAt: "2026-10-16T19:34:08.621Z"
+acceptanceCriteria: []
+description: "Config, head-to-head facts, and the editions that use them."
+lastModified: "2026-10-16T19:34:08.647Z"
+lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
+---
+
+## Children
+
+| Title | Status |
+|-------|--------|
+| [Declare rivalries in config/rivalries.yml](./declare-rivalries-in-config-rivalries.md) | completed |
+| [Head-to-head record counts a pre-0.1.0 snapshot with no settled flag as a finished week](./head-to-head-record-counts-a-pre-0-1-0.md) | completed |
+| [Head-to-head record from saved history](./head-to-head-record-from-saved-history.md) | completed |
+| [Rivalries in the preview, recap and trade report](./rivalries-in-the-preview-recap-and.md) | completed |

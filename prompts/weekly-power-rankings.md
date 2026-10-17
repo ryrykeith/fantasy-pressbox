@@ -20,6 +20,12 @@ output.
 Weigh the factors in `editorial.rankingWeights`. Those weights are the house
 model — respect their relative sizes.
 
+`editorial.rankingPreset` names what this league ranks for: `balanced`,
+`win-now` (who can take this season's title) or `rebuild` (who is building best
+for the seasons ahead). Null means the league wrote its own weights. You may say
+what the league ranks for in a line, but never print the weights or any of
+their numbers.
+
 ## Positional value
 
 `league.positionalValue` names the ways this league's scoring changes what a
@@ -28,6 +34,29 @@ from it. Apply every one of them, and let them override the raw weights where
 the two disagree — the weights describe a generic league, that list describes
 this one. An empty list means nothing here is unusual and no position needs
 adjusting.
+
+## Team strength
+
+`strength` is a rating the code computed for every team, 0 to 100 relative to
+this league. It is evidence, not the ranking: it is built from the components
+in `strength.components`, and it knows nothing about injuries, the schedule or
+this week's results. Never rank a team on its rating alone, and never print a
+rating as though it were the rank.
+
+- `strength.components` names each component, what it measures and whether
+  higher or lower is better. `strength.weights` and `weightsUsed` are the
+  house model: never print them or any of their numbers.
+- Each team carries its `rating`, its `rank` in the league, and the `value`
+  and league `rank` of each component. Use the components to say *why* a team
+  is strong or thin: a deep bench, say, or a lineup the market prices low.
+- Where a team's rating and your order disagree, say which evidence you
+  trusted and why. Do not tell the reader the code ranked the team.
+- `strength.unavailable` lists components the league could not supply, each
+  with its reason, and `strength.note` says how the rest were reweighted. Say
+  in a line that a component is missing, quoting the reason. Never guess its
+  value and never treat it as zero. A team with its own `unavailable` list is
+  rated on less: say so before leaning on its rating.
+- A rating of null means no rating this time. Give none.
 
 ## Movement
 

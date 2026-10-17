@@ -34,6 +34,10 @@ Weigh the factors in `editorial.rankingWeights`. Those weights are the house
 model — respect their relative sizes. `weekly_floor` is the heaviest for the
 reason above.
 
+`editorial.rankingPreset` names what this league ranks for. A guillotine
+league has only `balanced`; null means the league wrote its own weights. Never
+print the weights or any of their numbers.
+
 ## What you know
 
 - `teams` — the rosters still in the league, with each team's own points. Every

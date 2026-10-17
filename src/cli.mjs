@@ -22,7 +22,7 @@ import {
   describePromptOverrides,
   rankEmoji,
   rankEmojiOf,
-  resolveRankingWeights,
+  resolveRankingChoice,
   resolveWorkspaceRoot,
   WORKSPACE_ENV_VAR,
   workspaceConfigDir,
@@ -36,6 +36,7 @@ import { describeDraftOrder } from './rookieDraft.mjs';
 import { describeProspectBoard } from './prospectBoard.mjs';
 import { resolveWeek, captureWeek, importSavedFiles, readEliminationLedger } from './pipeline.mjs';
 import { FUTURE_STOCK_TASK } from './futureStock.mjs';
+import { FIVE_YEAR_PLAN_TASK } from './fiveYearPlan.mjs';
 import { describeInspection, inspectLeague } from './inspect.mjs';
 import { PACKAGE_NAME, PACKAGE_VERSION } from './version.mjs';
 import { systemPromptOnly, taskPromptOnly } from './promptContext.mjs';
@@ -212,6 +213,7 @@ Examples
   ${cli} transactions --week 3 --generate
   ${cli} tank-watch --week 9
   ${cli} future-stock --week 9 --generate
+  ${cli} five-year-plan --team 3
 `;
 }
 
@@ -296,6 +298,7 @@ function describeLocalSettings(config) {
     `  League settings    .env ${sources.env ? `read from ${sources.env}` : 'not found'}`,
     `                     rookie-draft.yml ${from(sources.rookieDraft)}`,
     `                     guillotine.yml ${from(sources.guillotine)}`,
+    `                     rivalries.yml ${from(sources.rivalries)}`,
   ];
   const overrides = [];
   if (sources.editorialOverride) overrides.push(`config/editorial.yml (${sources.editorialOverride})`);
@@ -386,8 +389,9 @@ async function commandDoctor(config) {
         `(${UNDETECTABLE_FORMAT_TYPES.join(', ')} can only be declared)`);
   }
   try {
-    const weights = resolveRankingWeights(config.rankings, league.format.type);
-    say(`  Weights for league ✓ using the ${league.format.type} set (${Object.keys(weights).length} factors)`);
+    const { preset, weights } = resolveRankingChoice(config.rankings, league.format.type);
+    const chosenBy = preset ? `the ${preset} preset` : 'the league\'s own weights';
+    say(`  Weights for league ✓ ${chosenBy} for ${league.format.type} (${Object.keys(weights).length} factors)`);
   } catch (error) {
     say(`  Weights for league ✗ ${error.message}`);
   }
@@ -406,11 +410,14 @@ async function commandDoctor(config) {
     weekOverride: config.week ?? null,
     espnRoute: league.provider === 'espn' ? config.league.route : null,
     live: espnRoute.imported ? null : { league, week, source },
+    // Declared in config/rivalries.yml; checked against the teams doctor just opened.
+    rivalries: config.rivalries,
+    teams,
   });
   const status = describeInspection(report);
   for (const line of status.week) say(line);
   const staleLeaguePage = reportSavedPages(ctx);
-  for (const line of [...status.coverage, ...status.next]) say(line);
+  for (const line of [...status.coverage, ...status.rivalries, ...status.next]) say(line);
   const mismatch = report.problems.find((problem) => problem.code === 'league-mismatch');
   if (mismatch) say(`  League ID          ✗ ${mismatch.message}`);
   if (espnRoute.imported) for (const line of describeImportToSave(config, { season: league.season, weeks: savedWeeks(ctx) })) say(line);
@@ -1103,6 +1110,7 @@ async function main() {
     case 'transactions':
     case TANK_WATCH_TASK:
     case FUTURE_STOCK_TASK:
+    case FIVE_YEAR_PLAN_TASK:
       return commandEdition(config, args, editionForCommand(command).name);
     case 'record':
       return commandRecord(config, args);

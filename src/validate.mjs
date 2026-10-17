@@ -46,7 +46,8 @@ export function looksCollapsed(posts) {
 /**
  * Every market value an edition's context carries, as numbers. FantasyCalc
  * values appear under `value`, `netValue`, `generic` and `tiers`, wherever the
- * context nests them (trades, pick tiers, held-pick capital). Walking the
+ * context nests them (trades, pick tiers, held-pick capital, the strength
+ * rating's market_value and draft_capital). Walking the
  * context keeps this independent of the league platform: the values have the
  * same shape on Sleeper and ESPN.
  */
@@ -64,6 +65,11 @@ export function marketValueNumbers(context) {
   walk(context?.trades, false);
   walk(context?.teams?.map((t) => t.draftCapital), false);
   walk(context?.draftCapital?.seasons, false);
+  // The strength rating's market-priced components; its other values are points and ages.
+  walk(
+    context?.strength?.teams?.map((t) => [t.components?.market_value, t.components?.draft_capital]),
+    false,
+  );
   return found;
 }
 

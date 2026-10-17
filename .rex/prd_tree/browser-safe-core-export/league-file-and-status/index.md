@@ -2,14 +2,12 @@
 id: "2621e81a-fd89-4ddb-bd1d-0bf2c610e18e"
 level: "feature"
 title: "League file and status"
-status: "completed"
+status: "pending"
 priority: "high"
 startedAt: "2026-10-14T20:31:40.933Z"
-completedAt: "2026-10-14T20:31:40.933Z"
-endedAt: "2026-10-14T20:31:40.933Z"
 acceptanceCriteria: []
 description: "One versioned JSON file holding a league's history, which the website and the CLI both read and write, and one status report built from it."
-lastModified: "2026-10-14T20:38:09.000Z"
+lastModified: "2026-10-15T16:59:28.000Z"
 lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 ---
 

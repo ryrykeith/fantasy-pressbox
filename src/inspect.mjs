@@ -15,6 +15,8 @@
  * Browser-safe: nothing here imports from `node:`.
  */
 import { storeDataFromLeagueFile } from './leagueFile.mjs';
+import { checkRivalries, parseRivalryTable } from './rivalries.mjs';
+import { createTeamIdentity } from './teamIdentity.mjs';
 import { EDITIONS, RECORDABLE_TASKS, weeklyEditions } from './options.mjs';
 import { getProvider } from './providers.mjs';
 import { createMemoryStore } from './storeCore.mjs';
@@ -84,8 +86,15 @@ function gradability({ store, season, week }) {
  * @param espnRoute      'import' or 'fetch' for an ESPN league, else null
  * @param live           `{ league, week, source }` from the provider and resolveWeek
  *                       when it could be asked; null offline and on ESPN's import route
+ * @param rivalries      the declared rivalries (parseRivalries), as written
+ * @param teams          the league's teams now, `[{ rosterId, name, manager }]`,
+ *                       when the caller has them; else the latest saved week's
  *
- * → `{ league, format, season, week, espn, lastWeek, coverage, gradable, thisWeek, problems }`
+ * → `{ league, format, season, week, espn, lastWeek, coverage, gradable, thisWeek, rivalries, problems }`
+ *   `rivalries` is `{ declared, checked, unresolved }`: `checked` is false
+ *   when no team list was known (nothing is saved yet), and `unresolved`
+ *   lists each rivalry that no longer resolves to a team, `{ index, code,
+ *   message }` — never with its name or note.
  */
 export function inspectLeague({
   store,
@@ -97,6 +106,8 @@ export function inspectLeague({
   weekOverride = null,
   espnRoute = null,
   live = null,
+  rivalries = [],
+  teams = null,
 }) {
   const seasonName = asId(season ?? live?.league?.season);
   const snapshots = seasonName ? store.loadSnapshotsThrough(seasonName, Number.POSITIVE_INFINITY) : [];
@@ -222,6 +233,20 @@ export function inspectLeague({
     }
   }
 
+  // A rivalry is declared by team name or roster id; a team that left the
+  // league, or a name that was misspelt, is reported rather than dropped.
+  const knownTeams = teams ?? latest?.teams ?? null;
+  const rivalryReport = { declared: rivalries.length, checked: false, unresolved: [] };
+  if (rivalries.length && knownTeams?.length) {
+    const identity = createTeamIdentity({
+      teams: knownTeams,
+      history: seasonName ? store.loadTeamNameHistory(seasonName) : [],
+    });
+    rivalryReport.checked = true;
+    rivalryReport.unresolved = checkRivalries(rivalries, identity).problems.map(({ index, code, message }) => ({ index, code, message }));
+    for (const { code, message } of rivalryReport.unresolved) problems.push({ code: `rivalry-${code}`, message });
+  }
+
   return {
     league: { provider, id: expectedId, name: name.value, nameFrom: name.from },
     format,
@@ -233,6 +258,7 @@ export function inspectLeague({
     seasonLong,
     gradable,
     thisWeek: { week: week?.number ?? null, missing },
+    rivalries: rivalryReport,
     problems,
   };
 }
@@ -249,7 +275,7 @@ const period = (p) => (p === null ? 'unknown' : `scoring period ${p}`);
 /**
  * The report as the lines doctor prints, in sections so a caller can print
  * only some of them (doctor keeps its own League, Teams and Format lines):
- * `{ league, format, week, espn, coverage, next }`, each a list of lines. A
+ * `{ league, format, week, espn, coverage, rivalries, next }`, each a list of lines. A
  * section with nothing to say is an empty list.
  */
 export function describeInspection(report) {
@@ -335,7 +361,29 @@ export function describeInspection(report) {
     );
   }
 
-  return { league: leagueLines, format: formatLines, week: weekLines, espn: espnLines, coverage: coverageLines, next: nextLines };
+  // Nothing declared, nothing to say. Declared but unchecked says so rather
+  // than implying every rivalry resolved.
+  const rivalryLines = [];
+  const { rivalries } = report;
+  if (rivalries.declared) {
+    const count = `${rivalries.declared} declared`;
+    if (!rivalries.checked) rivalryLines.push(row('Rivalries', `${count}; not checked yet: no team list is saved`));
+    else if (!rivalries.unresolved.length) rivalryLines.push(row('Rivalries', `${count}, every one resolves to a team`));
+    else {
+      rivalryLines.push(row('Rivalries', `${count}, ${rivalries.unresolved.length} no longer resolve`));
+      for (const { message } of rivalries.unresolved) rivalryLines.push(`${CONTINUED}✗ ${message}`);
+    }
+  }
+
+  return {
+    league: leagueLines,
+    format: formatLines,
+    week: weekLines,
+    espn: espnLines,
+    coverage: coverageLines,
+    rivalries: rivalryLines,
+    next: nextLines,
+  };
 }
 
 /**
@@ -356,5 +404,6 @@ export function inspectLeagueFile(file, { live = null } = {}) {
     weekOverride: settings.week,
     espnRoute: league.provider === 'espn' ? (settings.espnRoute ?? 'import') : null,
     live,
+    rivalries: parseRivalryTable(settings.declared.rivalries),
   });
 }

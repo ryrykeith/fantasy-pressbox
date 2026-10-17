@@ -49,6 +49,7 @@ Every edition is built from your league's real data:
 | **Survival preview, chop recap, survival rankings** | The guillotine league versions of the three weekly editions: who is near the chop line, who got chopped, who is safest. |
 | **Tank watch** | Dynasty leagues, second half of the season: the race for next year's top rookie picks and who owns them. |
 | **Future stock** | Dynasty leagues: every team ranked on the next three seasons rather than this week. |
+| **Five-year plan** | Dynasty leagues: one team you choose with `--team`, and its next five seasons built from facts (ages, each position's age curve, the picks it holds), never a prediction. |
 
 Here is the kind of thing it produces — this is real output from a real
 league, and every number in it came out of Sleeper:
@@ -444,8 +445,10 @@ how teams are judged. It is saved as `LEAGUE_FORMAT` in `.env`.
 | **Detected from Sleeper?** | Yes | Yes | **No — must be declared** |
 | **Weekly editions** | `preview`, `recap`, `rankings` | `preview`, `recap`, `rankings` | `survival-preview`, `chop-recap`, `survival-rankings` |
 | **Rankings judge** | This season and the long term: starting lineup, dynasty value, depth, quarterback, future picks | This season only: starting lineup, depth, contender status | Not being last: weekly floor, bye-week exposure, remaining FAAB |
-| **Extra editions** | `tank-watch`, `future-stock` | — | — |
+| **Extra editions** | `tank-watch`, `future-stock`, `five-year-plan` | — | — |
+| **Strength rating** | Yes (lineup, depth, market value, age window, draft capital) | Yes (lineup, depth, market value) | No |
 | **League config** | `rookie-draft.yml`, a prospect board | — | `guillotine.yml` |
+| **Any format** | `rivalries.yml` (optional) | `rivalries.yml` (optional) | `rivalries.yml` (optional) |
 
 **Why guillotine has to be declared.** In a guillotine league the lowest
 scorer each week is eliminated, and the commissioner does that by hand:
@@ -459,8 +462,8 @@ printing them. `preview`, `recap` and `rankings` refuse to run and name the
 edition that replaces them. `doctor` prints the format the tool is using and
 whether it was declared or detected.
 
-`tank-watch` and `future-stock` look at future rookie drafts, so they refuse
-redraft and guillotine leagues.
+`tank-watch`, `future-stock` and `five-year-plan` look at future seasons and
+rookie drafts, so they refuse redraft and guillotine leagues.
 
 ---
 
@@ -633,6 +636,7 @@ terminal). Only `init`, `import-league` and `check` work without one.
 | `fantasy-pressbox transactions` | Grade the week's trades against the trade market's values. A week with no trades is reported and skipped. |
 | `fantasy-pressbox tank-watch` | Build the tank watch: the race for next season's top rookie picks, who owns them, and which picks jump if their team crosses the playoff line. Dynasty leagues only. It needs a declared draft order (see `config/rookie-draft.yml`) and opens from the middle of the regular season. |
 | `fantasy-pressbox future-stock` | Rank every team on the next three seasons rather than this week: production by age band, each position's age curve, and priced future picks, with its own weight set (`weights.future_stock` in `config/rankings.yml`). Dynasty leagues only. Not recorded, so it prints no movement arrows. |
+| `fantasy-pressbox five-year-plan --team <name or roster id>` | Plan one team's next five seasons: each player's age and stage on the position's age curve, how many of today's starters are past their decline age, how much of today's starter production comes from players still before the cliff, the picks held for each draft, and the team's strength rating, standing and market value today. See [The five-year plan](#the-five-year-plan). Dynasty leagues only. Not recorded. |
 | `fantasy-pressbox record <file> --task <name>` | File a finished edition you pasted back from a chat. `<name>` is `preview`, `survival-preview`, `rankings`, `survival-rankings` or `preseason-rankings`. |
 | `fantasy-pressbox check <file>` | Check a file of posts against the league's post length limit (`POST_MAX_LENGTH`). It warns when a reply has lost its blank lines, which is what highlighting and copying does; use the chat's copy button. |
 | `fantasy-pressbox grade` | Show how last week's predictions actually did. |
@@ -650,6 +654,7 @@ Useful options:
 | `--generate` | Call the AI for you and write finished posts. |
 | `--task <name>` | Which edition a file is, for `record`. |
 | `--early` | Run the tank watch before its start week. |
+| `--team 3` | Which team a `five-year-plan` is about: its name (`--team "Punt Intended"`, or a name it used before), its manager's username, or its roster id. A name that has meant more than one team is refused; use the roster id. Only that edition uses it. |
 | `--refresh-market` | Fetch trade values again instead of reusing the ones saved for that week. |
 | `--refresh-players` | Re-download the NFL player list instead of using the cached copy. |
 | `--workspace <folder>` | Use a league folder other than the one you are in. `PRESSBOX_WORKSPACE` does the same. |
@@ -690,7 +695,8 @@ It's a separate developer account that bills per use. See
 Two kinds of settings, in two places:
 
 - **Your league's own settings** live in your league folder: `.env`,
-  `config/rookie-draft.yml`, `config/guillotine.yml` and your prospect board.
+  `config/rookie-draft.yml`, `config/guillotine.yml`, `config/rivalries.yml`
+  and your prospect board.
   Setup writes the first ones for you.
 - **The house style** — `config/editorial.yml`, `config/rankings.yml` and the
   prompts — ships with Fantasy Pressbox. To change it for one league, put a
@@ -845,8 +851,103 @@ recaps alike.
 - If you override a set, write out every line it needs. A partial set replaces
   the whole thing rather than merging into the default, so five lines means
   five.
+- `preset` — what your league ranks for, in one line of your league folder's
+  own `config/rankings.yml`, such as `preset: rebuild`. Leave it out and the
+  league ranks on `balanced`, the sets under `weights`, exactly as before.
+
+  | Format | Presets |
+  |---|---|
+  | dynasty | `balanced`, `win-now`, `rebuild` |
+  | redraft | `balanced`, `win-now` |
+  | guillotine | `balanced` |
+
+  `win-now` leans on this season's lineup and title chances. `rebuild` leans on
+  what the roster is worth long term and the picks still to come. The values
+  are under `presets` in the shipped file, with the reasoning for each. They
+  are editorial guidance, like every weight here. The posts may say what the
+  league ranks for but never print the numbers. A preset your league's format
+  does not have is refused, naming the ones it does have. So is a preset
+  together with your own `weights.<format>` for the same format, because
+  nothing should silently win: pick one.
 - `weekly.max_normal_movement` — how far a team normally moves in one week.
   One Sunday is a small sample, and the rankings should act like it.
+- `strength.dynasty`, `strength.redraft` and `strength_inputs` — the weights
+  and the window of the [strength rating](#the-strength-rating). A preset
+  carries its own weights for these too. Same rule as `weights`: each set adds
+  up to `1.0`, and a league that writes its own `strength.<format>` cannot also
+  name a `preset` for that format.
+- `age_curves` — for each of `QB`, `RB`, `WR` and `TE`, the age at which a
+  player is at `peak`, starts to `decline`, and hits the `cliff` (the first age
+  of each stage; the stage before `peak` is `rising`). The shipped curves are
+  editorial judgement, written out with their reasoning in the file. Your
+  league's file can change them: ages are whole numbers from 15 to 50 that
+  rise from `peak` to `cliff`, and there is no curve for a defense.
+
+### The strength rating
+
+The rankings are written by the AI under the weights above. The strength
+rating is different: a number from 0 to 100 for every team that Fantasy
+Pressbox **computes itself** from your saved data, so the same data always
+gives the same number and you can check it. The weekly, preseason and
+postseason rankings and the future stock carry it, and the posts may quote it
+and its parts as evidence. It is never the only reason given for a rank.
+Guillotine leagues get none: their survival rankings judge the floor, which is
+a different question.
+
+| Part | What it measures | Leagues |
+|---|---|---|
+| `lineup` | Points of the best lineup the roster could have fielded, over the last four settled weeks | dynasty, redraft |
+| `depth` | Points the bench would have supplied if each week's two best starters were missing | dynasty, redraft |
+| `market_value` | The trade market's value of the roster today | dynasty, redraft |
+| `age_window` | How old the starters are against the rest of the league at the same positions (younger is better) | dynasty |
+| `draft_capital` | The priced future picks the team holds | dynasty, Sleeper only |
+
+Each part ranks the teams and scores them from 100 for first to 0 for last,
+and the rating is the weighted average of a team's scores, so it says where a
+team stands in its own league, not how good it is in absolute terms. For
+example, a team that ranks first in lineup but last in market value, with
+weights of 0.6 and 0.4, rates 60 on those two parts. A part your league cannot supply (no settled
+week yet in the preseason, no trade values, or the traded picks ESPN does not
+give) is listed as `unavailable` with its reason and the other weights are
+scaled back up to `1.0`. A missing part is never counted as 0. The formula is in
+[docs/editorial-model.md](docs/editorial-model.md#the-team-strength-rating).
+
+### The five-year plan
+
+```bash
+fantasy-pressbox five-year-plan --team "Punt Intended"
+fantasy-pressbox five-year-plan --team 3
+```
+
+A dynasty edition about **one** team, chosen with `--team`. It is an outlook
+built from facts, not a prediction. The only things it carries forward are the
+calendar (every player is a year older each season) and the picks already
+issued. It gives the AI, for this season and the four after it:
+
+- **Ages and stages.** Each rostered player's age in each season, and whether
+  he is `rising`, at `peak`, `declining` or past the `cliff` for his position,
+  on the `age_curves` above. With the shipped curves a 29-year-old running back
+  is declining and a 29-year-old quarterback is at peak. A player Sleeper gives
+  no age for is listed without one, with the reason.
+- **Roll-ups.** In each season, how many of today's starters are past their
+  position's decline age, and how much of today's starter production comes
+  from players still before their cliff.
+- **Picks.** The picks the team holds for each draft. A draft that has already
+  been held, or one no pick of which has been traded or priced (so whether
+  it is issued is not known), is `unavailable` with that reason, never an empty list.
+- **Today.** The team's strength rating and its parts, its place in the
+  standings, and its roster's market value.
+
+There are no projected points, records or titles. The post describes the
+team's contention window and the options open to it (who to sell before a
+cliff, which picks are its currency, when to hold), each tied to a fact.
+
+It refuses to run, saying why, in a redraft or guillotine league, on an ESPN
+league (traded picks are not read, so who holds which pick is not known), and
+when `--team` is missing, names no team, or names more than one. It is not
+recorded, and it is not part of the weekly routine. The prompt file is
+`prompts/five-year-plan.md`; the file it writes carries the team's roster id,
+so two teams' plans for the same week do not overwrite each other.
 
 ### `config/guillotine.yml` — who has been chopped
 
@@ -949,6 +1050,47 @@ A missing source, a repeated rank, or a missing `updated` date stops the command
 with a message naming the entry. A prospect who isn't on the board is not
 discussed. `doctor` reports the board's age and warns once it is **over 45
 days old** — boards move fast in draft season, so refresh it.
+
+### `config/rivalries.yml` — who your league's rivals are
+
+Optional, and any league format. A rivalry is **your** call: Fantasy Pressbox
+never works one out from results, and it ships none. Copy the commented example
+that comes with the package (`config/rivalries.yml`; setup prints its path) into
+your league folder's `config/` and list the pairs:
+
+```yaml
+rivalries:
+  - teams:                  # exactly two, one per line
+      - Bye Week Blues      #   a team name as the platform shows it,
+      - Punt Intended       #   or a roster id such as 3
+    name: The Invented Cup  # optional, up to 60 characters
+    note: Started over a waiver claim.   # optional, one line, up to 200
+```
+
+- **A rename keeps the rivalry.** Teams are matched to rosters the same way
+  `guillotine.yml`'s are, so a team that changes its name is still the rival.
+  A roster id works too.
+- **A mistake stops the command, naming the rivalry** by its place in the list
+  (`rivalry 2`): a team that is not in the league, a name that has meant more
+  than one team, a pair of the same team, or the same pair written twice. The
+  message never repeats your name or note.
+- **Teams go one per line, not in `[brackets]`:** the file reader has no
+  bracket syntax and says so if you try. A name with a colon or `#` in it goes
+  in "double quotes".
+- **Your words stay yours.** The name and note are about real people, so they
+  live only in your league folder and in a league file you export yourself
+  (`export-league` carries `config/rivalries.yml`); they are never part of the
+  package.
+- **`doctor` checks them** against the league's teams and lists any rivalry
+  that no longer resolves (a team that left, a name that was misspelt).
+- **What the editions do with them.** In the preview and the recap, a matchup
+  between rivals is written one step hotter than `roast_intensity` (light to
+  medium, medium to scorched), and that post alone. It is given your name and
+  note and the pair's head-to-head record from the weeks you have saved: wins,
+  points, the last meeting, the streak and the biggest margin. With no meeting
+  saved, it gets no record at all, never 0-0. A trade between rivals is marked
+  as one in the trade report, and graded like any other. Survival editions
+  have no matchups, so they leave rivalries out.
 
 ### Trade values — fetched for you
 
@@ -1074,7 +1216,9 @@ fantasy-pressbox import-league my-league.fantasy-pressbox.json --workspace ~/lea
 ```
 
 The file holds `data/` (except the player list in `data/cache/`) and the
-league's settings from `.env` and `config/`. It never holds your AI keys, ESPN
+league's settings from `.env` and `config/` (including `config/rivalries.yml`,
+which is your own writing about real people, so send the file only to people you
+would tell). It never holds your AI keys, ESPN
 cookies, `AI_PROVIDER`, `AI_MODEL`, `DATA_DIR`, `OUTPUT_DIR` or `DEBUG`: those
 lines are dropped as `.env` is read, and `export-league` lists the ones it left
 out. For an ESPN league, the saved pages go in without their members' IDs and

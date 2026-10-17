@@ -17,10 +17,11 @@
  *   tank-watch/<season>/week-<n>.json   the draft order a tank watch reported
  *   editions/<season>/week-<n>-<task>.json  the whole reply an edition was recorded from
  *
- * This module has no node: imports. A back end supplies four operations:
+ * This module has no node: imports. A back end supplies five operations:
  *   read(kind, season, file)         → the saved value, or null
  *   write(kind, season, file, value) → where it was written (a path, or a key)
  *   list(kind, season)               → the file names saved for that kind and season
+ *   seasons(kind)                    → the seasons anything of that kind is saved under
  *   locate(kind, season, file)       → where that file is, saved or not
  */
 
@@ -40,7 +41,7 @@ function weeksIn(files) {
 
 /** The store's methods, over any back end. */
 export function createStoreOver(backend) {
-  const { read, write, list, locate } = backend;
+  const { read, write, list, seasons, locate } = backend;
   const weekFile = (week) => `week-${week}.json`;
 
   const store = {
@@ -104,6 +105,16 @@ export function createStoreOver(backend) {
         .filter((week) => week <= throughWeek)
         .map((week) => store.loadSnapshot(season, week))
         .filter(Boolean);
+    },
+    /**
+     * Every season with at least one week's snapshot saved, oldest first, as
+     * strings. Only what was captured: Sleeper serves the current season
+     * alone, so an older season is here only if it was saved at the time.
+     */
+    snapshotSeasons() {
+      return seasons('snapshots')
+        .filter((season) => /^\d{4}$/.test(season) && weeksIn(list('snapshots', season)).length > 0)
+        .sort((a, b) => Number(a) - Number(b));
     },
     /**
      * Every name each roster has been captured under this season, week by week.
@@ -238,6 +249,9 @@ export function createMemoryStore(initial = {}) {
     },
     list(kind, season) {
       return Object.keys(data[kind]?.[String(season)] ?? {});
+    },
+    seasons(kind) {
+      return Object.keys(data[kind] ?? {});
     },
     locate: keyOf,
   });

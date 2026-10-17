@@ -308,15 +308,18 @@ test('a workspace copy brings its overrides; a copy from the package leaves the 
 test('from the package, an empty template is left behind and a declared one travels', () => {
   const source = dynastyLeague(tempDir());
   write(source, 'config/guillotine.yml', '# the template\neliminations:\n  # 1: "Bye Week Blues"\n');
+  write(source, 'config/rivalries.yml', '# the template\nrivalries:\n  # - teams:\n');
   const fromPackage = join(tempDir(), 'p');
   copyOf(source, fromPackage, { fromPackage: true });
   assert.equal(existsSync(join(fromPackage, 'config', 'guillotine.yml')), false);
+  assert.equal(existsSync(join(fromPackage, 'config', 'rivalries.yml')), false);
   assert.ok(existsSync(join(fromPackage, 'config', 'rookie-draft.yml')), 'the declared rule is the league’s');
 
   // A workspace's own file is the operator's, empty or not.
   const fromWorkspace = join(tempDir(), 'w');
   copyOf(source, fromWorkspace);
   assert.ok(existsSync(join(fromWorkspace, 'config', 'guillotine.yml')));
+  assert.ok(existsSync(join(fromWorkspace, 'config', 'rivalries.yml')));
 });
 
 test('a copy is refused into a folder that already holds anything', () => {

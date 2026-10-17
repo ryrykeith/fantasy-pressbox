@@ -27,6 +27,7 @@ import { createMemoryStore } from '../src/storeCore.mjs';
 import { createMemoryPlayerCache } from '../src/playerCache.mjs';
 import { refuseTankWatch } from '../src/tankWatch.mjs';
 import { refuseFutureStock } from '../src/futureStock.mjs';
+import { refuseFiveYearPlan } from '../src/fiveYearPlan.mjs';
 import {
   EDITIONS,
   OPTIONS,
@@ -109,6 +110,18 @@ test('editionOptions passes on only the options OPTIONS names for that edition',
   assert.deepEqual(editionOptions('trade-report', args), { format: 'imessage', refreshMarket: true });
 });
 
+test('parseArgs reads --team, refuses it without a value, and only the five-year plan receives it', () => {
+  const args = parseArgs(['five-year-plan', '--team', 'Bye Week Blues', '--week', '4']);
+  assert.deepEqual(args, { _: ['five-year-plan'], team: 'Bye Week Blues', week: 4 });
+  assert.deepEqual(editionOptions('five-year-plan', args), { team: 'Bye Week Blues', week: 4 });
+  assert.deepEqual(editionOptions('future-stock', args), { week: 4 });
+  for (const argv of [['five-year-plan', '--team'], ['five-year-plan', '--team', '--week', '4']]) {
+    assert.throws(() => parseArgs(argv), { message: '--team needs a team name or roster id, e.g. --team 3' });
+  }
+  assert.match(help, /^ {2}--team <name\|id> +Which team a five-year plan is about: its name or roster id$/m);
+  assert.match(help, /^ {2}five-year-plan +Plan one team's next five seasons, chosen with --team \(dynasty leagues\)$/m);
+});
+
 /* ---------------------------------------------------------- the descriptors */
 
 test('EDITIONS names each edition once, every one a prompt that exists', () => {
@@ -139,6 +152,7 @@ function allowedByRefusals(task, formatType) {
     refuseOrdinaryEditionInGuillotineLeague(config, task);
     refuseSurvivalEditionWithoutEliminations(config, task);
     if (task === 'future-stock') refuseFutureStock({ formatType });
+    if (task === 'five-year-plan') refuseFiveYearPlan({ formatType });
     if (task === 'tank-watch') refuseTankWatch({ formatType, rule: null });
     return true;
   } catch (error) {
@@ -200,7 +214,7 @@ test('--help reads as it did before the descriptors drove it', () => {
 test("main dispatches every edition's command to that edition", () => {
   const source = readFileSync(CLI, 'utf8');
   const main = source.slice(source.indexOf('async function main()'));
-  const constants = { TANK_WATCH_TASK: 'tank-watch', FUTURE_STOCK_TASK: 'future-stock' };
+  const constants = { TANK_WATCH_TASK: 'tank-watch', FUTURE_STOCK_TASK: 'future-stock', FIVE_YEAR_PLAN_TASK: 'five-year-plan' };
   const cases = [...main.matchAll(/case (?:'([a-z-]+)'|([A-Z_]+)):/g)].map((m) => m[1] ?? constants[m[2]]);
   for (const edition of EDITIONS.filter((e) => e.command)) {
     assert.ok(cases.includes(edition.command), edition.command);

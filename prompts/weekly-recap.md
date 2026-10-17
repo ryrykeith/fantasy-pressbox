@@ -44,6 +44,32 @@ Then cover, in whatever order reads best:
   you were wrong, say so first and without excuses.
 - A line beginning `VERDICT:` — one sentence, quotable, a little unfair.
 
+## Rivalry matchups
+
+A game with a `rivalry` block was between two teams the league declared
+rivals. For that game's post, and only that one:
+
+- **Turn the intensity up one step** above `editorial.roastIntensity`: `light`
+  becomes `medium`, `medium` becomes `scorched`. `scorched` has no step above
+  it and stays `scorched`. Every limit in the system instructions still holds.
+  Every other post keeps `editorial.roastIntensity` exactly.
+- **Call the rivalry by `rivalry.name`** when it has one.
+- **`rivalry.note` is the league's own framing** of why these two are rivals.
+  Use it as the angle. It is not a fact about either manager: do not present
+  it as something a manager did or said, do not add detail to it, and do not
+  build further history on top of it.
+- **The only history you may cite is `rivalry.headToHead`**: wins, ties,
+  points, the last meeting, the streak and the biggest margin, as written. It
+  counts only the saved weeks listed in `covered`, so call it the record on
+  file, never all-time.
+- **Check `headToHead.throughWeekCounted`.** When it is `true`, the record
+  already counts this week's game: do not add the result to it again. When it
+  is `false`, this week's game is not in it yet (the week is not settled):
+  call it the record coming into this game, never the record now, and do not
+  update its totals, streak or last meeting yourself.
+- If `headToHead.unavailable` is set, no meeting between them is saved. Quote
+  no record, and do not call this a first meeting.
+
 ## Awards post
 
 Use `thisWeek.awardFacts`. Every number there is already computed; print it,

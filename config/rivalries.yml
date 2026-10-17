@@ -1,0 +1,42 @@
+# ============================================================================
+# Rivalries — optional. Copy this file into your league folder's config/ and
+# declare the pairs your league treats as rivals.
+#
+# A rivalry is YOUR judgement, not something this tool works out. It is never
+# inferred from results and never guessed. The package ships NO rivalries:
+# the names and notes you write are about real people, so they stay in your
+# league folder (and in a league file you export yourself) and are never
+# part of the package.
+#
+# HOW TO WRITE ONE
+#   rivalries:
+#     - teams:                        # exactly two, one per line: each a team
+#         - Bye Week Blues            #   name as the platform shows it, or a
+#         - Punt Intended             #   roster id (such as 3). No [brackets]:
+#                                     #   this file's reader has no such syntax.
+#       name: The Invented Cup        # optional, up to 60 characters
+#       note: Started over a waiver claim.   # optional, ONE line, up to 200
+#
+# A name with a colon or a # in it goes in "double quotes".
+#
+# - Teams are matched to rosters, not to names, so a team that renames itself
+#   keeps its rivalry. A roster id works too, for a team that renames often.
+# - A name that matches no team, or that has meant more than one team, is
+#   refused, and so is a pair of the same team or the same pair written twice.
+#   The message names the rivalry by its position in this list; it never
+#   repeats your name or note.
+# - A team may have several rivals.
+# - The note is the only backstory the writer is given. Write only what
+#   happened; nothing else will be invented to fill it out.
+# - The preview and the recap write a rivals' matchup one step hotter than
+#   roast_intensity (config/editorial.yml), with the pair's head-to-head record
+#   from your saved weeks; the trade report marks a trade between rivals.
+#
+# Run `node src/cli.mjs doctor` after editing to see whether every rivalry
+# still resolves to a team.
+rivalries:
+  # - teams:
+  #     - Bye Week Blues
+  #     - Punt Intended
+  #   name: The Invented Cup
+  #   note: Started over a waiver claim.

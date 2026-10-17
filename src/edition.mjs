@@ -18,12 +18,27 @@
  */
 import { providerOf, getProvider } from './providers.mjs';
 import { hasFutureDraftCapital, refuseEditionWithoutCapability } from './format.mjs';
-import { captureWeek, openLeague, readByeExposure, readMarketValues, readPickCapital, readRosterWindow, readTransactions, resolveWeek } from './pipeline.mjs';
+import {
+  captureWeek,
+  openLeague,
+  readByeExposure,
+  readMarketValues,
+  readPickCapital,
+  readRosterWindow,
+  readStrength,
+  readTransactions,
+  resolveWeek,
+  settledWeeks,
+} from './pipeline.mjs';
 import { FUTURE_STOCK_TASK, refuseFutureStock } from './futureStock.mjs';
+import { FIVE_YEAR_PLAN_TASK, refuseFiveYearPlan, refuseWithoutTeam, resolvePlanTeam } from './fiveYearPlan.mjs';
+import { buildFiveYearPlan } from './analysis/fiveYearPlan.mjs';
 import { normalizeFutureDraftCapital } from './league/draftCapital.mjs';
 import {
   TASKS,
   RANKING_TASKS,
+  STRENGTH_TASKS,
+  RIVALRY_TASKS,
   ELIMINATION_ONLY_TASKS,
   TRANSACTION_TASKS,
   buildContext,
@@ -33,9 +48,11 @@ import {
 import { extractJsonBlock } from './validate.mjs';
 import { gradePredictions, withMovement, movementLabel } from './rankingGrades.mjs';
 import { createTeamIdentity, attachRosterIds, presentPreviousRankings, describeUnresolved } from './teamIdentity.mjs';
+import { resolveRivalries } from './rivalries.mjs';
+import { headToHead, readSavedSeasons } from './analysis/rivalry.mjs';
 import { TANK_WATCH_TASK, refuseTankWatch, resolveTankWatchStartWeek } from './tankWatch.mjs';
 import { OPTIONS, editionNamed, optionNamed, quotedValues } from './options.mjs';
-import { ESPN_ROUTE_KEY, withRankEmojiMode } from './settings.mjs';
+import { ESPN_ROUTE_KEY, resolveAgeCurves, withRankEmojiMode } from './settings.mjs';
 
 /** How a refusal names a command to run instead. The CLI passes its own, with the program in front. */
 const bareCommand = (name) => name;
@@ -342,11 +359,18 @@ export function teamIdentityFor({ teams, store, league }) {
   });
 }
 
-/** The name an edition's files share: `2026-week03-rankings`, or `2026-preseason-rankings`. */
-export function editionFileStem({ task, season, week }) {
-  return task === 'preseason-rankings'
-    ? `${season}-preseason-rankings`
-    : `${season}-week${String(week).padStart(2, '0')}-${task}`;
+/**
+ * The name an edition's files share: `2026-week03-rankings`, or
+ * `2026-preseason-rankings`. An edition about one team (`rosterId`) names it,
+ * `2026-week03-five-year-plan-team7`, so two teams' plans for the same week
+ * do not overwrite each other.
+ */
+export function editionFileStem({ task, season, week, rosterId = null }) {
+  const stem =
+    task === 'preseason-rankings'
+      ? `${season}-preseason-rankings`
+      : `${season}-week${String(week).padStart(2, '0')}-${task}`;
+  return rosterId === null ? stem : `${stem}-team${rosterId}`;
 }
 
 /**
@@ -356,9 +380,11 @@ export function editionFileStem({ task, season, week }) {
  * - `task`         the edition (EDITIONS in src/options.mjs).
  * - `week`         the week asked for, or undefined to work it out.
  * - `options`      the edition's options, by OPTIONS name (format, early,
- *                  refreshPlayers, refreshMarket).
+ *                  refreshPlayers, refreshMarket, team).
  * - `settings`     the league's resolved settings (the CLI's loadConfig
- *                  output); its provider is opened from them.
+ *                  output); its provider is opened from them. Its `rivalries`
+ *                  (src/rivalries.mjs, as declared) are resolved to roster ids
+ *                  once the league's teams are known.
  * - `store`        where the league's history lives (src/storeCore.mjs).
  * - `assets`       the shipped prompts and tables (src/assets.mjs).
  * - `prospectBoardFor(draftYear)`  the league's prospect board for a class,
@@ -371,7 +397,10 @@ export function editionFileStem({ task, season, week }) {
  * → `{ built: false, message }` for a transaction edition about a quiet week
  *   (nothing was built, and that is a result, not an error), or
  *   `{ built: true, task, week, prompt, context, fileStem, league, teams,
- *   store, previousRankings, recordsBlock, tankWatchPath }`.
+ *   store, previousRankings, rivalries, recordsBlock, tankWatchPath }`.
+ *   `rivalries` are the declared rivalries resolved to roster ids
+ *   (resolveRivalries); one naming a team the league does not have refuses
+ *   the edition.
  *   `recordsBlock` says whether the reply ends with a block recordEdition
  *   files; `tankWatchPath` is where a tank watch's projection was saved for
  *   the next one to measure movement from.
@@ -406,6 +435,14 @@ export async function prepareEdition({
   // Same two-step as the tank watch: the declared format refuses before
   // Sleeper is contacted, the resolved one once the league is open.
   if (isFutureStock) refuseFutureStock({ formatType: config.leagueFormat });
+  const isFiveYearPlan = task === FIVE_YEAR_PLAN_TASK;
+  // The declared format refuses before the provider is contacted, and so does
+  // a missing --team. Whether the team exists needs the league's teams, so an
+  // unknown or ambiguous one is refused once the league is open.
+  if (isFiveYearPlan) {
+    refuseFiveYearPlan({ formatType: config.leagueFormat });
+    refuseWithoutTeam(options.team, { commandFor });
+  }
   const format = outputFormat(options);
 
   // Without allowStaleLeague: a provider with an import route refuses a saved
@@ -422,6 +459,12 @@ export async function prepareEdition({
   // Null for a provider with no traded future picks (ESPN); every use is gated on that capability.
   const tradedPicks = ctx.draftCapital?.tradedPicks ?? [];
   const teamsByRosterId = new Map(teams.map((team) => [team.rosterId, team]));
+  // Declared in config/rivalries.yml by team name or roster id; resolved here,
+  // where the teams are known, the way config/guillotine.yml's teams are.
+  const rivalries = resolveRivalries(config.rivalries ?? [], teamIdentityFor({ teams, store, league }));
+  if (isFiveYearPlan) refuseFiveYearPlan({ formatType: league.format.type });
+  // Before the week is captured: a typo'd team costs no fetch and writes nothing.
+  const planTeam = isFiveYearPlan ? resolvePlanTeam(options.team, teamIdentityFor({ teams, store, league })) : null;
 
   // Not computed for a format without future picks: Sleeper can still report
   // picks traded for a redraft league's own upcoming draft, so the data being
@@ -476,9 +519,41 @@ export async function prepareEdition({
   let prospectBoard = null;
   let rosterWindow = null;
   let pickCapital = null;
+  let strength = null;
+  let rivalryRecords = null;
+  let fiveYearPlan = null;
+
+  /**
+   * The team strength rating, for an edition in STRENGTH_TASKS, from what is
+   * on file and the week's market (fetched once and saved, so the same week
+   * always rates on the same prices). A market that cannot be fetched leaves
+   * the priced components out, saying so; it never stops the edition.
+   */
+  const rateStrength = async ({ preseason = false } = {}) => {
+    if (!marketValues) {
+      marketValues = await readMarketValues({ store, league, teams, week, refresh: options.refreshMarket });
+      if (marketValues.unavailable) {
+        warn(`Trade values could not be fetched (${marketValues.unavailable}). The strength rating leaves them out.`);
+      }
+    }
+    return readStrength({
+      store,
+      assets,
+      league,
+      teams,
+      players,
+      config,
+      throughWeek: week,
+      market: marketValues,
+      tradedPicks,
+      ...(pickCapital ? { pickCapital } : {}),
+      preseason,
+    });
+  };
 
   if (task === 'preseason-rankings') {
     say('Preseason edition: regular-season results are deliberately excluded.');
+    strength = await rateStrength({ preseason: true });
   } else {
     const captured = await captureWeek({ ...ctx, week });
     eliminationLedger = captured.elimination ?? null;
@@ -565,6 +640,33 @@ export async function prepareEdition({
       if (!rosterWindow.weeksCovered.length) {
         warn(`Week ${week} has no completed week on disk: production by age cannot be reported yet.`);
       }
+      strength = await rateStrength();
+    } else if (isFiveYearPlan) {
+      // The future stock's inputs, for one team: the week's market (a market
+      // that cannot be fetched leaves picks and the roster unpriced, saying
+      // so), the league's pick capital, and the settled weeks today's
+      // starters scored in. Nothing is projected.
+      marketValues = await readMarketValues({ store, league, teams, week, refresh: options.refreshMarket });
+      if (marketValues.unavailable) {
+        warn(`Trade values could not be fetched (${marketValues.unavailable}). Picks and the roster will not be priced.`);
+      }
+      pickCapital = readPickCapital({ league, teams, tradedPicks, market: marketValues, config });
+      draftOrder = captured.draftOrder ?? null;
+      const weeks = settledWeeks({ store, assets, league, teams, players, throughWeek: week });
+      if (!weeks.length) warn(`No settled week is on disk through week ${week}: today's starters have no production to report.`);
+      strength = await rateStrength();
+      fiveYearPlan = buildFiveYearPlan({
+        league,
+        team: planTeam,
+        teams,
+        players,
+        weeks,
+        ageCurves: resolveAgeCurves(config.rankings),
+        pickCapital,
+        strength,
+        market: marketValues,
+      });
+      say(`Planning ${planTeam.name}'s seasons ${fiveYearPlan.seasons[0]} to ${fiveYearPlan.seasons.at(-1)}.`);
     } else if (task === 'preview') {
       // The week has not been played, so the preview gets the pairings plus
       // last week's results — never this week's partial scores.
@@ -629,14 +731,30 @@ export async function prepareEdition({
       if (gradedPredictions) {
         say(`Grading week ${week} predictions: ${gradedPredictions.correct}/${gradedPredictions.total} correct.`);
       }
+      if (STRENGTH_TASKS.includes(task)) strength = await rateStrength();
     }
+  }
+
+  // Each declared rivalry's head-to-head record, from the weeks saved so far
+  // (captureWeek above has just saved this one). A preview reads up to the
+  // week before the game: the game itself has not happened. A recap and a
+  // trade report read through their own week, so a recap's record already
+  // counts the game it is about.
+  if (rivalries.length && RIVALRY_TASKS.includes(task)) {
+    const through = { season: String(league.season), week: edition.forwardLooking ? week - 1 : week };
+    const seasons = readSavedSeasons(store, { through });
+    rivalryRecords = rivalries.map((rivalry) => ({
+      ...rivalry,
+      headToHead: headToHead(seasons, rivalry.rosterIds, league),
+      through,
+    }));
   }
 
   // Shown to the model under the names teams go by now, with the published
   // name kept as `formerly`, so a rename reads as a rename and not as a team
   // that appeared from nowhere while another vanished.
   const previousRankings =
-    task === 'preseason-rankings' || isTransactionEdition || isTankWatch || isFutureStock
+    task === 'preseason-rankings' || isTransactionEdition || isTankWatch || isFutureStock || isFiveYearPlan
       ? null
       : presentPreviousRankings(store.loadPreviousRankings(league.season, week), teamIdentityFor(ctx));
   if (previousRankings) {
@@ -673,6 +791,9 @@ export async function prepareEdition({
     prospectBoard,
     rosterWindow,
     pickCapital,
+    strength,
+    rivalryRecords,
+    fiveYearPlan,
     format,
   });
 
@@ -690,15 +811,16 @@ export async function prepareEdition({
     format,
     prompt,
     context,
-    fileStem: editionFileStem({ task, season: league.season, week }),
+    fileStem: editionFileStem({ task, season: league.season, week, rosterId: planTeam?.rosterId ?? null }),
     league,
     teams,
     store,
     previousRankings,
-    // A transaction edition, a tank watch and a future stock edition end with
-    // no machine-readable block: there is no prediction to grade and no
-    // ranking to carry movement from.
-    recordsBlock: !(isTransactionEdition || isTankWatch || isFutureStock),
+    rivalries,
+    // A transaction edition, a tank watch, a future stock edition and a
+    // five-year plan end with no machine-readable block: there is no
+    // prediction to grade and no ranking to carry movement from.
+    recordsBlock: !(isTransactionEdition || isTankWatch || isFutureStock || isFiveYearPlan),
     tankWatchPath,
   };
 }
