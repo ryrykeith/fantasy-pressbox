@@ -40,7 +40,8 @@ also tagged `v<version>` with a GitHub release.
   are in `config/rankings.yml`, where you can change them.
 - **League files**: `export-league` saves a league's history and settings as
   one JSON file, and `import-league` turns one back into a league folder.
-  API keys and ESPN cookies are never written into it.
+  API keys and ESPN cookies are never written into it, and a file over 20 MB
+  is refused.
 - **Rank emoji**: one setting with three modes, `default`, `custom` (your own
   `ranking_emoji` table) or `none`, shown by `doctor`. `--emoji none` (or
   `default`) changes it for a single run without touching your settings.
