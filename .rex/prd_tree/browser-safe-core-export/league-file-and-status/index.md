@@ -15,7 +15,9 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
+| [Check the contents of every league file history entry](./check-the-contents-of-every-league.md) | pending |
 | [export-league writes a league file over 20 MB that import-league and parseLeagueFile then refuse](./export-league-writes-a-league-file.md) | completed |
 | [inspectLeague: one status report for doctor and the website](./inspectleague-one-status-report-for.md) | completed |
 | [Keep a long league history under the league file cap](./keep-a-long-league-history-under-the.md) | pending |
 | [League file v1: schema, validator, import and export](./league-file-v1-schema-validator-import.md) | completed |
+| [Refusals never quote text from the league file](./refusals-never-quote-text-from-the.md) | completed |

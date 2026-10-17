@@ -13,7 +13,7 @@ Two guards run however a version is published:
   after an unpublish (which npm mostly limits to the first 72 hours). A mistake in a published
   version is fixed by publishing the next one.
 
-## The first release (0.1.0, by hand)
+## The first release (0.1.0, by hand — done 2026-10-11)
 
 npm trusted publishing can only be configured for a package that already
 exists, so the first version is published from a maintainer's machine.
@@ -52,8 +52,11 @@ exists, so the first version is published from a maintainer's machine.
    gh release create v0.1.0 --target main --title v0.1.0 --notes "First public release. See CHANGELOG.md."
    ```
 
-   This runs the Publish workflow, which sees 0.1.0 is already on npm and
-   stops with a notice. That is expected.
+   This runs the Publish workflow. If 0.1.0 is already on npm it stops with a
+   notice. If the release is created before the hand publish has finished, or
+   before the trusted publisher exists, its `npm publish` fails with `E404`
+   and nothing is published. That is what happened for v0.1.0, and it is
+   harmless.
 
 ## Set up trusted publishing (once, after 0.1.0 exists)
 
@@ -86,7 +89,9 @@ same environment name in the npm trusted-publisher form.
    file's `writtenBy`); `npm test` fails until the two agree.
 
 2. Add a `## <version>` section at the top of `CHANGELOG.md` describing what
-   changed for someone running the tool.
+   changed for someone running the tool. The heading must be exactly
+   `## 0.2.0` (say): the workflow looks for `^## <version>$`, so no date or
+   suffix.
 3. Open a PR, let CI pass, and merge it.
 4. Create the release from `main`, with the tag `v` plus the version:
 
@@ -97,6 +102,13 @@ same environment name in the npm trusted-publisher form.
 5. The Publish workflow checks the tag matches `package.json`, checks
    `CHANGELOG.md` has the section, runs the tests and the pack check, and
    publishes. Watch it under the repository's **Actions** tab.
+
+6. Check the release landed: `npm view fantasy-pressbox version` shows it,
+   and jsDelivr serves the browser entry as JavaScript:
+
+   ```bash
+   curl -sI https://cdn.jsdelivr.net/npm/fantasy-pressbox@0.2.0/src/core/index.mjs | grep -i content-type
+   ```
 
 A release marked as a pre-release (for example `v0.2.0-beta.1`, with a
 matching version in `package.json`) is published under the `next` dist-tag,
@@ -115,7 +127,7 @@ gh release delete v0.1.1 --cleanup-tag
   create it again with the right tag. Nothing was published.
 - **No `CHANGELOG.md` section**: add it in a PR, merge, then delete and
   recreate the release.
-- **Auth error at `npm publish`**: the trusted publisher is missing or does not
-  match. Check the user, repository and workflow filename on npmjs.com.
+- **`E404` or an auth error at `npm publish`**: the trusted publisher is
+  missing or does not match (npm answers a missing one with `E404 Not Found`). Check the user, repository and workflow filename on npmjs.com.
 - **Tests or the pack check fail**: fix on `main`, then delete and recreate
   the release so it points at the fixed commit.

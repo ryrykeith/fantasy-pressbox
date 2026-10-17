@@ -15,7 +15,7 @@ import { parseDeclaredEliminations } from './analysis/elimination.mjs';
 import { parseDeclaredRoundOrder, parseDeclaredDraftOrder } from './rookieDraft.mjs';
 import { parseTankWatchStartWeek } from './tankWatch.mjs';
 import { DEFAULT_PROVIDER, PROVIDER_NAMES, providerDisplayName } from './providers.mjs';
-import { checkKey } from './lib/safeInput.mjs';
+import { checkKey, shownText } from './lib/safeInput.mjs';
 
 export const DEFAULT_EDITORIAL = {
   tone: 'humorous',
@@ -579,7 +579,7 @@ function validateStrengthSettings(rankings) {
   const unknown = Object.keys(inputs).filter((key) => !(key in DEFAULT_STRENGTH_INPUTS));
   if (unknown.length) {
     throw new Error(
-      `strength_inputs in config/rankings.yml has ${unknown.join(', ')}, which it does not read. ` +
+      `strength_inputs in config/rankings.yml has ${shownText(unknown.join(', '))}, which it does not read. ` +
         `It reads: ${Object.keys(DEFAULT_STRENGTH_INPUTS).join(', ')}.`,
     );
   }
@@ -605,7 +605,7 @@ function validateAgeCurves(rankings) {
     if (!isTable(curve)) throw new Error(`${path} must be a table of ${AGE_CURVE_KEYS.join(', ')}`);
     const unknown = Object.keys(curve).filter((key) => !AGE_CURVE_KEYS.includes(key));
     if (unknown.length) {
-      throw new Error(`${path} has ${unknown.join(', ')}, which it does not read. A curve has: ${AGE_CURVE_KEYS.join(', ')}.`);
+      throw new Error(`${path} has ${shownText(unknown.join(', '))}, which it does not read. A curve has: ${AGE_CURVE_KEYS.join(', ')}.`);
     }
     for (const key of AGE_CURVE_KEYS) {
       const age = curve[key];

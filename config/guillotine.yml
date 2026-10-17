@@ -1,5 +1,6 @@
 # ============================================================================
-# Guillotine settings — only read when LEAGUE_FORMAT is `guillotine`.
+# Guillotine settings — only used when LEAGUE_FORMAT is `guillotine` (a typo
+# is still refused in any league).
 #
 # In a guillotine league there are no matchups. Every team scores on its own
 # each week and the LOWEST scorer is eliminated permanently, until one is left.
@@ -32,6 +33,6 @@
 # guessing. An absent week is reported as "not resolved"; a wrong one quietly
 # poisons every week after it, because the survivors are wrong from then on.
 #
-# Run `node src/cli.mjs doctor` after editing to see the ledger it produced.
+# Run `fantasy-pressbox doctor` after editing to see the ledger it produced.
 eliminations:
   # 1: "Bye Week Blues"

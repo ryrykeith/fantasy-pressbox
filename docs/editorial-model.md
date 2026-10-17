@@ -53,7 +53,9 @@ The weights above steer a ranking that the model writes. The strength rating
 is a different kind of thing: a number from 0 to 100 that **the code**
 computes for every team (`src/analysis/strength.mjs`), so the same saved data
 always gives the same rating and anyone can check it. The weekly, preseason
-and postseason rankings and the future stock carry it as `strength`. It is
+and postseason rankings and the future stock carry it as `strength`; the
+five-year plan carries its one team's rating, rank and components as
+`fiveYearPlan.strength`. It is
 evidence the ranking may cite, never the sole reason for a rank. Guillotine
 leagues get no rating, because their survival rankings judge the floor, which
 is a different question.
@@ -225,6 +227,11 @@ contention window and the options open to the team, each tied to a fact. Age
 stages come from `age_curves` in `config/rankings.yml`, which are editorial
 judgement and say so. The plan states no projected points, records or titles.
 
+It refuses redraft and guillotine leagues, and ESPN leagues, whose traded
+picks are not read. `--team` takes a team's name, a name it had before, its
+manager's username or its roster id; a name that has meant more than one team
+is refused, listing the teams. It ends with no JSON block and is not recorded.
+
 ## Tone
 
 Confident, analytical, funny, dry, slightly petty, occasionally absurd,
@@ -302,6 +309,12 @@ Two rules:
 - about 900 characters per post by default
 - validated programmatically before output
 - **never silently truncated**
+- rank emoji come from one setting with three modes, `default`, `custom` (a
+  `ranking_emoji` table) or `none`; `--emoji default` or `--emoji none` changes
+  it for one run
+- a post that quotes a FantasyCalc value ends with the credit line
+  `Values: FantasyCalc (fantasycalc.com)`, which counts toward the limit;
+  `check` reports a post that leaves it out
 
 Long publications are numbered so the league can follow them:
 

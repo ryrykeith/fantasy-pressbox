@@ -68,6 +68,14 @@ function splitKey(content) {
   return null;
 }
 
+/**
+ * Each line of `source` as the reader sees it and quotes it in a refusal:
+ * without its comment, trimmed. Blank and `---` lines are left out.
+ */
+export function lineContents(source) {
+  return toLines(source).map((line) => line.content);
+}
+
 function toLines(source) {
   return source
     .split(/\r?\n/)

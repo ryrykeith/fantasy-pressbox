@@ -46,7 +46,7 @@
 #       sort: max_points_for
 #       direction: ascending
 #
-# Run `node src/cli.mjs doctor` after editing to see the rule in plain words.
+# Run `fantasy-pressbox doctor` after editing to see the rule in plain words.
 #
 order:
 

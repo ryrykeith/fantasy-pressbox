@@ -20,6 +20,8 @@
  * reads no files; src/config.mjs loads the file and hands the parsed YAML here.
  */
 
+import { shownText } from './lib/safeInput.mjs';
+
 /** Days after which doctor warns that the board needs refreshing. */
 export const PROSPECT_BOARD_STALE_DAYS = 45;
 
@@ -41,7 +43,8 @@ function requiredText(where, label, value) {
 function unrecognised(where, object, valid) {
   const unknown = Object.keys(object).filter((key) => !valid.includes(key));
   if (unknown.length) {
-    throw new Error(`${where}: unrecognised ${unknown.join(', ')}. Valid keys are ${valid.join(', ')}.`);
+    // Cut as a whole: a file could spell a message of its own across several short keys.
+    throw new Error(`${where}: unrecognised ${shownText(unknown.join(', '))}. Valid keys are ${valid.join(', ')}.`);
   }
 }
 
@@ -67,9 +70,9 @@ function parseEntry(raw, index, source) {
 
   // Named in every later message, so the operator can find the line.
   const name = requiredText(where, 'name', raw.name);
-  const named = `${where} (${name})`;
+  const named = `${where} (${shownText(name)})`;
   if (!Number.isInteger(raw.rank) || raw.rank < 1) {
-    throw new Error(`${named}: rank is ${raw.rank === undefined ? 'missing' : `"${raw.rank}"`}. Use a whole number from 1.`);
+    throw new Error(`${named}: rank is ${raw.rank === undefined ? 'missing' : `"${shownText(raw.rank)}"`}. Use a whole number from 1.`);
   }
   return {
     rank: raw.rank,
@@ -99,7 +102,7 @@ export function parseProspectBoard(value, { draftYear, source = prospectBoardFil
     throw new Error(`${source}: draftYear is missing. It must be ${draftYear}.`);
   }
   if (value.draftYear !== draftYear) {
-    throw new Error(`${source}: draftYear is ${value.draftYear}, but this file is for the ${draftYear} class.`);
+    throw new Error(`${source}: draftYear is ${shownText(value.draftYear)}, but this file is for the ${draftYear} class.`);
   }
   const updated = parseUpdated(source, value.updated);
 

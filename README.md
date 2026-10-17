@@ -1,7 +1,10 @@
 # Fantasy Pressbox
 
-**AI-powered fantasy football league coverage from Sleeper data: power
-rankings, previews, recaps, awards, and trash talk.**
+**AI-powered fantasy football league coverage from Sleeper (and,
+experimentally, ESPN) data: power rankings, previews, recaps, awards, and
+trash talk.**
+
+**Website:** [fantasypressbox.dev](https://fantasypressbox.dev)
 
 Fantasy Pressbox reads your Sleeper league, works out what actually happened,
 and writes the weekly content you post in your league chat — in a consistent
@@ -51,8 +54,8 @@ Every edition is built from your league's real data:
 | **Future stock** | Dynasty leagues: every team ranked on the next three seasons rather than this week. |
 | **Five-year plan** | Dynasty leagues: one team you choose with `--team`, and its next five seasons built from facts (ages, each position's age curve, the picks it holds), never a prediction. |
 
-Here is the kind of thing it produces — this is real output from a real
-league, and every number in it came out of Sleeper:
+Here is the kind of thing it produces, for an example league with invented
+teams:
 
 ```
 WEEK 1 RECAP • 5/8
@@ -130,7 +133,7 @@ wrong one — but they are computed from that run's ranking order. A team placed
 9th in one run and 7th in another honestly shows ↑3 in the first and ↑5 in the
 second.
 
-Here is a real example. The same Week 1 rankings prompt, run twice in two
+Here is a real example, with the team names changed. The same Week 1 rankings prompt, run twice in two
 fresh ChatGPT sessions, produced:
 
 | Team | First run | Second run |
@@ -217,7 +220,7 @@ Check that step 1 worked by typing this and pressing Enter:
 node --version
 ```
 
-You should see something like `v22.14.0`. Any number 18 or higher is fine.
+You should see something like `v22.14.0`. Any number 22 or higher is fine.
 
 > **If you get "command not found"**, Node did not install correctly, or this
 > window was open before you installed it. Close the window, open a new one,
@@ -418,7 +421,7 @@ when `ESPN_ROUTE` is `import`. If they stop working, copy fresh values:
 | | On ESPN |
 |---|---|
 | **Gets** | `preview`, `recap`, `rankings`, `preseason-rankings` and the trade report, plus `record`, `check` and `grade` |
-| **Refused** | `tank-watch` and `future-stock`: ESPN's traded picks are not read in this version, so who holds which future pick is not known |
+| **Refused** | `tank-watch`, `future-stock` and `five-year-plan`: ESPN's traded picks are not read in this version, so who holds which future pick is not known |
 | **Refused** | The guillotine editions (`survival-preview`, `chop-recap`, `survival-rankings`): guillotine is not supported on ESPN in this version |
 | **Refused** | A matchup period that spans more than one NFL week |
 | **Redraft** | A keeper league is treated as redraft. A declared dynasty is accepted, but the editions that need traded future picks refuse |
@@ -637,7 +640,7 @@ terminal). Only `init`, `import-league` and `check` work without one.
 | `fantasy-pressbox tank-watch` | Build the tank watch: the race for next season's top rookie picks, who owns them, and which picks jump if their team crosses the playoff line. Dynasty leagues only. It needs a declared draft order (see `config/rookie-draft.yml`) and opens from the middle of the regular season. |
 | `fantasy-pressbox future-stock` | Rank every team on the next three seasons rather than this week: production by age band, each position's age curve, and priced future picks, with its own weight set (`weights.future_stock` in `config/rankings.yml`). Dynasty leagues only. Not recorded, so it prints no movement arrows. |
 | `fantasy-pressbox five-year-plan --team <name or roster id>` | Plan one team's next five seasons: each player's age and stage on the position's age curve, how many of today's starters are past their decline age, how much of today's starter production comes from players still before the cliff, the picks held for each draft, and the team's strength rating, standing and market value today. See [The five-year plan](#the-five-year-plan). Dynasty leagues only. Not recorded. |
-| `fantasy-pressbox record <file> --task <name>` | File a finished edition you pasted back from a chat. `<name>` is `preview`, `survival-preview`, `rankings`, `survival-rankings` or `preseason-rankings`. |
+| `fantasy-pressbox record <file> --task <name>` | File a finished edition you pasted back from a chat. `<name>` is `preview`, `survival-preview`, `rankings`, `survival-rankings`, `preseason-rankings` or `postseason` (the final rankings, which no command builds yet). |
 | `fantasy-pressbox check <file>` | Check a file of posts against the league's post length limit (`POST_MAX_LENGTH`). It warns when a reply has lost its blank lines, which is what highlighting and copying does; use the chat's copy button. |
 | `fantasy-pressbox grade` | Show how last week's predictions actually did. |
 | `fantasy-pressbox migrate <folder>` | Copy this league — `.env`, league settings, `data/` and `output/` — into a new folder. Nothing is removed. See [Moving a league](#moving-a-league). |
@@ -899,7 +902,7 @@ a different question.
 | `lineup` | Points of the best lineup the roster could have fielded, over the last four settled weeks | dynasty, redraft |
 | `depth` | Points the bench would have supplied if each week's two best starters were missing | dynasty, redraft |
 | `market_value` | The trade market's value of the roster today | dynasty, redraft |
-| `age_window` | How old the starters are against the rest of the league at the same positions (younger is better) | dynasty |
+| `age_window` | How old the starters are against the rest of the league at the same positions (younger is better) | dynasty, Sleeper only |
 | `draft_capital` | The priced future picks the team holds | dynasty, Sleeper only |
 
 Each part ranks the teams and scores them from 100 for first to 0 for last,
@@ -907,7 +910,7 @@ and the rating is the weighted average of a team's scores, so it says where a
 team stands in its own league, not how good it is in absolute terms. For
 example, a team that ranks first in lineup but last in market value, with
 weights of 0.6 and 0.4, rates 60 on those two parts. A part your league cannot supply (no settled
-week yet in the preseason, no trade values, or the traded picks ESPN does not
+week yet in the preseason, no trade values, or the traded picks and player ages ESPN does not
 give) is listed as `unavailable` with its reason and the other weights are
 scaled back up to `1.0`. A missing part is never counted as 0. The formula is in
 [docs/editorial-model.md](docs/editorial-model.md#the-team-strength-rating).
@@ -1055,7 +1058,7 @@ days old** — boards move fast in draft season, so refresh it.
 
 Optional, and any league format. A rivalry is **your** call: Fantasy Pressbox
 never works one out from results, and it ships none. Copy the commented example
-that comes with the package (`config/rivalries.yml`; setup prints its path) into
+that comes with the package (`config/rivalries.yml` in the installed package's folder) into
 your league folder's `config/` and list the pairs:
 
 ```yaml
@@ -1208,7 +1211,7 @@ repository (from before league folders existed) into a folder of its own: run
 ### A league file
 
 `export-league` saves a league as one file you can keep, send to another
-machine, or open on the Fantasy Pressbox website:
+machine, or open on [fantasypressbox.dev](https://fantasypressbox.dev):
 
 ```bash
 fantasy-pressbox export-league                       # output/<league-name>.fantasy-pressbox.json
@@ -1296,7 +1299,9 @@ wasn't, the prompt rules need tightening.
 
 **Something else**
 Run `fantasy-pressbox doctor`. It checks each piece and tells you which one is
-unhappy. For full error details, set `DEBUG=true` in `.env`.
+unhappy. For full error details, put `DEBUG=true` in front of the command (for
+example `DEBUG=true fantasy-pressbox recap`); a `DEBUG` line in `.env` does
+not do this.
 
 ---
 
@@ -1349,6 +1354,14 @@ node scripts/fetch-bye-weeks.mjs <season>
 It writes `config/bye-weeks.<season>.yml` from the published NFL schedule and
 refuses to write a table that isn't 32 teams with one bye each. Review it and
 ship it with a release.
+
+### The `fantasy-pressbox/core` entry
+
+New in 0.2.0. `import … from 'fantasy-pressbox/core'` is a browser-safe entry
+(no `node:` imports, no AI call, and ESPN only through the import route) for
+league files, settings, edition preparation, prompt building and reply checks,
+so the same prompts can be built outside the CLI. It is the only path the
+package exports; `tests/core-purity.test.mjs` keeps it free of Node APIs.
 
 ### Design
 

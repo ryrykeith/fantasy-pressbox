@@ -43,9 +43,12 @@ output:
 #     which are unchanged.
 #   - Whatever you write here replaces this list completely, so you can make
 #     it shorter, longer, or nothing like the default.
-#   - To drop emoji entirely, set include_emoji: false above.
+#   - Each entry must be exactly one emoji. Anything else is refused, naming
+#     the rank.
+#   - To drop rank emoji, set include_emoji: false above (or INCLUDE_EMOJI=false
+#     in .env); for one run, pass --emoji none.
 #
-# Run `node src/cli.mjs doctor` after editing to see exactly what you will get.
+# Run `fantasy-pressbox doctor` after editing to see exactly what you will get.
 #
 # The default below is deliberately mean about the bottom of the table.
 # ---------------------------------------------------------------------------

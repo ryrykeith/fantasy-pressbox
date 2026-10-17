@@ -21,6 +21,8 @@
  * (`seasonPotentialPoints` is max points-for).
  */
 
+import { shownText } from './lib/safeInput.mjs';
+
 /** Where the rule is declared, for error messages and doctor. */
 export const DRAFT_ORDER_CONFIG_FILE = 'config/rookie-draft.yml';
 
@@ -119,7 +121,7 @@ export function parseDeclaredDraftOrder(value, { source = `order in ${DRAFT_ORDE
     }
     const unknown = Object.keys(group).filter((key) => !GROUP_KEYS.includes(key));
     if (unknown.length) {
-      throw new Error(`${where}: unrecognised ${unknown.join(', ')}. A group has only ${GROUP_KEYS.join(', ')}.`);
+      throw new Error(`${where}: unrecognised ${shownText(unknown.join(', '))}. A group has only ${GROUP_KEYS.join(', ')}.`);
     }
     const teams = oneOf(where, 'teams', group.teams, DRAFT_ORDER_TEAMS);
     const sort = oneOf(where, 'sort', group.sort, DRAFT_ORDER_SORTS);

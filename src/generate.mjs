@@ -94,7 +94,7 @@ export async function generate({ ai, system, user, maxTokens = 8000 }) {
 
   if (!ai.openaiKey) throw new Error('AI_PROVIDER is openai but OPENAI_API_KEY is empty.');
   if (!ai.model) {
-    throw new Error('Set OPENAI_MODEL in .env (for example: gpt-4.1) so we know which model to call.');
+    throw new Error('Set AI_MODEL in .env (for example: gpt-4.1) so we know which model to call.');
   }
   return {
     provider,

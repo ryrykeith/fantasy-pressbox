@@ -1,7 +1,8 @@
 # Ranking presets, a strength rating, rivalries and the five-year plan
 
-Status: planned 2026-10-15. Owner: the operator. Ships in 0.2.0, before the
-release task (`8574bb39`). Branch: `feat/football-config`.
+Status: shipped 2026-10-17 in #10 (`e6458a2`), for 0.2.0. All three PRD
+epics are complete. Planned 2026-10-15. Owner: the operator. Branch:
+`feat/football-config` (merged).
 
 Three PRD epics: "Ranking presets and a team strength rating", "Rivalries"
 and "Five-year plan". Each task in them is self-contained. This file holds the
@@ -36,6 +37,8 @@ reasoning that would make the task descriptions too long.
   (`tests/core-purity.test.mjs`).
 - **The league file is still unreleased** (schema v1 has not shipped). New
   settings can join v1 without a version bump until 0.2.0 is published.
+  After that, a new setting needs a `schemaVersion` bump or a `MIGRATIONS`
+  entry.
 
 ## 3. Ranking presets
 
@@ -56,8 +59,8 @@ format:
   it does today.
 - **The preset tables** are shipped in `config/rankings.yml`, commented as
   editorial guidance, and every set sums to 1.0. A rebuild preset moves weight
-  from `contender_viability` and `starting_lineup` to `dynasty_value`, age and
-  `future_draft_capital`. Win-now does the reverse. The run picks the values,
+  from `contender_viability` and `starting_lineup` to `dynasty_value` and
+  `future_draft_capital` (and, in the strength rating, to `age_window`). Win-now does the reverse. The run picks the values,
   and the comments explain them.
 - **A preset sets both** the ranking weights and the strength rating's weights
   (section 4).

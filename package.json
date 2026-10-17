@@ -1,7 +1,7 @@
 {
   "name": "fantasy-pressbox",
-  "version": "0.1.0",
-  "description": "AI-powered fantasy football league coverage from Sleeper data: power rankings, previews, recaps, awards, and trash talk.",
+  "version": "0.2.0",
+  "description": "AI-powered fantasy football league coverage from Sleeper (and, experimentally, ESPN) data: power rankings, previews, recaps, awards, and trash talk.",
   "keywords": [
     "fantasy-football",
     "sleeper",

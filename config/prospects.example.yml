@@ -21,7 +21,7 @@
 #     board here says so.
 #   - A prospect not on the board is not discussed. Editions tell the model so.
 #   - `updated` is required: the date you last checked the board, as
-#     YYYY-MM-DD. `node src/cli.mjs doctor` reports the board's age and warns
+#     YYYY-MM-DD. `fantasy-pressbox doctor` reports the board's age and warns
 #     once it is over 45 days old. Refresh it a few times a season.
 #   - Ranks are whole numbers from 1 and must not repeat.
 #   - `note` is optional and should be short.

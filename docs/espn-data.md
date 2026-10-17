@@ -963,7 +963,7 @@ through an allowlist that leaves out `ESPN_S2` and `ESPN_SWID`.
 ## Coverage matrix
 
 What every edition, command and context fact does on an ESPN league, as the
-code stands (2026-10-13). This is the final form of the draft in
+code stands. This is the final form of the draft in
 `docs/plans/espn-football.md` §8, corrected against the code.
 `tests/espn-coverage-matrix.test.mjs` keeps it honest. It fails when an
 edition, a command, a top-level context key or an `unavailable` key exists in

@@ -32,7 +32,7 @@
 #   roast_intensity (config/editorial.yml), with the pair's head-to-head record
 #   from your saved weeks; the trade report marks a trade between rivals.
 #
-# Run `node src/cli.mjs doctor` after editing to see whether every rivalry
+# Run `fantasy-pressbox doctor` after editing to see whether every rivalry
 # still resolves to a team.
 rivalries:
   # - teams:
