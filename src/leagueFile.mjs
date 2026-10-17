@@ -42,8 +42,8 @@
  * website hands in the files a person chose.
  */
 import { parseEnvAllowlist } from './lib/envText.mjs';
-import { LEAGUE_JSON_LIMITS, parseJsonSafely, utf8Length } from './lib/safeInput.mjs';
-import { parseYaml, stringifyYaml } from './lib/yaml.mjs';
+import { LEAGUE_JSON_LIMITS, fileTexts, parseJsonSafely, shownText, utf8Length, withoutFileText } from './lib/safeInput.mjs';
+import { lineContents, parseYaml, stringifyYaml } from './lib/yaml.mjs';
 import { parseDeclaredFormatType } from './format.mjs';
 import { EDITIONS, optionNamed } from './options.mjs';
 import { parseProspectBoard } from './prospectBoard.mjs';
@@ -156,7 +156,7 @@ function mapAt(field, value, what = 'a table of named entries') {
 function onlyKeys(field, value, keys) {
   for (const key of Object.keys(value)) {
     if (!keys.includes(key)) {
-      throw new LeagueFileError(join(field, key), `is not part of a league file (expected only ${keys.join(', ')})`);
+      throw new LeagueFileError(join(field, shownText(key)), `is not part of a league file (expected only ${keys.join(', ')})`);
     }
   }
 }
@@ -219,7 +219,7 @@ function checkRankEmoji(value) {
   const table = mapAt(`${field}.table`, value.table, 'a table of rank to emoji');
   if (!Object.keys(table).length) throw new LeagueFileError(`${field}.table`, 'must give at least one rank an emoji');
   for (const [rank, emoji] of Object.entries(table)) {
-    if (!/^[1-9]\d{0,2}$/.test(rank)) throw new LeagueFileError(`${field}.table.${rank}`, 'is not a rank');
+    if (!/^[1-9]\d{0,2}$/.test(rank)) throw new LeagueFileError(`${field}.table.${shownText(rank)}`, 'is not a rank');
     if (!isSingleEmoji(emoji)) throw new LeagueFileError(`${field}.table.${rank}`, 'must be a single emoji');
   }
 }
@@ -257,7 +257,7 @@ function checkSettings(settings, league) {
     try {
       parseDeclaredFormatType(settings.format, { source: `${field}.format`, provider: providerDisplayName(league.provider) });
     } catch (error) {
-      throw new LeagueFileError(`${field}.format`, error.message, { whole: true });
+      throw relayedRefusal(`${field}.format`, error, settings.format, 'is not a league format (expected dynasty, redraft, guillotine or null)');
     }
     if (typeof settings.format !== 'string' || settings.format !== settings.format.toLowerCase().trim()) {
       throw new LeagueFileError(`${field}.format`, 'must be written in lower case');
@@ -306,17 +306,17 @@ function checkSettings(settings, league) {
     try {
       parseRivalryTable(declared.rivalries, { source: at });
     } catch (error) {
-      throw new LeagueFileError(at, error.message, { whole: true });
+      throw relayedRefusal(at, error, declared.rivalries, 'is not a table of rivalries');
     }
   }
   mapAt(`${field}.declared.prospects`, declared.prospects, 'a table of draft year to board');
   for (const [year, board] of Object.entries(declared.prospects)) {
-    const at = `${field}.declared.prospects.${year}`;
+    const at = `${field}.declared.prospects.${shownText(year)}`;
     seasonName(at, year);
     try {
       parseProspectBoard(board, { draftYear: Number(year), source: at });
     } catch (error) {
-      throw new LeagueFileError(at, error.message, { whole: true });
+      throw relayedRefusal(at, error, board, `is not a prospect board for the ${shownText(year)} class`);
     }
   }
 
@@ -333,8 +333,24 @@ function checkSettings(settings, league) {
       resolveStrengthChoice(rankings, settings.format);
     }
   } catch (error) {
-    throw new LeagueFileError(field, `${field} are refused: ${error.message}`, { whole: true });
+    const message = withoutFileText(error.message, fileTexts(settings));
+    throw new LeagueFileError(
+      field,
+      `${field} are refused: ${message ?? "they do not pass the checks a league folder's config files get"}`,
+      { whole: true },
+    );
   }
+}
+
+/**
+ * A refusal from another parser (formats, rivalries, prospect boards) of
+ * `source`, passed on as a LeagueFileError for `at`. That parser words its
+ * messages for a person's own files and may quote them, so the message goes
+ * through withoutFileText, and `fallback` is said instead when it cannot.
+ */
+function relayedRefusal(at, error, source, fallback) {
+  const message = withoutFileText(error.message, fileTexts(source));
+  return new LeagueFileError(at, message ?? `${at} ${fallback}`, { whole: true });
 }
 
 /** One history entry, checked for the shape its kind's readers rely on. */
@@ -372,7 +388,7 @@ function checkHistoryEntry(field, history, name, value) {
     case 'editions': {
       const task = match[2];
       if (!EDITIONS.some((edition) => edition.name === task)) {
-        throw new LeagueFileError(field, `names "${task}", which is not an edition`);
+        throw new LeagueFileError(field, `names "${shownText(task)}", which is not an edition`);
       }
       if (typeof value.text !== 'string') throw new LeagueFileError(`${field}.text`, 'must be the reply text');
       if (value.task !== task) throw new LeagueFileError(`${field}.task`, `must be ${task}, the edition it is named for`);
@@ -387,7 +403,7 @@ function checkHistoryEntry(field, history, name, value) {
 function checkSeasons(seasons) {
   mapAt('seasons', seasons, 'a table of seasons');
   for (const [season, kinds] of Object.entries(seasons)) {
-    const at = `seasons.${season}`;
+    const at = `seasons.${shownText(season)}`;
     seasonName(at, season);
     mapAt(at, kinds, 'a table of kinds of history');
     onlyKeys(at, kinds, LEAGUE_FILE_HISTORY_KINDS);
@@ -395,7 +411,7 @@ function checkSeasons(seasons) {
       if (!(history.key in kinds)) continue;
       const entries = mapAt(`${at}.${history.key}`, kinds[history.key]);
       for (const [name, value] of Object.entries(entries)) {
-        checkHistoryEntry(`${at}.${history.key}.${name}`, history, name, value);
+        checkHistoryEntry(`${at}.${history.key}.${shownText(name)}`, history, name, value);
       }
     }
   }
@@ -436,7 +452,7 @@ export function validateLeagueFile(value) {
       'kind',
       value.kind === undefined
         ? `is missing, so this is not a Fantasy Pressbox league file`
-        : `is ${JSON.stringify(value.kind)}, so this is not a Fantasy Pressbox league file (expected "${LEAGUE_FILE_KIND}")`,
+        : `is not "${LEAGUE_FILE_KIND}", so this is not a Fantasy Pressbox league file`,
     );
   }
   if (!Number.isInteger(value.schemaVersion) || value.schemaVersion < 0) {
@@ -478,7 +494,14 @@ export function parseLeagueFile(text, { name = 'The league file' } = {}) {
   try {
     value = parseJsonSafely(text, { file: name, limits: LEAGUE_JSON_LIMITS });
   } catch (error) {
-    if (error instanceof SyntaxError) throw new LeagueFileError(null, `${name} is not JSON: ${error.message}`);
+    // JSON.parse's own message quotes the text, so only where it stopped is passed on.
+    if (error instanceof SyntaxError) {
+      // V8 says "at position 6 (line 1 column 7)", Firefox and Safari "at line 1 column 7"; some V8 messages say neither.
+      const line = /line (\d+) column (\d+)/.exec(error.message);
+      const position = /at position (\d+)/.exec(error.message);
+      const where = line ? ` at line ${line[1]}, column ${line[2]}` : position ? ` at position ${position[1]}` : '';
+      throw new LeagueFileError(null, `${name} is not JSON${where} (check it was saved as a league file)`);
+    }
     throw error;
   }
   try {
@@ -686,7 +709,8 @@ function readYamlEntry(path, text) {
   try {
     return parseYaml(text) ?? {};
   } catch (error) {
-    throw new LeagueFileError(null, `Could not read ${path}: ${error.message}`);
+    const message = withoutFileText(error.message, fileTexts(text, ...lineContents(text)));
+    throw new LeagueFileError(null, `Could not read ${path}: ${message ?? 'it is not YAML this reader understands'}`);
   }
 }
 
@@ -694,7 +718,7 @@ const TRUE_TEXT = /^(1|true|yes|on)$/i;
 
 /** A whole number from .env, or a refusal naming the key. */
 function envInteger(key, value) {
-  if (!/^\d+$/.test(value)) throw new LeagueFileError(null, `${key} in .env is "${value}", which is not a whole number`);
+  if (!/^\d+$/.test(value)) throw new LeagueFileError(null, `${key} in .env is "${shownText(value)}", which is not a whole number`);
   return Number.parseInt(value, 10);
 }
 
@@ -778,8 +802,8 @@ export function leagueFileFromWorkspace(entries, { surface, writtenAt = new Date
       skipped.push(String(entry?.path));
       continue;
     }
-    if (byPath.has(entry.path)) throw new LeagueFileError(null, `${entry.path} was given twice`);
-    if (typeof entry.text !== 'string') throw new LeagueFileError(null, `${entry.path} has no text`);
+    if (byPath.has(entry.path)) throw new LeagueFileError(null, `${shownText(entry.path)} was given twice`);
+    if (typeof entry.text !== 'string') throw new LeagueFileError(null, `${shownText(entry.path)} has no text`);
     byPath.set(entry.path, entry.text);
   }
   if (!byPath.has('.env')) {
@@ -787,19 +811,22 @@ export function leagueFileFromWorkspace(entries, { surface, writtenAt = new Date
   }
 
   const { values: env, ignored: ignoredEnvKeys } = parseEnvAllowlist(byPath.get('.env'), LEAGUE_FILE_ENV_KEYS);
-  const league = leagueSettingsFromEnv(env);
+  const league = boundingFileText(() => leagueSettingsFromEnv(env), [env, byPath.get('.env')]);
 
   const layers = { prospects: {} };
+  const configTexts = [];
   const seasons = {};
   const historyByKind = new Map(HISTORY.map((history) => [history.kind, history]));
   for (const [path, text] of byPath) {
     if (path === '.env') continue;
     if (CONFIG_FILES[path]) {
+      configTexts.push(text, ...lineContents(text));
       layers[CONFIG_FILES[path]] = readYamlEntry(path, text);
       continue;
     }
     const prospects = PROSPECTS_FILE.exec(path);
     if (prospects) {
+      configTexts.push(text, ...lineContents(text));
       layers.prospects[prospects[1]] = readYamlEntry(path, text);
       continue;
     }
@@ -809,12 +836,14 @@ export function leagueFileFromWorkspace(entries, { surface, writtenAt = new Date
       skipped.push(path);
       continue;
     }
-    const [, , season, name] = data;
+    const [, kind, season, name] = data;
+    // An entry name may be long; the path a refusal shows cuts it.
+    const shownPath = `data/${kind}/${season}/${shownText(name)}.json`;
     let value;
     try {
-      value = parseJsonSafely(text, { file: path, limits: LEAGUE_JSON_LIMITS });
+      value = parseJsonSafely(text, { file: shownPath, limits: LEAGUE_JSON_LIMITS });
     } catch (error) {
-      if (error instanceof SyntaxError) throw new LeagueFileError(null, `Could not read ${path}: it is not JSON`);
+      if (error instanceof SyntaxError) throw new LeagueFileError(null, `Could not read ${shownPath}: it is not JSON`);
       throw error;
     }
     if ((history.key === 'raw' || history.key === 'import') && isEspnPage(value)) value = stripEspnPersonalData(value);
@@ -829,7 +858,7 @@ export function leagueFileFromWorkspace(entries, { surface, writtenAt = new Date
     writtenBy: writtenByFor(surface),
     writtenAt,
     league: { provider: league.provider, leagueId: league.id || null },
-    settings: settingsFromFolder(env, league, layers),
+    settings: boundingFileText(() => settingsFromFolder(env, league, layers), [env, layers, ...configTexts]),
     seasons: sortedSeasons(seasons),
   };
   let leagueFile;
@@ -839,6 +868,25 @@ export function leagueFileFromWorkspace(entries, { surface, writtenAt = new Date
     throw inFolderTerms(error);
   }
   return { leagueFile, skipped: skipped.sort(), ignoredEnvKeys };
+}
+
+/**
+ * Runs `step`, passing on a refusal from the settings layer with the file
+ * texts in `sources` taken out of its message (withoutFileText): that layer
+ * words refusals for a person's own .env and config files, and may quote a
+ * value in full. The error keeps its class.
+ */
+function boundingFileText(step, sources) {
+  try {
+    return step();
+  } catch (error) {
+    if (error instanceof Error) {
+      error.message =
+        withoutFileText(error.message, fileTexts(...sources)) ??
+        "A setting in this league folder is refused, and the reason quotes too much of the folder's files to show.";
+    }
+    throw error;
+  }
 }
 
 /** A refusal of a history entry, naming the data/ file it was read from. */

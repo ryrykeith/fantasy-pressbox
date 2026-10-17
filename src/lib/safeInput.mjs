@@ -14,9 +14,13 @@
  *     step (a JSON reviver, a merge) can run out of stack on it;
  *   - a string longer than the string limit is refused.
  *
- * A refusal is an UnsafeInputError. Its message is in plain words, names the
- * file (when the caller gave one) and the field, and never echoes a value
- * from the file.
+ * A refusal is an UnsafeInputError. Its message is in plain words and names
+ * the file (when the caller gave one) and the field. It never echoes a value
+ * from the file, and a key it names to find the field is cut to
+ * SHOWN_TEXT_LIMIT characters with control characters removed (shownText).
+ * A caller that words its own refusals from a file's keys uses shownText, and
+ * one that passes on another parser's message uses withoutFileText, given
+ * the file texts that parser read (fileTexts).
  *
  * NODE-FREE: this module imports nothing, so the browser core can use it.
  */
@@ -78,12 +82,143 @@ export function utf8Length(text) {
  */
 const named = (file) => file ?? 'It';
 
-/** A field path (`['output', 'include_emoji']`, `['teams', 3, 'name']`) as `output.include_emoji` / `teams[3].name`. */
+/** The most characters of a file's own text a refusal shows in one place. */
+export const SHOWN_TEXT_LIMIT = 40;
+
+/** Control, format (bidirectional overrides, zero-width) and line or paragraph separator characters. */
+const UNPRINTABLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+
+/**
+ * Text from a file (a key, an entry name) as a refusal may show it: control
+ * and format characters removed, and cut to SHOWN_TEXT_LIMIT characters, the
+ * last of them `…`, when longer. Counts code points, so an emoji is never split.
+ */
+export function shownText(text) {
+  const chars = [...String(text).replace(UNPRINTABLE, '')];
+  return chars.length > SHOWN_TEXT_LIMIT ? `${chars.slice(0, SHOWN_TEXT_LIMIT - 1).join('')}…` : chars.join('');
+}
+
+/** The longest message boundFileText passes on, in characters. */
+const BOUND_MESSAGE_LIMIT = 800;
+
+/** UNPRINTABLE less the line break, which a passed-on message uses for its own layout. */
+const UNPRINTABLE_INLINE = /(?!\n)[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+
+/** A run of key characters longer than SHOWN_TEXT_LIMIT. */
+const LONG_RUN = new RegExp(`[^\\s"'.:,()[\\]]{${SHOWN_TEXT_LIMIT + 1},}`, 'gu');
+
+/**
+ * The backstop for another parser's refusal, after withoutFileText: that
+ * parser words its messages for a person's own settings files, so it may
+ * quote a value or name a key in full. Control and format characters other
+ * than the line break (its own layout) are removed, every "quoted" text and
+ * every run of key characters (anything but spaces, quotes, `.`, `:`, `,`,
+ * brackets and parentheses) is cut with shownText, and the whole message is
+ * cut to BOUND_MESSAGE_LIMIT characters.
+ */
+export function boundFileText(message) {
+  const bounded = String(message)
+    .replace(UNPRINTABLE_INLINE, '')
+    .replace(/"([^"]*)"/g, (_, inner) => `"${shownText(inner)}"`)
+    .replace(LONG_RUN, (run) => shownText(run));
+  const chars = [...bounded];
+  return chars.length > BOUND_MESSAGE_LIMIT ? `${chars.slice(0, BOUND_MESSAGE_LIMIT - 1).join('')}…` : bounded;
+}
+
+/** Whether `text` could make a message unsafe: longer than SHOWN_TEXT_LIMIT, or holding a character UNPRINTABLE removes. */
+const isRiskyText = (text) =>
+  // More than twice the limit in UTF-16 units is over it in code points, without counting them.
+  text.length > SHOWN_TEXT_LIMIT * 2 ||
+  (text.length > SHOWN_TEXT_LIMIT && [...text].length > SHOWN_TEXT_LIMIT) ||
+  /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(text);
+
+/**
+ * The most file texts, characters read and message length withoutFileText
+ * works with before giving up: enough for any real league folder or file
+ * (the shipped config files hold about 500 texts), and quick in a browser.
+ */
+const FILE_TEXT_LIMITS = Object.freeze({ texts: 20_000, characters: 2_000_000, messageLength: 50_000 });
+
+/**
+ * Every key and text in `values`, as fileTexts for withoutFileText. A value
+ * is parsed data or, given as a string, a file's raw text, which is also
+ * read line by line (a parser quotes one line; a caller that knows the exact
+ * form, such as yaml.mjs's lineContents, passes those too). Only the texts
+ * that could make a message unsafe are kept, with the forms a parser may
+ * print them in: as written, JSON-escaped, trimmed and lower-cased, and a
+ * list as String() and comma-joined.
+ * → `{ texts, complete }`; `complete` is false past FILE_TEXT_LIMITS, and
+ *   then withoutFileText refuses to vouch.
+ */
+export function fileTexts(...values) {
+  const texts = new Set();
+  let characters = 0;
+  const add = (text) => {
+    characters += text.length;
+    for (const form of [text, JSON.stringify(text).slice(1, -1), text.trim(), text.toLowerCase(), text.trim().toLowerCase()]) {
+      if (isRiskyText(form)) texts.add(form);
+    }
+  };
+  const over = () => texts.size > FILE_TEXT_LIMITS.texts || characters > FILE_TEXT_LIMITS.characters;
+  for (const value of values) {
+    if (typeof value === 'string' && /[\r\n]/.test(value)) {
+      for (const line of value.split(/\r?\n/)) {
+        add(line);
+        if (over()) return { texts, complete: false };
+      }
+    }
+  }
+  const stack = [...values];
+  while (stack.length) {
+    if (over()) return { texts, complete: false };
+    const value = stack.pop();
+    if (typeof value === 'string') add(value);
+    else if (Array.isArray(value)) {
+      // A list printed whole: one longer than any message withoutFileText checks is not needed.
+      const printed = value.every((item) => item === null || typeof item !== 'object')
+        ? value.reduce((length, item) => length + String(item).length + 2, 0)
+        : Infinity;
+      if (printed <= FILE_TEXT_LIMITS.messageLength) {
+        add(String(value));
+        add(value.join(', '));
+      }
+      for (const item of value) stack.push(item);
+    } else if (value !== null && typeof value === 'object') {
+      for (const [key, item] of Object.entries(value)) {
+        add(key);
+        stack.push(item);
+      }
+    }
+  }
+  return { texts, complete: !over() };
+}
+
+/**
+ * Another parser's refusal of a stranger's file, safe to pass on: every text
+ * from `fileTexts` that appears in it is replaced by its shownText, longest
+ * first, and then boundFileText applies. Returns null when it cannot vouch
+ * for the message (too many texts to check, or a message too long to check),
+ * and the caller words its own refusal instead.
+ */
+export function withoutFileText(message, { texts, complete }) {
+  let text = String(message);
+  if (!complete || text.length > FILE_TEXT_LIMITS.messageLength) return null;
+  for (const form of [...texts].sort((a, b) => b.length - a.length)) {
+    if (text.includes(form)) text = text.split(form).join(shownText(form));
+  }
+  return boundFileText(text);
+}
+
+/**
+ * A field path (`['output', 'include_emoji']`, `['teams', 3, 'name']`) as
+ * `output.include_emoji` / `teams[3].name`. Each key is passed through
+ * shownText, since keys come from the file.
+ */
 export function fieldPath(path) {
   let text = '';
   for (const part of path) {
     if (typeof part === 'number') text += `[${part}]`;
-    else text += text === '' ? part : `.${part}`;
+    else text += text === '' ? shownText(part) : `.${shownText(part)}`;
   }
   return text;
 }

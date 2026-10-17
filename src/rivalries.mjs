@@ -24,7 +24,7 @@
  * NODE-FREE: this module imports nothing from `node:`, so the browser core can
  * use it. It reads no files.
  */
-import { checkString } from './lib/safeInput.mjs';
+import { checkString, shownText } from './lib/safeInput.mjs';
 import { parseYaml } from './lib/yaml.mjs';
 
 /** Where the file lives, relative to a league folder. */
@@ -105,7 +105,8 @@ export function parseRivalryTable(parsed, { source = RIVALRIES_FILE } = {}) {
   }
   const unknownKeys = Object.keys(parsed).filter((key) => !FILE_KEYS.includes(key));
   if (unknownKeys.length) {
-    throw refusal(source, `unrecognised ${unknownKeys.join(', ')}. The only key is rivalries.`);
+    // Cut as a whole: a file could spell a message of its own across several short keys.
+    throw refusal(source, `unrecognised ${shownText(unknownKeys.join(', '))}. The only key is rivalries.`);
   }
   const list = parsed.rivalries;
   if (list === null || list === undefined) return [];
@@ -117,7 +118,7 @@ export function parseRivalryTable(parsed, { source = RIVALRIES_FILE } = {}) {
     }
     const unknown = Object.keys(raw).filter((key) => !ENTRY_KEYS.includes(key));
     if (unknown.length) {
-      throw refusal(source, `${entryLabel(index)}: unrecognised ${unknown.join(', ')}. Valid keys are ${ENTRY_KEYS.join(', ')}.`);
+      throw refusal(source, `${entryLabel(index)}: unrecognised ${shownText(unknown.join(', '))}. Valid keys are ${ENTRY_KEYS.join(', ')}.`);
     }
     if (typeof raw.teams === 'string' && raw.teams.trim().startsWith('[')) {
       // The reader (src/lib/yaml.mjs) has no flow syntax, so [A, B] arrives as one string.
