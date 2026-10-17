@@ -8,7 +8,7 @@ League provider (Sleeper or ESPN)  src/providers.mjs picks it from LEAGUE_PROVID
 Fetch
     ↓  provider normalizer (src/sleeper/normalize.mjs, src/espn/normalize.mjs), through provider.mjs
 Normalize
-    ↓  src/store.mjs
+    ↓  src/storeCore.mjs (over src/store.mjs on disk, or createMemoryStore)
 Snapshot / persist
     ↓  src/analysis/
 Analyze
@@ -22,8 +22,9 @@ Validate
 the league's chat / iMessage / a file
 ```
 
-`src/pipeline.mjs` is the sequence. `src/cli.mjs` is the interface. Neither
-contains domain logic.
+`src/edition.mjs` is the sequence (`prepareEdition`, `recordEdition`);
+`src/pipeline.mjs` opens the league, captures a week and reads saved history.
+`src/cli.mjs` is the interface. None of them contains domain logic.
 
 ## Why the stages are separate
 
@@ -45,8 +46,8 @@ Two directories, never confused (`src/config.mjs`):
 
 | Root | What lives there | At run time |
 |---|---|---|
-| `PACKAGE_ROOT` (from `import.meta.url`) | `prompts/`, the `config/editorial.yml` and `config/rankings.yml` defaults, `config/bye-weeks.<season>.yml`, `config/prospects.example.yml`, empty `rookie-draft.yml` / `guillotine.yml` templates | read only |
-| workspace (`config.workspaceRoot`) | one league's `.env`, its `config/rookie-draft.yml`, `config/guillotine.yml`, `config/prospects.<year>.yml`, and `data/` and `output/` | read and written |
+| `PACKAGE_ROOT` (from `import.meta.url`) | `prompts/`, the `config/editorial.yml` and `config/rankings.yml` defaults, `config/bye-weeks.<season>.yml`, `config/prospects.example.yml`, empty `rookie-draft.yml` / `guillotine.yml` / `rivalries.yml` templates | read only |
+| workspace (`config.workspaceRoot`) | one league's `.env`, its `config/rookie-draft.yml`, `config/guillotine.yml`, `config/rivalries.yml`, `config/prospects.<year>.yml`, and `data/` and `output/` | read and written |
 
 The workspace is chosen by `resolveWorkspaceRoot`: `--workspace <folder>`, then
 `PRESSBOX_WORKSPACE`, then the working directory. It cannot come from `.env`,
@@ -84,14 +85,14 @@ into the package. On a second run the existing answers are the defaults, and
 folder: `.env`, the league's config files, a workspace's overrides, and the
 whole data and output folders, at the same relative paths. It never moves or
 deletes. Copied from the package folder, the shipped defaults stay behind and
-so does a template (`rookie-draft.yml`, `guillotine.yml`) that declares
+so does a template (`rookie-draft.yml`, `guillotine.yml`, `rivalries.yml`) that declares
 nothing. A `DATA_DIR` or `OUTPUT_DIR` outside the source is refused, because
 the copied `.env` would point both leagues at one history.
 
 Every write goes through `config.dataDir` or `config.outputDir`, so nothing is
-ever written into an installed package. Only the modules that read shipped
-assets (`config.mjs`, `promptContext.mjs`'s `readPrompt`, `cli.mjs`'s doctor)
-refer to `PACKAGE_ROOT`, and `tests/workspace-root.test.mjs` holds that line.
+ever written into an installed package. Only `config.mjs` (whose `diskReadText` feeds
+`loadAssets` in `src/assets.mjs`) and `cli.mjs` (doctor, setup) refer to
+`PACKAGE_ROOT`, and `tests/workspace-root.test.mjs` holds that line.
 The prospect board has no package fallback: `loadProspectBoard` needs the
 workspace's config folder.
 
@@ -111,14 +112,14 @@ the website uses.
 {
   "schemaVersion": 1,
   "kind": "fantasy-pressbox.league",
-  "writtenBy": { "package": "fantasy-pressbox", "version": "0.1.0", "surface": "cli" },
+  "writtenBy": { "package": "fantasy-pressbox", "version": "0.2.0", "surface": "cli" },
   "writtenAt": "2026-10-14T18:00:00.000Z",
   "league": { "provider": "sleeper", "leagueId": "000000000000000000" },
   "settings": {
     "displayName": "Taco Tuesday League", "format": null, "season": null, "week": null,
     "espnRoute": null, "tone": null, "roastIntensity": null, "postFormat": "sleeper",
     "maxChars": null, "rankEmoji": { "mode": "default" }, "editorial": null, "rankings": null,
-    "declared": { "eliminations": null, "rookieDraft": null, "prospects": {} }
+    "declared": { "eliminations": null, "rookieDraft": null, "prospects": {}, "rivalries": null }
   },
   "seasons": {
     "2026": {
@@ -135,8 +136,8 @@ the website uses.
   `data/rankings/2026/week-3.json`. An import writes each file back as the
   store writes it, so a folder exported and imported again has the same
   `data/` files byte for byte. `editions` holds each recorded reply's whole
-  text (`week-<n>-<task>`), which `record` and `--generate` save from the
-  release after 0.1.0; history recorded before then has none.
+  text (`week-<n>-<task>`), which `record` and `--generate` save from
+  0.2.0; history recorded before then has none.
 - **A setting is what the folder declares**, null when it declares nothing so
   the package default applies. From `.env`: `displayName`
   (`LEAGUE_DISPLAY_NAME`), `format` (`LEAGUE_FORMAT`), `season`
@@ -148,7 +149,7 @@ the website uses.
   `editorial.yml` has a `ranking_emoji` table, `default` otherwise.
   `roastIntensity` is `editorial.yml`'s `roast_intensity`; `editorial` is the
   rest of that file, and `rankings` is `config/rankings.yml`. `declared` holds
-  `guillotine.yml`'s eliminations, `rookie-draft.yml` and every
+  `guillotine.yml`'s eliminations, `rookie-draft.yml`, `rivalries.yml` and every
   `prospects.<year>.yml`. `postFormat` is the website's posting choice; the CLI
   takes it from `--format` on each run.
 - **The folder is read through an allowlist** (`leagueFileFromWorkspace`): from
@@ -192,7 +193,7 @@ A workspace may adjust the shipped defaults without copying the package:
   either through `renderFormatBlocks`, so an override's `<!-- format: -->`
   blocks resolve exactly as the shipped prompt's do.
 - League-specific files (`.env`, `rookie-draft.yml`, `guillotine.yml`,
-  `prospects.<year>.yml`) are never layered: they come from the workspace only.
+  `rivalries.yml`, `prospects.<year>.yml`) are never layered: they come from the workspace only.
 - When the workspace is the package folder there is nothing to override, so none
   is reported.
 
@@ -209,22 +210,29 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/lib/envText.mjs` | `.env` parsing, so secrets need no dependency, and `parseEnvAllowlist`, which drops every key but the allowed ones before reading its value. No `node:` imports |
 | `src/lib/env.mjs` | Reads a `.env` file from disk through `envText.mjs`, under any real environment variable |
 | `src/version.mjs` | The package's name and version as code, for the browser; a test holds them to `package.json` |
-| `src/config.mjs` | Merges flags, env, `config/*.yml` and defaults; owns the package root and the workspace root (above) |
+| `src/config.mjs` | The CLI half of settings: reads flags, `.env` and `config/*.yml` from disk and hands them to `resolveSettings` (`src/settings.mjs`); owns the package root and the workspace root (above) |
+| `src/settings.mjs` | The pure settings layer: defaults (`DEFAULT_EDITORIAL` among them), `deepMerge` and `mergeSettingsLayer`, validation, `resolveSettings`, `resolveRankingWeights`, `rankEmoji`. No `node:` imports |
+| `src/assets.mjs` | `loadAssets(readText)`: the prompts, the default config and `byeWeekTable(season)`, read through the `readText` it is given. No `node:` imports |
+| `src/promptTemplate.mjs` | `renderFormatBlocks`: the `<!-- format: -->` blocks inside prompts |
 | `src/workspace.mjs` | What makes a folder a league workspace, the refusal outside one, and the copy-only `migrate` |
 | `src/init.mjs` | What init offers and writes, without the terminal: format choices, rookie draft presets, answers read by the loader's parsers, and a `rookie-draft.yml` checked back through them. `setup.mjs` asks the questions |
 | `src/format.mjs` | The league format taxonomy: valid types, declaration parsing, resolution |
+| `src/prospectBoard.mjs` | The declared prospect board: parsing, its age, `prospectBoardView` and `prospectBoardUnavailable` |
 | `src/rookieDraft.mjs` | The declared rookie draft order rule (`config/rookie-draft.yml`): parsing, group sizes, plain-words description, and the refusal to project an order without one |
 | `src/providers.mjs` | The provider registry: `getProvider(name)`, `PROVIDER_NAMES`, `DEFAULT_PROVIDER` (`sleeper`). The only module outside a provider directory that imports one |
 | `src/sleeper/provider.mjs` | Sleeper behind the provider interface: its descriptor (name, `capabilities`, `playerIdSpace`) and an instance bound to a client (`openLeague`, `fetchWeek`, `currentWeek`, `lookupLeague`, `normalizeWeek`) |
-| `src/sleeper/client.mjs` | HTTP only. Retries, friendly errors, player-file cache |
+| `src/playerCache.mjs` | The one-day player-list cache rule (`cachedPlayers`, `createMemoryPlayerCache`), shared by both clients. No `node:` imports |
+| `src/diskPlayerCache.mjs` | The CLI's player cache: `<dataDir>/cache/<key>.json` |
+| `src/sleeper/client.mjs` | HTTP only. Retries, friendly errors, and the player file through the `playerCache` option |
 | `src/sleeper/normalize.mjs` | Sleeper shapes → league concepts, including a saved week as WeekData (`normalizeWeek`) |
 | `src/espn/provider.mjs` | ESPN behind the same interface, **experimental**. Two routes by `ESPN_ROUTE`: `import` (the default; reads pages the operator saved, contacts nothing) and `fetch` (opt-in; asks ESPN with the cookies). `docs/espn-data.md` is its contract |
-| `src/espn/client.mjs` | HTTP only, the fetch route's. Sends `espn_s2` and `SWID` as a `Cookie` header to the ESPN host and nowhere else; scrubs them from every error |
+| `src/espn/client.mjs` | HTTP only, the fetch route's. Sends `espn_s2` and `SWID` as a `Cookie` header to the ESPN host and nowhere else; scrubs them from every error. The player list goes through the `playerCache` option |
 | `src/espn/urls.mjs` | Every ESPN address, node-free. The client requests them and `import-espn` lists them for the operator to save, so the two cannot drift |
 | `src/espn/import.mjs` | The import route: validates saved pages (safe input at `ESPN_IMPORT_LIMITS`, JSON, league, season, shape) and refuses a stale league page |
 | `src/espn/shape.mjs` | Shape guards: a response that does not match the documented shape throws `EspnShapeError`, naming the view and field |
 | `src/espn/codes.mjs` | ESPN's numeric code tables (slots, stats, pro teams); an unknown ID throws |
 | `src/espn/normalize.mjs` | ESPN shapes → league concepts, including a saved week as WeekData (`normalizeWeek`). ESPN field names stop here |
+| `src/nflTeams.mjs` | The canonical NFL team codes and their aliases (`LA` to `LAR`, `OAK` to `LV`) |
 | `src/league/players.mjs` | The player dictionary lookup and the one-line player description every edition prints |
 | `src/league/draftCapital.mjs` | Draft capital from normalized traded picks and the league's draft status: who holds each pick, and whether it is still a future asset |
 | `src/league/pairing.mjs` | Head-to-head pairing on a WeekData roster's `pairingKey` |
@@ -238,6 +246,7 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/analysis/pickCapital.mjs` | Future pick capital across the tradeable drafts: each held pick priced (projected Early/Mid/Late tier for the draft the standings decide, generic round value otherwise, unpriced when the market lists none), per season and summed, net against each team's own picks |
 | `src/analysis/strength.mjs` | The team strength rating, 0 to 100 and relative to the league: `lineup`, `depth`, `market_value`, `age_window` and `draft_capital`, each ranked across the teams that have it and scored by rank, then weighted by `strength.<format>` in `config/rankings.yml` (set by the preset). A component the league cannot supply is in `unavailable` with its reason and the other weights are rescaled; nothing missing counts as 0. `src/pipeline.mjs#readStrength` feeds it saved weeks, the market and pick capital, and the editions in `STRENGTH_TASKS` carry it. Formula in `docs/editorial-model.md`. No `node:` imports |
 | `src/analysis/fiveYearPlan.mjs` | One dynasty team's facts for seasons S to S+4: each player's age (today's age plus one a season) and stage on the editorial `age_curves` in `config/rankings.yml`, today's starters past their decline age and the share of their points from players before the cliff, picks held per draft (`unavailable` for a draft held, or one beyond every traded or priced draft: whether Sleeper issues it is not known, so it is never called "not issued"), and today's strength, standing and market value. No projected points, records or titles. No `node:` imports |
+| `src/analysis/byeExposure.mjs` | The bye-week table (`parseByeWeekTable`), `byeWeekFor` and `upcomingByeExposure` |
 | `src/analysis/standings.mjs` | Current seeds: wins, then points-for |
 | `src/analysis/playoffField.mjs` | The projected playoff field and the bubble that decides it |
 | `src/rivalries.mjs` | The declared rivalries (`config/rivalries.yml`): parsing, limits through the safe-input rules, and each team resolved to a roster id through `src/teamIdentity.mjs`. No `node:` imports |
@@ -249,6 +258,8 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/futureStock.mjs` | The future-stock edition: its refusal (dynasty only) and each team's age, production-by-age and priced pick capital, with held picks placed at their projected slot |
 | `src/fantasycalc/client.mjs` | FantasyCalc trade values: query from the league's format and scoring, fetch, normalize. FantasyCalc field names stop here, as Sleeper's stop at `src/sleeper/` |
 | `src/eliminationReport.mjs` | The elimination ledger as `doctor` prints it |
+| `src/scoringReport.mjs` | The scoring-profile lines `doctor` prints |
+| `src/inspect.mjs` | `inspectLeague` and `inspectLeagueFile`: one status report for `doctor` and the website. No `node:` imports |
 | `src/storeCore.mjs` | The store's methods (raw, snapshots, rankings, predictions, market values, tank watch, imported league, and each recorded edition's whole reply) over a back end, and `createMemoryStore`. No `node:` imports |
 | `src/leagueFile.mjs` | The league file: one versioned JSON file holding a league's history and settings, which the website and the CLI share ([The league file](#the-league-file)). Schema, validator, migration, the folder mapping both ways, and the stripping of people from saved ESPN pages. No `node:` imports |
 | `src/leagueFolder.mjs` | The disk half of `export-league` and `import-league`: reads a league folder's files (only those the mapping reads) and writes a league file's folder without overwriting anything |
@@ -257,11 +268,12 @@ workspace prompt whose name matches no shipped prompt (it would never be read).
 | `src/teamIdentity.mjs` | Which roster a published team name means, across renames |
 | `src/promptContext.mjs` | Assembles the model's facts and instructions |
 | `src/generate.mjs` | Optional Anthropic / OpenAI call |
-| `src/validate.mjs` | Post splitting and length checking |
-| `src/pipeline.mjs` | The run order |
+| `src/validate.mjs` | Post splitting, length checking, post formatting (`formatPost`, `looksCollapsed`) and the reply's JSON block (`extractJsonBlock`, `stripJsonBlock`) |
+| `src/pipeline.mjs` | Opening the league, resolving and capturing a week, and the `read*` helpers over saved history |
 | `src/options.mjs` | `EDITIONS` and `OPTIONS`, the descriptors both surfaces read: each edition's command, formats, and whether it is recordable or forward-looking; each option's flag, values, default, help line, the editions it changes, and whether only the CLI offers it. `parseArgs` is built from them. No `node:` imports |
 | `src/edition.mjs` | The steps of an edition, shared by the CLI and the website: `prepareEdition` (every refusal, open, resolve the week, capture, build the context and the prompt), `openLeagueOnSurface` (the league opened for a surface: `refuseCliOnly` first, so off the command line an ESPN league on `ESPN_ROUTE=fetch` is refused before any client exists; the CLI passes `surface: 'cli'`, and `fantasy-pressbox/core` exports it as `openLeague`) and `recordEdition` (file a reply's machine-readable tail, then keep the whole reply). No `node:` imports, directly or through anything it imports |
 | `src/cli.mjs` | Commands and human-facing output: finds the league folder, calls `prepareEdition`/`recordEdition`, writes files, and makes the optional AI call. `--help` is built from the descriptors |
+| `src/core/index.mjs` | The `fantasy-pressbox/core` browser entry. Re-exports only; `tests/core-purity.test.mjs` fails if anything it reaches imports `node:` or the AI call |
 | `src/welcome.mjs` | How the CLI talks someone through starting: the command line its advice prints (global install, npx, a project's node_modules, or a clone), the banner, the getting-started steps and the weekly routine |
 
 ## Domain concepts
@@ -302,7 +314,8 @@ the ID space the provider's players use.
 The capability gates work at two levels:
 
 - An edition that needs a capability (`EDITION_CAPABILITIES` in
-  `src/format.mjs`: future picks for `tank-watch` and `future-stock`,
+  `src/format.mjs`: future picks for `tank-watch`, `future-stock` and
+  `five-year-plan`,
   guillotine for the survival editions) is refused by
   `refuseEditionWithoutCapability`, naming the reason. `prepareEdition` runs it
   before the provider is contacted and again with the opened league, and
@@ -654,12 +667,12 @@ report. `readByeExposure` therefore takes `fromWeek` separately from
 the risk starts in. It still fetches nothing.
 
 **The rank emoji table now runs to 18.** A guillotine league normally starts
-with one team per NFL regular-season week, and `rankEmoji` (`src/config.mjs`)
+with one team per NFL regular-season week, and `rankEmoji` (`src/settings.mjs`)
 repeats the last entry past the end of the table — so a twelve-entry default
 printed the same emoji for ranks 13 through 18 and the bottom of the table
 stopped meaning anything. The first twelve entries are unchanged, so a 12-team
 league prints exactly what it always did. `config/editorial.yml` and
-`DEFAULT_EDITORIAL` in `src/config.mjs` both carry the table and must stay in
+`DEFAULT_EDITORIAL` in `src/settings.mjs` both carry the table and must stay in
 step; the file is what a real run reads, the constant is only the fallback for
 a missing one.
 
@@ -863,8 +876,8 @@ used: the Terms of Use bar reading it with a script.
   complaint is about a hand-edited or broken-generator file, so every one of
   them stops the run rather than silently reporting a partial table — a team
   that looks like it never has a bye is exactly the kind of wrong fact this
-  project refuses to print. `src/config.mjs#loadByeWeekTable` is the one place
-  that turns a season number into a file path and calls it; there is no
+  project refuses to print. `byeWeekTable` in `src/assets.mjs` (`loadAssets`) is
+  the one place that turns a season number into a file path and calls it; there is no
   fallback default the way `config/guillotine.yml` has one, because "no table
   found" cannot honestly default to "nobody has a bye" — a season without its
   table yet is refused loudly, naming `scripts/fetch-bye-weeks.mjs` as the
@@ -1001,7 +1014,7 @@ snapshot's `teams`.
 (through `requireDraftOrderRule`), and a week before the start week unless
 `--early` is passed. The start week is `tank_watch.start_week` in
 `config/rookie-draft.yml`, or the regular season's midpoint
-(`resolveTankWatchStartWeek`). The CLI runs the gate twice: before the provider is
+(`resolveTankWatchStartWeek`). `prepareEdition` (`src/edition.mjs`) runs the gate twice: before the provider is
 contacted, with the declared format, and again with the resolved format and
 week. `buildPrompt` refuses as well, as a second line of defence.
 
@@ -1272,6 +1285,8 @@ a platform detail has leaked and belongs back in the normalizer.
 2. a raw Sleeper field name (`roster_id`, `owner_id`, `matchup_id`,
    `players_points`, `starters_points`, `fpts_decimal`, `waiver_bid`,
    `last_scored_leg`) appears in code outside `src/sleeper/`. Comments that
-   explain Sleeper are allowed.
+   explain Sleeper are allowed;
+3. a raw ESPN field name (`RAW_ESPN_FIELDS`: `rosterForCurrentScoringPeriod`,
+   `playerPoolEntry`, `lineupSlotId`, …) appears in code outside `src/espn/`.
 
 The Sleeper data itself is described in `docs/sleeper-data.md`.

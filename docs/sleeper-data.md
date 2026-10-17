@@ -37,7 +37,7 @@ Sleeper stores points as an integer plus a separate hundredths field:
 { "ppts": 180, "ppts_decimal": 14 }   // 180.14 potential points
 ```
 
-`normalize.mjs` recombines them. Nothing downstream should see the halves.
+`src/sleeper/normalize.mjs` recombines them. Nothing downstream should see the halves.
 
 ### Matchup pairing
 
@@ -85,8 +85,9 @@ means Superflex.
 ### Players
 
 `/players/nfl` is roughly 15 MB and Sleeper asks that it be fetched at most
-once a day. It is cached at `data/cache/players-nfl.json` and refreshed after
-24 hours, or on demand with `--refresh-players`.
+once a day. The CLI caches it at `data/cache/players-nfl.json`
+(`src/diskPlayerCache.mjs`; the one-day rule is `src/playerCache.mjs`) and
+refreshes it after 24 hours, or on demand with `--refresh-players`.
 
 Player IDs are resolved to names in the normalizer. **A raw player ID must
 never reach a prompt** — the model cannot know who `9228` is, and will guess.
@@ -141,7 +142,7 @@ active depth.
 
 Sleeper publishes `ppts` (season potential points), which is an independent
 check on the optimal-lineup solver: summing the solver's weekly optimums must
-reproduce it. That check was used to validate `analysis/lineup.mjs` and is the
+reproduce it. That check was used to validate `src/analysis/lineup.mjs` and is the
 first thing to re-run if lineup logic changes.
 
 **Reserve and taxi check (2026-10-13).** The operator ran

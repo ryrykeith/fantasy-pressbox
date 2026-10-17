@@ -1,11 +1,14 @@
 # Plan: ESPN football leagues
 
+Status: shipped as **experimental** in #8 (`bf92532`, 2026-10-13), released
+in 0.2.0. Still open: the operator-run live checks in Appendix A, tasks 2.1
+(the public endpoints) and 2.2 (league views, blocked: no test league yet).
+
 Written 2026-10-11 against `main` at `1250052` (fantasy-pressbox 0.1.0, 671
-tests). Fantasy Pressbox covers only Sleeper today. This plan adds ESPN
+tests), when Fantasy Pressbox covered only Sleeper. This plan adds ESPN
 fantasy football leagues without changing anything a Sleeper league does.
 
-The tasks in Appendix A are run with `ndx work`. Nothing in this plan is
-implemented yet.
+The tasks in Appendix A are run with `ndx work`.
 
 ## 1. Scope
 

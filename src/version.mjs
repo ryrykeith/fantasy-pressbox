@@ -5,4 +5,4 @@
  * from package.json, so a release that bumps the version must bump it here.
  */
 export const PACKAGE_NAME = 'fantasy-pressbox';
-export const PACKAGE_VERSION = '0.1.0';
+export const PACKAGE_VERSION = '0.2.0';

@@ -2,13 +2,20 @@
 
 ## Assembly
 
-Every prompt is built by `src/promptContext.mjs` in this order:
+Every prompt file is built by `buildPrompt` in `src/promptContext.mjs` in this
+order:
 
 ```
+READ THIS FIRST          a short preamble: this is an assignment, not a document to review
 SYSTEM INSTRUCTIONS      prompts/system.md
 TASK INSTRUCTIONS        prompts/<edition>.md
-LEAGUE CONTEXT           a JSON block
+LEAGUE CONTEXT           an instruction to read the `unavailable` list first, then a JSON block
 ```
+
+With `--generate` the call is split instead (`src/cli.mjs`): `system.md` goes as
+the system message, and the task instructions plus the `# LEAGUE CONTEXT`
+heading and the JSON block go as the user message. That path has neither the
+preamble nor the `unavailable` instruction.
 
 The JSON block carries, depending on the edition:
 
@@ -21,6 +28,12 @@ previous rankings
 previous predictions, graded
 transactions
 editorial configuration
+the ranking preset and its weights
+the team strength rating
+declared rivalries, with their head-to-head record
+market values, with the FantasyCalc credit line
+the five-year plan's facts (`fiveYearPlan`)
+unavailable: what the edition does not know, each with an instruction
 ```
 
 ## Structured facts, not prose facts
@@ -31,9 +44,14 @@ context for it and know whether the model was quoting or inventing.
 
 The model is told, in `system.md`:
 
-> Do not invent facts not present in the supplied context. Treat scores,
-> records, rosters, players, transactions and rankings in the structured
-> context as authoritative. Editorialize only after factual grounding.
+> **Never invent a league fact.**
+>
+> The JSON context you are given is the complete record of this league. Players,
+> scores, records, rosters, starters, benches, transactions, draft picks,
+> rankings and predictions all come from there and nowhere else.
+>
+> - If a claim is not supported by the context, do not make it.
+> - If you want a number you were not given, leave the sentence out.
 
 ## Compactness matters
 
@@ -115,6 +133,10 @@ the final `%%%`:
 
 - **previews** emit their predictions, so the next recap can grade them
 - **ranking editions** emit their order, so the next edition can show movement
+
+Every other edition ends without one. The prompts for `future-stock`,
+`five-year-plan`, `tank-watch`, the trade report and the waiver report say so
+outright: "No JSON block at the end. This edition is not recorded."
 
 Team names in these blocks must match the context exactly. `extractJsonBlock`
 reads the last one; `stripJsonBlock` removes it from the human-facing copy.

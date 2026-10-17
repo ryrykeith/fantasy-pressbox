@@ -184,7 +184,7 @@ export function describeOptions() {
 
 export function helpText(cli = CLI_COMMAND) {
   return `
-Fantasy Pressbox — AI league coverage from your Sleeper data
+Fantasy Pressbox — AI league coverage from your Sleeper or ESPN data
 
 Usage
   ${cli} <command> [options]
@@ -825,7 +825,7 @@ function reportLengths(body, config, format, context = null) {
     for (const post of tooLong) {
       warn(`  post ${post.index}: ${post.length} chars (${post.overBy} over) — ${post.firstLine}`);
     }
-    warn('Edit those posts down before sending, or raise SLEEPER_POST_MAX_LENGTH in .env.');
+    warn('Edit those posts down before sending, or raise POST_MAX_LENGTH in .env.');
   }
   if (report.creditMissing.length) {
     warn("FantasyCalc's terms require its credit beside its values. These posts quote values without it:");
