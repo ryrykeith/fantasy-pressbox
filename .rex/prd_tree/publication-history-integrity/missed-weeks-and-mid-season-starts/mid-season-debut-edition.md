@@ -1,0 +1,15 @@
+---
+id: "64f86236-8633-46c2-baa8-63a761678c31"
+level: "task"
+title: "Mid-season debut edition"
+status: "pending"
+priority: "medium"
+source: "operator review session 2026-10-22"
+acceptanceCriteria:
+  - "A week 6 ranking with nothing recorded gets the mid-season debut note; a week 1 ranking keeps the existing first-edition note"
+  - "A strength window shorter than lineup_weeks carries a note naming how many weeks it holds"
+  - "doctor on a mid-season league with no saved weeks names the backfill"
+description: "A league can start coverage mid-season (the operator's second league starts in week 7). With no recorded ranking and week greater than 1, the missing-context note in src/promptContext.mjs (isRanking && !context.previousRankings) says only that this is the first edition, which reads as if it were week 1, and the prompt still centres on what this week's result proved. The strength rating then rests on whatever weeks are on disk, often one, with no note: strength.window.weeks lists them but nothing says the sample is short of lineup_weeks. WHAT TO ADD: a distinct note when no ranking is recorded and week > 1: first edition, N weeks into the season; judge the season so far from records, points-for and the saved weeks; introduce the publication; no arrows. A strength note whenever the window holds fewer weeks than lineup_weeks, naming the count, so the model weighs it accordingly. init and doctor, for a league whose current week is past 1 with no saved weeks, point to the backfill from 'Capture missing earlier weeks before a backward-looking edition' (or offer it)."
+lastModified: "2026-10-22T19:08:15.703Z"
+lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
+---
