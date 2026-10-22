@@ -16,7 +16,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Capture missing earlier weeks before a backward-looking edition](./capture-missing-earlier-weeks-before-a.md) | pending |
+| [Coverage labels name the weeks actually on file](./coverage-labels-name-the-weeks.md) | pending |
 | [Gap-aware ranking movement](./gap-aware-ranking-movement.md) | pending |
 | [Mid-season debut edition](./mid-season-debut-edition.md) | pending |
 | [Summarize skipped weeks in a ranking that spans a gap](./summarize-skipped-weeks-in-a-ranking.md) | pending |
-| [Coverage labels name the weeks actually on file](./coverage-labels-name-the-weeks.md) | pending |
