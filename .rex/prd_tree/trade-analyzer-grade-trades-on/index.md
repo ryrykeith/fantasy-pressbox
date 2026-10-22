@@ -14,6 +14,6 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
+| [Grading guidance](./grading-guidance/index.md) | pending |
 | [Player facts from Sleeper: stats, projections and role](./player-facts-from-sleeper-stats/index.md) | pending |
 | [Trade facts the grade is built on](./trade-facts-the-grade-is-built-on/index.md) | pending |
-| [Grading guidance](./grading-guidance/index.md) | pending |
