@@ -21,3 +21,4 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Gap-aware ranking movement](./gap-aware-ranking-movement.md) | pending |
 | [Mid-season debut edition](./mid-season-debut-edition.md) | pending |
 | [Summarize skipped weeks in a ranking that spans a gap](./summarize-skipped-weeks-in-a-ranking.md) | pending |
+| [Tell the model how old the league is, apart from the publication](./tell-the-model-how-old-the-league-is.md) | pending |
