@@ -39,6 +39,7 @@
  */
 import { fieldedStarterPoints, isAgedPosition } from './rosterWindow.mjs';
 import { lineupCandidates, optimalLineup } from './week.mjs';
+import { missingWeeksIn } from './weekCoverage.mjs';
 
 /** How each component reads, in the order a rating lists them. */
 export const STRENGTH_COMPONENTS = Object.freeze({
@@ -248,9 +249,12 @@ function rescale(weights, components) {
  * @param teams           normalized teams: rosterId, name, playerIds (today's roster)
  * @param players         the player dictionary, keyed by id (position, age)
  * @param slots           the league's starting slots
- * @param weeks           `{ settled: [{ week, rosters }], unavailable }`: every
- *                        settled week on file (WeekData rosters), or the reason
- *                        there are none to read
+ * @param weeks           `{ settled: [{ week, rosters }], unavailable, throughWeek? }`:
+ *                        every settled week on file (WeekData rosters), or the
+ *                        reason there are none to read. With `throughWeek` (the
+ *                        week the rating is for), `window.missingWeeks` names
+ *                        the weeks from the window's first week to that week
+ *                        that are not in `settled`
  * @param market          readMarketValues' snapshot, `{ unavailable }`, or null
  * @param pickCapital     buildPickCapital's output, or null
  * @param draftCapitalUnavailable why there is no pick capital, when it is null
@@ -274,6 +278,11 @@ export function buildStrength({
 }) {
   const components = Object.keys(weights).filter((component) => weights[component] > 0);
   const window = strengthWindow(weeks.settled ?? [], inputs.lineupWeeks);
+  // The window lists the weeks it used; a gap inside its span (a skipped
+  // week) is otherwise indistinguishable from a bye.
+  const windowMissing = window.length
+    ? missingWeeksIn({ present: window.map((entry) => entry.week), from: window[0].week, through: weeks.throughWeek })
+    : [];
 
   // Why a whole component cannot be computed for this league, if it cannot.
   const leagueGap = {};
@@ -391,6 +400,7 @@ export function buildStrength({
     weightsUsed,
     window: {
       weeks: window.map((entry) => entry.week),
+      ...(windowMissing.length ? { missingWeeks: windowMissing } : {}),
       lineupWeeks: inputs.lineupWeeks,
       shortWeekStarters: inputs.shortWeekStarters,
     },

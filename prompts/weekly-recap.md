@@ -62,6 +62,9 @@ rivals. For that game's post, and only that one:
   points, the last meeting, the streak and the biggest margin, as written. It
   counts only the saved weeks listed in `covered`, so call it the record on
   file, never all-time.
+- **If `headToHead.missingWeeks` is present**, those weeks were never saved,
+  so the record leaves out any game they played in them. Say which weeks it
+  covers, and state no season-long record, streak or trend.
 - **Check `headToHead.throughWeekCounted`.** When it is `true`, the record
   already counts this week's game: do not add the result to it again. When it
   is `false`, this week's game is not in it yet (the week is not settled):

@@ -77,7 +77,9 @@ Say so in the deal post, calling the rivalry by its `name` when it has one.
   manager: use it as colour, never as a claim about what a manager did or
   meant.
 - `headToHead` is their record on file, as written. If it is `unavailable`,
-  quote no record.
+  quote no record. If `headToHead.missingWeeks` is present, those weeks were
+  never saved: say which weeks the record covers and state no season-long
+  record, streak or trend.
 - The rivalry changes how the deal is framed, never its grades: grade each side
   exactly as you would grade a trade between strangers.
 

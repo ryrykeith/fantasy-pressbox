@@ -56,6 +56,10 @@ rating as though it were the rank.
   in a line that a component is missing, quoting the reason. Never guess its
   value and never treat it as zero. A team with its own `unavailable` list is
   rated on less: say so before leaning on its rating.
+- `strength.window.weeks` are the weeks the lineup, depth and age components
+  rest on. If `strength.window.missingWeeks` is present, those weeks fall
+  inside the window but were never saved: say which weeks the rating covers,
+  and state no season-long trend from it.
 - A rating of null means no rating this time. Give none.
 
 ## Movement

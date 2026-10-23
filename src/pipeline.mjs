@@ -564,7 +564,7 @@ export function readStrength({
   if (!choice) return null;
   const weeks = preseason
     ? { settled: [], unavailable: "a preseason ranking reads none of this season's results" }
-    : { settled: settledWeeks({ store, assets, league, teams, players, throughWeek }), unavailable: null };
+    : { settled: settledWeeks({ store, assets, league, teams, players, throughWeek }), unavailable: null, throughWeek };
   const capital = pickCapital === undefined ? readPickCapital({ league, teams, tradedPicks, market, config }) : pickCapital;
   const provider = providerOf(league);
   const draftCapitalUnavailable = capital

@@ -53,6 +53,7 @@ import { createTeamIdentity, attachRosterIds, presentPreviousRankings, describeU
 import { describeRankingEdition, describeWeeks, rankingGap } from './rankingGap.mjs';
 import { resolveRivalries } from './rivalries.mjs';
 import { headToHead, readSavedSeasons } from './analysis/rivalry.mjs';
+import { missingWeeksIn } from './analysis/weekCoverage.mjs';
 import { TANK_WATCH_TASK, refuseTankWatch, resolveTankWatchStartWeek } from './tankWatch.mjs';
 import { OPTIONS, editionNamed, optionNamed, quotedValues } from './options.mjs';
 import { ESPN_ROUTE_KEY, resolveAgeCurves, withRankEmojiMode } from './settings.mjs';
@@ -791,10 +792,18 @@ export async function prepareEdition({
   if (rivalries.length && RIVALRY_TASKS.includes(task)) {
     const through = { season: String(league.season), week: edition.forwardLooking ? week - 1 : week };
     const seasons = readSavedSeasons(store, { through });
+    // The record counts only the weeks on disk, so name this season's weeks
+    // up to `through` that are not: a pair whose only meeting fell in one
+    // would otherwise read as having never met.
+    const missingWeeks = missingWeeksIn({
+      present: (seasons.find(({ season }) => season === through.season)?.snapshots ?? []).map((snapshot) => snapshot.week),
+      through: through.week,
+    });
     rivalryRecords = rivalries.map((rivalry) => ({
       ...rivalry,
       headToHead: headToHead(seasons, rivalry.rosterIds, league),
       through,
+      ...(missingWeeks.length ? { missingWeeks } : {}),
     }));
   }
 

@@ -79,6 +79,9 @@ rivals. For that matchup's post, and only that one:
   points, the last meeting, the streak and the biggest margin, as written. It
   counts only the saved weeks listed in `covered`, so call it the record on
   file, never all-time.
+- **If `headToHead.missingWeeks` is present**, those weeks were never saved,
+  so the record leaves out any game they played in them. Say which weeks it
+  covers, and state no season-long record, streak or trend.
 - If `headToHead.unavailable` is set, no meeting between them is saved. Quote
   no record, and do not call this a first meeting: they may have played before
   the saved weeks.
