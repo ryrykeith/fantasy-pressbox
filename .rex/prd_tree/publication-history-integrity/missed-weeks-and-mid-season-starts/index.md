@@ -16,7 +16,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | Title | Status |
 |-------|--------|
 | [Capture missing earlier weeks before a backward-looking edition](./capture-missing-earlier-weeks-before-a.md) | pending |
-| [catch-up command: save every completed week not yet on disk](./catch-up-command-save-every-completed.md) | pending |
+| [catch-up command: save every completed week not yet on disk](./catch-up-command-save-every-completed.md) | completed |
 | [Coverage labels name the weeks actually on file](./coverage-labels-name-the-weeks.md) | pending |
 | [Gap-aware ranking movement](./gap-aware-ranking-movement.md) | pending |
 | [Mid-season debut edition](./mid-season-debut-edition.md) | pending |
