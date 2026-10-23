@@ -128,21 +128,35 @@ export function checkPosts(text, { maxChars = 900, context = null } = {}) {
  * order, in machine-readable form, so that the recap can grade them later
  * without anyone re-typing anything. The block is a fenced block after the last
  * %%% line (the whole text when there is no %%%): a fence inside a post is
- * prose and is never read. The chat sometimes drops the `json` tag, so a block
- * tagged json (any case) or untagged is accepted, and a json-tagged one wins
- * when both are present. Other languages are not the block.
+ * prose and is never read. When the reply closes with a %%% line after the
+ * block, so that only whitespace follows the last one, the text after the %%%
+ * before it is read instead (one step back, no further). The chat sometimes
+ * drops the `json` tag, so a block tagged json (any case) or untagged is
+ * accepted, and a json-tagged one wins when both are present. Other languages
+ * are not the block. The closing fence may share the JSON's last line, and an
+ * opening fence that is never closed (a reply cut off) is unreadable, not
+ * missing.
  *
- * Returns { status: 'none' } when there is no such fence, { status: 'unreadable',
- * start, end } when there is one that is not valid JSON, and { status: 'found',
- * value, start, end } otherwise; start and end are offsets into `text`.
+ * Line endings are normalised first (CRLF and a lone CR become LF). `text` is
+ * that normalised text and `start` and `end` are offsets into it, not into the
+ * argument.
+ *
+ * Returns { status: 'none', text } when there is no such fence,
+ * { status: 'unreadable', text, start, end } when there is one that is not valid
+ * JSON, and { status: 'found', text, value, start, end } otherwise.
  */
 export function findJsonBlock(text) {
-  const source = String(text);
+  const source = String(text).replace(/\r\n?/g, '\n');
   const delimiters = [...source.matchAll(new RegExp(POST_DELIMITER.source, 'gm'))];
-  const lastDelimiter = delimiters.at(-1);
-  const tailStart = lastDelimiter ? lastDelimiter.index + lastDelimiter[0].length : 0;
-  const fenced = /^[ \t]*```([A-Za-z]*)[ \t]*\n([\s\S]*?)^[ \t]*```[ \t]*$/gm;
-  const fences = [...source.slice(tailStart).matchAll(fenced)]
+  const endOf = (m) => m.index + m[0].length;
+  let tailStart = delimiters.length ? endOf(delimiters.at(-1)) : 0;
+  if (delimiters.length > 1 && source.slice(tailStart).trim() === '') {
+    tailStart = endOf(delimiters.at(-2));
+  }
+  const tail = source.slice(tailStart);
+  const fenced = /^[ \t]*```([A-Za-z]*)[ \t]*\n([\s\S]*?)```[ \t]*$/gm;
+  const all = [...tail.matchAll(fenced)];
+  const fences = all
     .map((m) => ({
       tag: m[1].toLowerCase(),
       body: m[2],
@@ -151,12 +165,23 @@ export function findJsonBlock(text) {
     }))
     .filter((fence) => fence.tag === 'json' || fence.tag === '');
   const chosen = fences.findLast((fence) => fence.tag === 'json') ?? fences.at(-1);
-  if (!chosen) return { status: 'none' };
+  if (!chosen) {
+    // Past the last closed fence, an opener left without its closer.
+    const consumed = all.length ? endOf(all.at(-1)) : 0;
+    // \x60 is a backtick: tests/espn-coverage-matrix.test.mjs scans source
+    // files with a tokenizer that reads a lone literal backtick as a template.
+    const open = /^[ \t]*\x60{3}([A-Za-z]*)[ \t]*\n/m.exec(tail.slice(consumed));
+    const openTag = open?.[1].toLowerCase();
+    if (open && (openTag === 'json' || openTag === '')) {
+      return { status: 'unreadable', text: source, start: tailStart + consumed + open.index, end: source.length };
+    }
+    return { status: 'none', text: source };
+  }
   const { start, end } = chosen;
   try {
-    return { status: 'found', value: JSON.parse(chosen.body), start, end };
+    return { status: 'found', text: source, value: JSON.parse(chosen.body), start, end };
   } catch {
-    return { status: 'unreadable', start, end };
+    return { status: 'unreadable', text: source, start, end };
   }
 }
 
@@ -166,10 +191,12 @@ export function extractJsonBlock(text) {
   return found.status === 'found' ? found.value : null;
 }
 
-/** Strips the block `extractJsonBlock` reads, so the human-facing copy stays clean. */
+/**
+ * Strips the block `extractJsonBlock` reads, so the human-facing copy stays clean.
+ * The result has LF line endings whatever the input had.
+ */
 export function stripJsonBlock(text) {
-  const source = String(text);
-  const found = findJsonBlock(source);
-  if (found.status === 'none') return source.trim();
-  return (source.slice(0, found.start) + source.slice(found.end)).trim();
+  const found = findJsonBlock(text);
+  if (found.status === 'none') return found.text.trim();
+  return (found.text.slice(0, found.start) + found.text.slice(found.end)).trim();
 }
