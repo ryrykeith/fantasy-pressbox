@@ -180,6 +180,11 @@ const CLI = join(PACKAGE_ROOT, 'src', 'cli.mjs');
 
 const DYNASTY_ID = '111111111111';
 const REDRAFT_ID = '222222222222';
+const MID_SEASON_ID = '333333333333';
+// Renewed every year since 2023: each season names the one before.
+const RENEWED_ID = '444444444444';
+const BROKEN_ID = '555555555555';
+const renewedSeason = (season, previous) => ({ league_id: `44444444${season}`, season: String(season), previous_league_id: previous });
 
 const LEAGUES = {
   [DYNASTY_ID]: {
@@ -197,6 +202,36 @@ const LEAGUES = {
     settings: { type: 0, num_teams: 18, playoff_teams: 0 },
     scoring_settings: { rec: 0.5, pass_td: 4 },
     roster_positions: ['QB', 'RB', 'WR', 'TE', 'FLEX', 'BN'],
+  },
+  [MID_SEASON_ID]: {
+    league_id: MID_SEASON_ID,
+    name: 'Late Starters',
+    season: '2026',
+    settings: { type: 2, num_teams: 12, playoff_teams: 6, playoff_week_start: 15, last_scored_leg: 6 },
+    scoring_settings: { rec: 1, bonus_rec_te: 0.5, pass_td: 4 },
+    roster_positions: ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'BN'],
+  },
+  [RENEWED_ID]: {
+    league_id: RENEWED_ID,
+    name: 'Old Guard Dynasty',
+    season: '2026',
+    previous_league_id: '444444442025',
+    settings: { type: 2, num_teams: 12, playoff_teams: 6, playoff_week_start: 15 },
+    scoring_settings: { rec: 1, pass_td: 4 },
+    roster_positions: ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'BN'],
+  },
+  444444442025: renewedSeason(2025, '444444442024'),
+  444444442024: renewedSeason(2024, '444444442023'),
+  444444442023: renewedSeason(2023, null),
+  // Names a previous season Sleeper does not know.
+  [BROKEN_ID]: {
+    league_id: BROKEN_ID,
+    name: 'Lost Records League',
+    season: '2026',
+    previous_league_id: '555555555554',
+    settings: { type: 2, num_teams: 12, playoff_teams: 6, playoff_week_start: 15 },
+    scoring_settings: { rec: 1, pass_td: 4 },
+    roster_positions: ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'BN'],
   },
 };
 
@@ -235,6 +270,7 @@ const dynastyAnswers = ({ id = DYNASTY_ID, order = '', rounds = '1', startWeek =
   '', // display name: the league's
   '', // format: Sleeper's reading, dynasty
   '', // scoring matches
+  '', // first season: Sleeper's reading is right
   order, // draft order: the first preset
   rounds, // rounds: linear
   startWeek, // tank watch start week
@@ -275,6 +311,16 @@ test('setup ends with the commands to run next, written for the league folder', 
   assert.doesNotMatch(result.stdout, /node src\/cli\.mjs/);
 });
 
+test('a league whose season is under way is told to run catch-up; one before kickoff is not', () => {
+  const underWay = runSetup(dynastyAnswers({ id: MID_SEASON_ID }), { workspace: tempDir() });
+  assert.equal(underWay.status, 0, underWay.stdout + underWay.stderr);
+  assert.match(underWay.stdout, /Your season is under way \(6 weeks played\)/);
+  assert.match(underWay.stdout, / catch-up\n/);
+  const preseason = runSetup(dynastyAnswers(), { workspace: tempDir() });
+  assert.equal(preseason.status, 0, preseason.stdout + preseason.stderr);
+  assert.doesNotMatch(preseason.stdout, /catch-up/);
+});
+
 test('the scoring Sleeper reports is shown back for confirmation', () => {
   const result = runSetup(dynastyAnswers(), { workspace: tempDir() });
   assert.match(result.stdout, /Reception\s+full PPR/);
@@ -294,7 +340,7 @@ test('a dynasty league is pointed at the example board, and no prospect board is
 test('an invalid tank watch week is refused at the question and asked again', () => {
   const workspace = tempDir();
   const answers = dynastyAnswers({ startWeek: 'eight' });
-  answers.splice(8, 0, '9'); // the second try at the start week
+  answers.splice(9, 0, '9'); // the second try at the start week
   const result = runSetup(answers, { workspace });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /tank watch start week is "eight"/);
@@ -313,7 +359,7 @@ test('"something else" leaves the draft rule undeclared, and the folder still lo
 test('a chopped league can be declared guillotine, and gets the empty ledger to fill in', () => {
   const workspace = tempDir();
   const result = runSetup(
-    [REDRAFT_ID, '', '', '3', '', '', '', ''], // id, yes, name, guillotine, scoring, provider, tone, length
+    [REDRAFT_ID, '', '', '3', '', '', '', '', ''], // id, yes, name, guillotine, scoring, first season, provider, tone, length
     { workspace },
   );
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -332,7 +378,7 @@ test('a chopped league can be declared guillotine, and gets the empty ledger to 
 
 test('a redraft league writes no league config files at all', () => {
   const workspace = tempDir();
-  const result = runSetup([REDRAFT_ID, '', '', '', '', '', '', ''], { workspace });
+  const result = runSetup([REDRAFT_ID, '', '', '', '', '', '', '', ''], { workspace });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(loadEnvFile(join(workspace, '.env')).LEAGUE_FORMAT, 'redraft');
   assert.equal(existsSync(join(workspace, 'config')), false);
@@ -349,7 +395,7 @@ test('an unknown league ID is refused at entry, and giving up writes nothing', (
 test('the provider and key go into the workspace .env, ready for --generate', () => {
   const workspace = tempDir();
   const answers = dynastyAnswers();
-  answers.splice(8, 1, '2', 'sk-ant-test-key', ''); // Claude, a key, the default model
+  answers.splice(9, 1, '2', 'sk-ant-test-key', ''); // Claude, a key, the default model
   const result = runSetup(answers, { workspace });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const config = loadConfig({ workspaceRoot: workspace });
@@ -357,6 +403,45 @@ test('the provider and key go into the workspace .env, ready for --generate', ()
   assert.equal(config.ai.anthropicKey, 'sk-ant-test-key');
   assert.ok(config.ai.model);
   assert.equal(readFileSync(join(workspace, 'config', 'rookie-draft.yml'), 'utf8').includes('sk-ant'), false);
+});
+
+/* ------------------------------------------------------- the league's age */
+
+test("setup shows how long Sleeper says the league has run, and writes no override when it is right", () => {
+  const workspace = tempDir();
+  const result = runSetup(dynastyAnswers({ id: RENEWED_ID }), { workspace });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /Sleeper says this league started in 2023: 2026 is its 4th season\./);
+  assert.equal(loadEnvFile(join(workspace, '.env')).LEAGUE_FIRST_SEASON, '');
+  assert.equal(loadConfig({ workspaceRoot: workspace }).leagueFirstSeason, null);
+
+  const fresh = runSetup(dynastyAnswers(), { workspace: tempDir() });
+  assert.match(fresh.stdout, /Sleeper says 2026 is this league's first season\./);
+});
+
+test('a league recreated rather than renewed is given its real first season, read by the loader', () => {
+  const workspace = tempDir();
+  const answers = dynastyAnswers();
+  answers.splice(5, 1, 'n', '2030', '2021'); // not right; a year after the season (refused); the real one
+  const result = runSetup(answers, { workspace });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /The first season is 2030, after this league's 2026 season/);
+  assert.equal(loadEnvFile(join(workspace, '.env')).LEAGUE_FIRST_SEASON, '2021');
+  assert.equal(loadConfig({ workspaceRoot: workspace }).leagueFirstSeason, 2021);
+
+  // A second run offers the declared year to keep.
+  const again = runSetup(['', '', '', '', '', '', '', '', '', '', 'n'], { workspace });
+  assert.match(again.stdout, /Your \.env says this league started in 2021: 2026 is its 6th season\./);
+});
+
+test('a broken Sleeper chain is explained, and the year is asked for', () => {
+  const workspace = tempDir();
+  const answers = dynastyAnswers({ id: BROKEN_ID });
+  answers.splice(5, 1, '2023');
+  const result = runSetup(answers, { workspace });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /The 2026 league names 555555555554 as its previous season, and Sleeper has no league/);
+  assert.equal(loadEnvFile(join(workspace, '.env')).LEAGUE_FIRST_SEASON, '2023');
 });
 
 /* ------------------------------------------------------------- running twice */
@@ -368,7 +453,7 @@ test('a second run offers the first run\'s answers, and replaces nothing when to
   const draftBefore = readFileSync(join(workspace, 'config', 'rookie-draft.yml'), 'utf8');
 
   // The league ID is the default now; the draft settings are offered to keep.
-  const result = runSetup(['', '', '', '', '', '', '', '', '', 'n'], { workspace });
+  const result = runSetup(['', '', '', '', '', '', '', '', '', '', 'n'], { workspace });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /\[111111111111\]/);
   assert.match(result.stdout, /Keep these rookie draft settings\?/);
@@ -384,9 +469,9 @@ test('a second run that changes the draft rule backs up both files first', () =>
   assert.equal(runSetup(dynastyAnswers(), { workspace }).status, 0);
   const draftBefore = readFileSync(join(workspace, 'config', 'rookie-draft.yml'), 'utf8');
 
-  // Don't keep the settings; choose every team by record, snake, keep the
-  // offered start week; confirm.
-  const result = runSetup(['', '', '', '', '', 'n', '4', '2', '', '', '', '', 'y'], { workspace });
+  // Keep the first season; don't keep the settings; choose every team by
+  // record, snake, keep the offered start week; confirm.
+  const result = runSetup(['', '', '', '', '', '', 'n', '4', '2', '', '', '', '', 'y'], { workspace });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(readFileSync(join(workspace, 'config', 'rookie-draft.yml.backup'), 'utf8'), draftBefore);
   assert.ok(existsSync(join(workspace, '.env.backup')));

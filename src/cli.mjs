@@ -34,7 +34,14 @@ import { describeScoringSummary, describeUnmodelledScoring } from './scoringRepo
 import { describeEliminationLedger } from './eliminationReport.mjs';
 import { describeDraftOrder } from './rookieDraft.mjs';
 import { describeProspectBoard } from './prospectBoard.mjs';
-import { resolveWeek, captureWeek, importSavedFiles, readEliminationLedger } from './pipeline.mjs';
+import {
+  resolveWeek,
+  captureWeek,
+  catchUpWeeks,
+  lastCompletedWeek,
+  importSavedFiles,
+  readEliminationLedger,
+} from './pipeline.mjs';
 import { FUTURE_STOCK_TASK } from './futureStock.mjs';
 import { FIVE_YEAR_PLAN_TASK } from './fiveYearPlan.mjs';
 import { describeInspection, inspectLeague } from './inspect.mjs';
@@ -138,6 +145,7 @@ const OTHER_COMMANDS = [
   ['grade', "Score last week's predictions against what happened"],
   ['check <file>', "Check a file of finished posts against the league's post length limit"],
   ['fetch', 'Download and save a week of league data'],
+  ['catch-up', 'Save every completed week not on disk yet (mid-season start, missed week)'],
   [
     'import-espn [--week <n>] <files>',
     [
@@ -506,8 +514,8 @@ function savedWeeks(ctx) {
   return (ctx.provider.savedPages?.()?.weeks ?? []).map((w) => w.week);
 }
 
-function describeImportToSave(config, { season, weeks }) {
-  const links = getProvider(config.league.provider).importLinks({ leagueId: config.league.id, season, weeks });
+function describeImportToSave(config, { season, weeks, linkWeeks = weeks }) {
+  const links = getProvider(config.league.provider).importLinks({ leagueId: config.league.id, season, weeks: linkWeeks });
   const lines = [
     `  Imported weeks     ${weeks.length ? weeks.join(', ') : 'none yet'}`,
     "  Addresses to save  Open each in a browser signed in to ESPN and save the page in this league's folder,",
@@ -612,6 +620,63 @@ async function commandFetch(config, args) {
   const { week } = await resolveWeek({ ...ctx, config, requested: args.week });
   const result = await captureWeek({ ...ctx, week });
   reportCapture(result, week, ctx);
+  return 0;
+}
+
+/**
+ * Saves every completed week that has no settled snapshot yet
+ * (src/pipeline.mjs#catchUpWeeks). On ESPN's import route nothing is fetched:
+ * the weeks whose pages are not saved are listed with the addresses to save.
+ */
+async function commandCatchUp(config, args) {
+  requireLeague(config);
+  if (args.through !== undefined && !(Number.isInteger(args.through) && args.through > 0)) {
+    throw new Error('--through must be a week number (1, 2, 3, ...).');
+  }
+  const ctx = await openFolderLeague(config, { refreshPlayers: args.refreshPlayers });
+  if (typeof ctx.provider.savedPages === 'function') return reportCatchUpImports(config, ctx, args.through);
+
+  const lines = {
+    saved: (week) => `Week ${week} saved.`,
+    settled: (week) => `Week ${week} already settled, kept as it is.`,
+    'not-played': (week) => `Week ${week} saved, but not played yet (all scores are zero).`,
+    'not-completed': (week) => `Week ${week} is not played yet, so it was not fetched.`,
+  };
+  const { weeks, lastCompleted } = await catchUpWeeks({
+    ...ctx,
+    through: args.through,
+    onWeek: ({ week, status }) => say(lines[status](week)),
+  });
+  if (weeks.length === 0) {
+    say(`No week has been completed yet (last completed week: ${lastCompleted}), so there is nothing to save.`);
+    return 0;
+  }
+  const written = weeks.filter(({ status }) => status === 'saved' || status === 'not-played');
+  if (written.length === 0) {
+    if (weeks.some(({ status }) => status === 'settled')) say('\nEvery completed week is already settled; nothing was fetched.');
+    return 0;
+  }
+  say(
+    `\nWeeks ${written.map(({ week }) => week).join(', ')} carry today's team names and records, ` +
+      `because ${providerDisplayName(ctx.league.provider ?? 'sleeper')} keeps no history of them.`,
+  );
+  return 0;
+}
+
+/** catch-up on the import route: the weeks still to save, and where to save them from. Fetches nothing. */
+async function reportCatchUpImports(config, ctx, through) {
+  const last = await lastCompletedWeek(ctx);
+  const upTo = Number.isInteger(through) ? Math.min(through, last) : last;
+  const have = new Set(savedWeeks(ctx));
+  const missing = Array.from({ length: upTo }, (_, index) => index + 1).filter((week) => !have.has(week));
+  if (missing.length === 0) {
+    say(`Every completed week${upTo > 0 ? ` (1-${upTo})` : ''} has its pages saved. Nothing to do.`);
+    return 0;
+  }
+  say(`Weeks without saved pages: ${missing.join(', ')}. Nothing was requested from ESPN.`);
+  for (const line of describeImportToSave(config, { season: ctx.league.season, weeks: [...have], linkWeeks: missing })) say(line);
+  say("\nSave each week's pages, then import them one week at a time:");
+  say(`  ${CLI_COMMAND} import-espn --week <n> <the saved files>`);
   return 0;
 }
 
@@ -1096,6 +1161,8 @@ async function main() {
       return commandDoctor(config);
     case 'fetch':
       return commandFetch(config, args);
+    case 'catch-up':
+      return commandCatchUp(config, args);
     case 'import-espn':
       return commandImportEspn(config, args);
     // Every command EDITIONS names (src/options.mjs); tests/options.test.mjs

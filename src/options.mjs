@@ -182,6 +182,19 @@ const OPTION_LIST = [
     commands: ['record', 'grade', 'fetch', 'import-espn'],
   },
   {
+    name: 'through',
+    flag: '--through',
+    kind: 'integer',
+    value: '<n>',
+    values: null,
+    default: null,
+    help: ['The last week catch-up saves', '(default: the last completed week)'],
+    missing: '--through needs a week number, e.g. --through 5',
+    editions: [],
+    commands: ['catch-up'],
+    cliOnly: 'a command that writes to the league folder; the website holds its league in the page',
+  },
+  {
     name: 'format',
     flag: '--format',
     kind: 'text',
@@ -229,7 +242,7 @@ const OPTION_LIST = [
     default: false,
     help: 'Re-download the NFL player list instead of using the cache',
     editions: BUILT_EDITIONS,
-    commands: ['fetch'],
+    commands: ['fetch', 'catch-up'],
   },
   {
     name: 'refreshMarket',

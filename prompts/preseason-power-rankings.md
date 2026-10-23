@@ -80,9 +80,10 @@ were the rank.
 
 `futureDraftCapital` lists picks for drafts that **have not happened yet**, and
 only those. Picks for the current season and earlier are already spent and are
-excluded from the context on purpose — in a league's first year those are
-startup-draft picks, and treating them as assets is a straightforward analytical
-error.
+excluded from the context on purpose — they were spent in a draft that has
+already happened (the startup draft, when `league.history.seasonNumber` is 1),
+and treating them as assets is a straightforward analytical error. That a pick
+is spent says nothing about how old the league is.
 
 Read it as follows:
 

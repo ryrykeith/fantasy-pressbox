@@ -118,9 +118,10 @@ async function savedLeaguePage(leagueId) {
   return response.text();
 }
 
-// After the league is confirmed: display name, format, scoring matches,
-// writing provider, tone, longest post. '' takes each default.
-const TAIL = ['', '', '', '', '', ''];
+// After the league is confirmed: display name, format, scoring matches, the
+// league's first season (ESPN cannot say: left unknown), writing provider,
+// tone, longest post. '' takes each default.
+const TAIL = ['', '', '', '', '', '', ''];
 
 test('import route: setup makes no request, asks for no cookie, and writes ESPN_ROUTE=import', async () => {
   const workspace = tempDir();
@@ -263,8 +264,8 @@ test('an ESPN dynasty league gets no rookie draft questions and is not pointed a
   const workspace = tempDir();
   const page = join(workspace, 'league-page.json');
   writeFileSync(page, await savedLeaguePage(PUBLIC_LEAGUE_ID));
-  // route; id; season; file; is this your league; name; format: 1 (dynasty); scoring; provider; tone; length
-  const result = runSetup(['', PUBLIC_LEAGUE_ID, String(SEASON), page, '', '', '1', '', '', '', ''], {
+  // route; id; season; file; is this your league; name; format: 1 (dynasty); scoring; first season; provider; tone; length
+  const result = runSetup(['', PUBLIC_LEAGUE_ID, String(SEASON), page, '', '', '1', '', '', '', '', ''], {
     workspace,
     preload: THROWING_FETCH,
   });

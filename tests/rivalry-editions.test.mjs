@@ -245,3 +245,27 @@ test('the head-to-head record reaches back into earlier saved seasons', async ()
   assert.match(headToHead.biggestMargin.score, /^Bye Week Blues 101\.5, Punt Intended 140\.25$/);
   assert.deepEqual(headToHead.covered, ['2025: week 9', '2026: week 1']);
 });
+
+test('a rivalry record names the weeks up to its through week that are not saved', async () => {
+  const store = createMemoryStore();
+  const side = (rosterId, team, points) => ({ rosterId, team, points });
+  // Weeks 1, 2 and 4 are saved; week 3 is not.
+  for (const week of [1, 2, 4]) {
+    store.saveSnapshot('2026', week, {
+      week,
+      settled: true,
+      played: true,
+      analysis: { teamWeeks: [side(1, 'Bye Week Blues', 100), side(2, 'Punt Intended', 90)], games: [] },
+    });
+  }
+  const { context } = await build('espn', 'preview', 5, { store });
+  const { headToHead } = context.upcomingMatchups.find((entry) => hasTeams(entry, 'Bye Week Blues', 'Lowered Expectations')).rivalry;
+  assert.deepEqual(headToHead.missingWeeks, [3]);
+  assert.equal(headToHead.through, `${context.league.season} week 4`);
+});
+
+test('with every week up to the through week saved, a rivalry record carries no missingWeeks', async () => {
+  const { context } = await build('sleeper', 'recap', 1);
+  const { headToHead } = context.thisWeek.games.find((entry) => entry.rivalry?.name === NAME).rivalry;
+  assert.equal('missingWeeks' in headToHead, false);
+});

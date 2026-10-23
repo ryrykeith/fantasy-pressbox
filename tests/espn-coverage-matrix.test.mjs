@@ -11,7 +11,7 @@ import { espnProvider } from '../src/espn/provider.mjs';
 import { capabilityGap, EDITION_CAPABILITIES, refuseEditionWithoutCapability } from '../src/format.mjs';
 import { FUTURE_STOCK_TASK } from '../src/futureStock.mjs';
 import { FIVE_YEAR_PLAN_TASK } from '../src/fiveYearPlan.mjs';
-import { captureWeek, readMarketValues, readStrength, readTransactions } from '../src/pipeline.mjs';
+import { captureWeek, readLeagueHistory, readMarketValues, readStrength, readTransactions } from '../src/pipeline.mjs';
 import { buildContext, describePlayer, STRENGTH_TASKS, TASKS } from '../src/promptContext.mjs';
 import { resolveSettings } from '../src/settings.mjs';
 import { assets } from './fixtures/assets.mjs';
@@ -291,7 +291,8 @@ async function espnWeek({ leagueId = PUBLIC_LEAGUE_ID, leagueFormat = null } = {
   const store = createStore({ dataDir });
   const captured = await captureWeek({ provider, store, ...opened, week: SCORED_WEEK });
   const enriched = readTransactions({ store, ...opened, describePlayer, week: SCORED_WEEK });
-  return { ...opened, store, captured, enriched };
+  const leagueHistory = await readLeagueHistory({ provider, store, league: opened.league });
+  return { ...opened, store, captured, enriched, leagueHistory };
 }
 
 /** The shipped strength weights: CONFIG's hand-built rankings carry none. */
@@ -320,6 +321,7 @@ function espnContext(task, week, extra = {}) {
     teams: week.teams,
     players: week.players,
     week: SCORED_WEEK,
+    leagueHistory: week.leagueHistory,
     weekAnalysis: readsTheWeek ? week.captured.analysis : null,
     upcomingAnalysis: task === 'preview' ? week.captured.analysis : null,
     transactions: week.captured.transactions,
@@ -380,6 +382,11 @@ before(async () => {
     }),
     espnContext('recap', base, { gradedPredictions: { week: SCORED_WEEK, correct: 0, total: 0, predictions: [] } }),
     espnContext('rankings', base, { previousRankings: lastRankings }),
+    // A ranking recorded two weeks back spans the week between, read from its saved snapshot.
+    espnContext('rankings', base, {
+      previousRankings: { ...lastRankings, label: 'Week 2', week: SCORED_WEEK - 2 },
+      skippedWeekSnapshots: (week) => ({ week, played: true, analysis: base.captured.analysis }),
+    }),
   );
 });
 

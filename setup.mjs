@@ -48,6 +48,7 @@ import { FORMAT_LABELS } from './src/format.mjs';
 import { describeScoringSummary, describeUnmodelledScoring } from './src/scoringReport.mjs';
 import { describeDraftOrder } from './src/rookieDraft.mjs';
 import { banner, cliCommand, displayPath, weeklyRoutine } from './src/welcome.mjs';
+import { describeLeagueAge } from './src/leagueAge.mjs';
 import {
   DRAFT_ORDER_PRESETS,
   ESPN_COOKIE_HELP,
@@ -64,6 +65,7 @@ import {
   extractEspnLeague,
   extractLeagueId,
   formatChoices,
+  parseFirstSeasonAnswer,
   parseStartWeekAnswer,
   presetForOrder,
   readRookieDraftConfig,
@@ -310,6 +312,64 @@ async function askSeason(fallback) {
     if (/^\d{4}$/.test(answer)) return answer;
     say(red('  That is not a four-digit year.'));
     fallback = '';
+  }
+}
+
+/**
+ * The season the league started, for LEAGUE_FIRST_SEASON: '' to let the
+ * provider's chain of seasons answer, or a year.
+ *
+ * A declared year already in .env is offered first. Otherwise the provider's
+ * reading is shown and confirmed with one Enter; a "no", or a provider that
+ * cannot say, asks for the year (empty leaves it unknown).
+ */
+async function askFirstSeason({ provider, league, existing }) {
+  const season = Number.parseInt(league.season, 10);
+  const declared = existing.LEAGUE_FIRST_SEASON?.trim() ?? '';
+  say('A first edition of Fantasy Pressbox is not the first season of the league, and');
+  say('every edition tells the writer which season this is.');
+  say('');
+  const askYear = async (fallback) => {
+    while (true) {
+      const answer = await askWithDefault("Which year was the league's first season? (empty: not known)", fallback);
+      try {
+        const year = parseFirstSeasonAnswer(answer, league.season);
+        return year === null ? '' : String(year);
+      } catch (error) {
+        say(red(`  ${error.message}`));
+        fallback = '';
+      }
+    }
+  };
+
+  if (declared && readsAsFirstSeason(declared, league.season)) {
+    say(describeLeagueAge({ firstSeason: Number(declared), season, by: 'Your .env' }));
+    if (await askYesNo('Keep that?', true)) return declared;
+    return askYear('');
+  }
+
+  const found =
+    typeof provider.lookupLeagueHistory === 'function'
+      ? await provider.lookupLeagueHistory({ league })
+      : { unavailable: `${provider.displayName} does not report a league's earlier seasons.` };
+  if (found.unavailable) {
+    say(found.unavailable);
+    say(dim('  Leave it empty and editions say nothing about how old the league is.'));
+    return askYear('');
+  }
+  say(describeLeagueAge({ firstSeason: found.firstSeason, season, by: provider.displayName }));
+  if (await askYesNo('Is that right?', true)) return '';
+  say(dim('  A league recreated rather than renewed starts a new chain. Give the real first year,'));
+  say(dim(`  or leave it empty to keep ${provider.displayName}'s reading.`));
+  return askYear('');
+}
+
+/** Is a LEAGUE_FIRST_SEASON already in .env one setup can offer? A broken one is asked again. */
+function readsAsFirstSeason(text, season) {
+  try {
+    return parseFirstSeasonAnswer(text, season) !== null;
+  } catch {
+    return false;
   }
 }
 
@@ -644,6 +704,9 @@ async function main() {
     if (!(await askYesNo('Carry on with setup anyway?', true))) return 1;
   }
 
+  heading('How long your league has run');
+  const firstSeason = await askFirstSeason({ provider: leagueProvider, league, existing });
+
   const draftPath = join(configDir, 'rookie-draft.yml');
   const guillotinePath = join(configDir, 'guillotine.yml');
   let rookieDraftText = null;
@@ -742,6 +805,8 @@ async function main() {
     // Always declared, even when it agrees with Sleeper: the operator has now
     // said what the league is, and doctor reports it as told rather than guessed.
     LEAGUE_FORMAT: formatType,
+    // Empty unless the operator gave a year: the provider's chain answers.
+    LEAGUE_FIRST_SEASON: firstSeason,
     AI_PROVIDER: provider,
     ANTHROPIC_API_KEY: anthropicKey,
     OPENAI_API_KEY: openaiKey,
@@ -814,6 +879,13 @@ async function main() {
   }
   say(`  ${bold(`${cli} doctor`)}`);
   say('');
+  // A season already under way has weeks behind it that nothing has saved.
+  if (Number.isInteger(league.lastScoredWeek) && league.lastScoredWeek >= 1) {
+    say(`Your season is under way (${league.lastScoredWeek} week${league.lastScoredWeek === 1 ? '' : 's'} played). Save the earlier weeks first:`);
+    say('');
+    say(`  ${bold(`${cli} catch-up`)}`);
+    say('');
+  }
   say('Then every week, from that folder:');
   say('');
   for (const line of weeklyRoutine(cli, formatType)) say(line);

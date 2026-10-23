@@ -26,6 +26,8 @@ import { prospectBoardView } from './prospectBoard.mjs';
 import { TANK_WATCH_TASK, tankWatchPrize, tankWatchUnavailable, tankWatchView } from './tankWatch.mjs';
 import { draftProjectionView, pickProjection, tradePicksUnavailable, tradeProspectBoard } from './tradePicks.mjs';
 import { FUTURE_STOCK_TASK, futureStockUnavailable, futureStockView, refuseFutureStock } from './futureStock.mjs';
+import { ordinal } from './leagueAge.mjs';
+import { describeRankingEdition, describeWeeks, rankingGap, summarizeSkippedWeeks } from './rankingGap.mjs';
 import {
   FIVE_YEAR_PLAN_TASK,
   fiveYearPlanUnavailable,
@@ -935,15 +937,18 @@ const twoDecimals = (n) => Number(n.toFixed(2));
  * by team name with no roster ids. A pair with no saved meeting carries the
  * record's `unavailable` reason, never 0-0. `coverage` names the seasons and
  * weeks the record was read from and every season it could not be.
+ * `missingWeeks` lists this season's weeks up to `through` with nothing saved
+ * (absent when all are), so a record is never read as covering them.
  * `throughWeekCounted` says whether the `through` week itself is in the
  * record: a recap built before the provider has settled its week reads a
  * record that stops short of the game it is about, and must not call it current.
  */
-function rivalryView({ rosterIds, teams, name, note, headToHead: record, through }) {
+function rivalryView({ rosterIds, teams, name, note, headToHead: record, through, missingWeeks }) {
   const nameOf = (rosterId) => (rosterId === rosterIds[0] ? teams[0] : rosterId === rosterIds[1] ? teams[1] : null);
   const score = ([a, b]) => `${teams[0]} ${twoDecimals(a)}, ${teams[1]} ${twoDecimals(b)}`;
   const coverage = {
     through: `${through.season} week ${through.week}`,
+    ...(missingWeeks?.length ? { missingWeeks } : {}),
     throughWeekCounted: record.covered.some(
       ({ season, weeks }) => season === String(through.season) && weeks.includes(through.week),
     ),
@@ -1017,8 +1022,66 @@ function marketValuesView(market) {
 }
 
 /**
+ * `context.league.history`: `{ firstSeason, seasonNumber, source }`, or
+ * `{ unavailable }` when the league's age is not known.
+ */
+function leagueHistoryView(history) {
+  if (history.unavailable) return { unavailable: history.unavailable };
+  const { firstSeason, seasonNumber, source } = history;
+  return { firstSeason, seasonNumber, source };
+}
+
+/**
+ * The note carried by a previous ranking that is more than one week old
+ * (src/rankingGap.mjs#rankingGap): which edition the arrows measure from, the
+ * weeks with no ranking in between, and the movement cap scaled by the span,
+ * because `max_normal_movement` is a one-week figure.
+ */
+function spanNote({ from, weeksSpanned, skippedWeeks }, maxNormalMovement) {
+  const edition = describeRankingEdition(from);
+  const cap = Number.isFinite(maxNormalMovement)
+    ? ` Scale editorial.movementGuidance.max_normal_movement by the ${weeksSpanned} weeks: ` +
+      `normally keep movement within ${maxNormalMovement * weeksSpanned} spots.`
+    : ` Scale editorial.movementGuidance.max_normal_movement by the ${weeksSpanned} weeks.`;
+  return (
+    `These arrows measure ${weeksSpanned} weeks of movement, from ${edition}. ` +
+    `No ranking was recorded for ${describeWeeks(skippedWeeks)}. ` +
+    `Name ${edition} as the edition the arrows measure from, and never call it last week's.` +
+    cap
+  );
+}
+
+/**
+ * What the first-edition note says about the league itself, so "first
+ * edition" is never read as "first season": `{ fact, rule }`, sentences to
+ * add to the note's `why` and `instruction`, both empty when no history was
+ * read.
+ */
+function leagueAgeNote(history, season) {
+  if (!history) return { fact: '', rule: '' };
+  if (history.unavailable) {
+    return { fact: '', rule: ' Do not say whether the league itself is new: how long it has run is not known.' };
+  }
+  if (history.seasonNumber > 1) {
+    return {
+      fact:
+        ` The league itself is not new: ${season} is its ${ordinal(history.seasonNumber)} season ` +
+        `(it started in ${history.firstSeason}).`,
+      rule:
+        " Do not call this the league's first season and do not describe the league as new. " +
+        'Describe nothing from its earlier seasons: none of it is on file.',
+    };
+  }
+  return { fact: ` This is also the league's first season (${season}).`, rule: '' };
+}
+
+/**
  * @param {object} input
  * @param {string} input.task one of TASKS
+ * @param {object|null} input.leagueHistory from
+ *        src/pipeline.mjs#readLeagueHistory: `{ firstSeason, seasonNumber,
+ *        source }` or `{ unavailable }`. Null (not looked up) leaves
+ *        `league.history` out of the context.
  * @param {boolean} input.transactionsUnavailable true when the week's
  *        transactions are unknown (captureWeek's flag), so an empty list is
  *        not reported as a quiet week.
@@ -1054,6 +1117,9 @@ function marketValuesView(market) {
  *        `headToHead` (src/analysis/rivalry.mjs#headToHead) and `through`
  *        (`{ season, week }`, the last week the record read); only read by
  *        RIVALRY_TASKS, and only where teams meet head to head.
+ * @param {Function|null} input.skippedWeekSnapshots `(week) => snapshot|null`,
+ *        a week's saved snapshot; read only by a ranking whose
+ *        `previousRankings` spans more than one week (`sinceLastEdition`).
  */
 export function buildContext({
   task,
@@ -1062,10 +1128,12 @@ export function buildContext({
   teams,
   players,
   week,
+  leagueHistory = null,
   weekAnalysis = null,
   upcomingAnalysis = null,
   priorWeekAnalysis = null,
   previousRankings = null,
+  skippedWeekSnapshots = null,
   gradedPredictions = null,
   transactions = null,
   transactionsUnavailable = false,
@@ -1129,6 +1197,9 @@ export function buildContext({
       positionalValue: describePositionalValue(league.format?.scoring),
       playoffTeams: league.playoffTeams,
       playoffWeekStart: league.playoffWeekStart,
+      // How long the league itself has run, apart from this publication.
+      // An unknown one also gets a `leagueHistory` entry in `unavailable`.
+      ...(leagueHistory ? { history: leagueHistoryView(leagueHistory) } : {}),
     },
     editorial: editorialView(config, league.format, task),
     week,
@@ -1207,9 +1278,16 @@ export function buildContext({
 
   if (previousRankings) {
     const renamed = (previousRankings.rankings || []).some((entry) => entry.formerly);
+    // Only said when it applies, like the rename note: a ranking from the
+    // week before is the ordinary case and needs no comment.
+    const gap = rankingGap(previousRankings, week);
+    const spansWeeks = gap && gap.weeksSpanned > 1;
     context.previousRankings = {
       label: previousRankings.label ?? null,
       publishedFor: previousRankings.week ?? null,
+      ...(spansWeeks
+        ? { weeksSpanned: gap.weeksSpanned, spanNote: spanNote(gap, config.rankings?.weekly?.max_normal_movement) }
+        : {}),
       // Only said when it applies: a rename is news, and a standing note about
       // renames that did not happen invites the model to look for one.
       ...(renamed
@@ -1226,6 +1304,12 @@ export function buildContext({
         ...(entry.formerly ? { formerly: entry.formerly } : {}),
       })),
     };
+    // The weeks between that ranking and this one, which the arrows span but
+    // nothing else in the context shows. Absent when no week was skipped.
+    if (spansWeeks && ranking && skippedWeekSnapshots) {
+      const nameOf = (rosterId) => teams.find((team) => team.rosterId === rosterId)?.name ?? null;
+      context.sinceLastEdition = summarizeSkippedWeeks(gap.skippedWeeks, skippedWeekSnapshots, nameOf);
+    }
   }
 
   // A preview is about games that have not happened. It still needs to know
@@ -1537,13 +1621,57 @@ function describeMissingContext({
     });
   }
 
+  // A league whose age is not known. Every edition: an opening line about a
+  // "new league" or "year three" is a league fact like any other.
+  const history = context.league.history ?? null;
+  if (history?.unavailable) {
+    missing.push({
+      field: 'leagueHistory',
+      why: history.unavailable,
+      instruction:
+        'Do not say how many seasons this league has run, when it started, or that this is its first season. ' +
+        "Describe nothing from the league's earlier seasons.",
+    });
+  }
+
   if (isRanking && !context.previousRankings) {
+    const age = leagueAgeNote(history, context.league.season);
+    // Coverage that starts partway through the season is a different opening
+    // from week 1: the season already has a record to judge.
+    const midSeason = Number.isInteger(week) && week > 1;
+    // The edition is built after `week` is played, so `week` weeks are in the books.
+    const weeksIn = `${week} ${week === 1 ? 'week' : 'weeks'}`;
     missing.push({
       field: 'previousRankings',
-      why: 'No earlier ranking has been published, so this is the first edition.',
+      why: midSeason
+        ? `No earlier ranking has been published, so this is the first Fantasy Pressbox edition for this league, ` +
+          `and it arrives ${weeksIn} into the season.${age.fact}`
+        : `No earlier ranking has been published, so this is the first Fantasy Pressbox edition for this league.${age.fact}`,
+      instruction: midSeason
+        ? 'Print no movement arrows and no previous ranks. Do not write ↑, ↓ or —. ' +
+          `Say in the opening that this is the first Fantasy Pressbox edition, arriving ${weeksIn} into the season, ` +
+          'and introduce the publication. Do not write as though it were week 1 or as though this week alone decided the picture: ' +
+          'judge the season so far from the records, points scored and the weeks on file.' +
+          age.rule
+        : 'Print no movement arrows and no previous ranks. Do not write ↑, ↓ or —. ' +
+          'Say in the opening that this is the first Fantasy Pressbox edition and there is nothing to move from.' +
+          age.rule,
+    });
+  }
+
+  // The rating rests on the weeks on disk. Fewer than the window it was
+  // configured for (a league that began coverage mid-season) is a thinner sample.
+  const strengthWindow = context.strength?.window;
+  if (strengthWindow && strengthWindow.weeks.length < strengthWindow.lineupWeeks) {
+    const held = strengthWindow.weeks.length;
+    missing.push({
+      field: 'strengthWindow',
+      why:
+        `The strength rating is meant to rest on the last ${strengthWindow.lineupWeeks} weeks, but only ${held} ` +
+        `${held === 1 ? 'week is' : 'weeks are'} on file (${describeWeeks(strengthWindow.weeks)}).`,
       instruction:
-        'Print no movement arrows and no previous ranks. Do not write ↑, ↓ or —. ' +
-        'Say in the opening that this is the first edition and there is nothing to move from.',
+        `Treat the lineup, depth and age components as a ${held}-week sample: weigh them accordingly, ` +
+        'do not call them settled, and lean on records and points scored.',
     });
   }
 

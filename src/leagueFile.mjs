@@ -8,7 +8,7 @@
  *     writtenBy: { package, version, surface },
  *     writtenAt,
  *     league: { provider, leagueId },
- *     settings: { displayName, format, season, week, espnRoute, tone,
+ *     settings: { displayName, format, season, week, firstSeason, espnRoute, tone,
  *                 roastIntensity, postFormat, maxChars, rankEmoji,
  *                 editorial, rankings,
  *                 declared: { eliminations, rookieDraft, prospects, rivalries } },
@@ -51,10 +51,12 @@ import { RIVALRIES_FILE, parseRivalryTable, rivalryTable } from './rivalries.mjs
 import { PROVIDER_NAMES, providerDisplayName } from './providers.mjs';
 import {
   ESPN_ROUTES,
+  LEAGUE_FIRST_SEASON_KEY,
   LEAGUE_ID_KEYS,
   firstSet,
   isSingleEmoji,
   leagueSettingsFromEnv,
+  parseLeagueFirstSeason,
   resolveRankingChoice,
   resolveSettings,
   resolveStrengthChoice,
@@ -83,6 +85,7 @@ export const LEAGUE_FILE_ENV_KEYS = Object.freeze([
   'LEAGUE_SEASON',
   'FANTASY_WEEK',
   'ESPN_ROUTE',
+  LEAGUE_FIRST_SEASON_KEY,
 ]);
 
 const WEEK_NAME = /^week-(\d+)$/;
@@ -123,6 +126,12 @@ const SETTINGS_KEYS = [
   'rankings',
   'declared',
 ];
+/**
+ * Settings added after schemaVersion 1 shipped. A file may leave them out (they
+ * read as null), so they are not in SETTINGS_KEYS: requiring them would make
+ * every earlier file invalid.
+ */
+const OPTIONAL_SETTINGS_KEYS = ['firstSeason'];
 const DECLARED_KEYS = ['eliminations', 'rookieDraft', 'prospects', 'rivalries'];
 const POST_FORMATS = optionNamed('format').values;
 
@@ -250,7 +259,7 @@ export function settingsLayers(settings) {
 function checkSettings(settings, league) {
   const field = 'settings';
   mapAt(field, settings, 'a table of settings');
-  onlyKeys(field, settings, SETTINGS_KEYS);
+  onlyKeys(field, settings, [...SETTINGS_KEYS, ...OPTIONAL_SETTINGS_KEYS]);
   requireKeys(field, settings, SETTINGS_KEYS);
   for (const key of ['displayName', 'tone', 'roastIntensity']) stringOrNull(`${field}.${key}`, settings[key]);
   if (settings.format !== null) {
@@ -265,6 +274,11 @@ function checkSettings(settings, league) {
   }
   if (settings.season !== null) seasonName(`${field}.season`, settings.season);
   if (settings.week !== null) integerIn(`${field}.week`, settings.week, 0, MAX_WEEK);
+  if (settings.firstSeason !== undefined && settings.firstSeason !== null) {
+    if (!Number.isInteger(settings.firstSeason) || settings.firstSeason < MIN_SEASON || settings.firstSeason > MAX_SEASON) {
+      throw new LeagueFileError(`${field}.firstSeason`, `is not a season (a year from ${MIN_SEASON} to ${MAX_SEASON}, or null)`);
+    }
+  }
   if (settings.espnRoute !== null) {
     if (league.provider !== 'espn') throw new LeagueFileError(`${field}.espnRoute`, 'is only for an ESPN league');
     if (!ESPN_ROUTES.includes(settings.espnRoute)) {
@@ -477,11 +491,12 @@ export function validateLeagueFile(value) {
   checkSettings(file.settings, file.league);
   checkSeasons(file.seasons);
 
+  const settings = { ...file.settings, firstSeason: file.settings.firstSeason ?? null };
   const seasons = {};
   for (const [season, kinds] of Object.entries(file.seasons)) {
     seasons[season] = Object.fromEntries(HISTORY.map(({ key }) => [key, kinds[key] ?? {}]));
   }
-  return { ...file, seasons };
+  return { ...file, settings, seasons };
 }
 
 /**
@@ -586,6 +601,7 @@ function blankSettings() {
     format: null,
     season: null,
     week: null,
+    firstSeason: null,
     espnRoute: null,
     tone: null,
     roastIntensity: null,
@@ -722,6 +738,15 @@ function envInteger(key, value) {
   return Number.parseInt(value, 10);
 }
 
+/** LEAGUE_FIRST_SEASON from .env as a year, or null; a value that is not a year refuses the folder. */
+function firstSeasonFromEnv(env) {
+  try {
+    return parseLeagueFirstSeason(firstSet(env, [LEAGUE_FIRST_SEASON_KEY]));
+  } catch (error) {
+    throw new LeagueFileError(null, error.message, { whole: true });
+  }
+}
+
 /** The named settings and the rest of editorial.yml, from the .env values and the parsed editorial.yml. */
 function settingsFromFolder(env, league, layers) {
   const editorial = isMap(layers.editorial) ? { ...layers.editorial } : {};
@@ -762,6 +787,7 @@ function settingsFromFolder(env, league, layers) {
     format: format === null ? null : parseDeclaredFormatType(format, { provider: providerDisplayName(league.provider) }),
     season: league.season,
     week: week === null ? null : envInteger('FANTASY_WEEK', week),
+    firstSeason: firstSeasonFromEnv(env),
     espnRoute: league.provider === 'espn' && firstSet(env, ['ESPN_ROUTE']) !== null ? league.route : null,
     tone,
     roastIntensity: named.roastIntensity,
@@ -944,6 +970,7 @@ export function workspaceFromLeagueFile(value) {
   ];
   if (settings.season !== null) env.push(envLine('LEAGUE_SEASON', settings.season));
   if (settings.week !== null) env.push(envLine('FANTASY_WEEK', settings.week));
+  if (settings.firstSeason !== null) env.push(envLine(LEAGUE_FIRST_SEASON_KEY, settings.firstSeason));
   if (settings.format !== null) env.push(envLine('LEAGUE_FORMAT', settings.format));
   if (settings.displayName !== null) env.push(envLine('LEAGUE_DISPLAY_NAME', settings.displayName));
   if (settings.espnRoute !== null) env.push(envLine('ESPN_ROUTE', settings.espnRoute));

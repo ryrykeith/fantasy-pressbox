@@ -16,12 +16,14 @@
  * (tests/options.test.mjs walks the imports to check). The store, the shipped
  * assets and the league's prospect board are passed in.
  */
-import { providerOf, getProvider } from './providers.mjs';
+import { providerDisplayName, providerOf, getProvider } from './providers.mjs';
 import { hasFutureDraftCapital, refuseEditionWithoutCapability } from './format.mjs';
 import {
+  captureEarlierWeeks,
   captureWeek,
   openLeague,
   readByeExposure,
+  readLeagueHistory,
   readMarketValues,
   readPickCapital,
   readRosterWindow,
@@ -48,8 +50,10 @@ import {
 import { findJsonBlock } from './validate.mjs';
 import { gradePredictions, withMovement, movementLabel } from './rankingGrades.mjs';
 import { createTeamIdentity, attachRosterIds, presentPreviousRankings, describeUnresolved } from './teamIdentity.mjs';
+import { describeRankingEdition, describeWeeks, rankingGap } from './rankingGap.mjs';
 import { resolveRivalries } from './rivalries.mjs';
 import { headToHead, readSavedSeasons } from './analysis/rivalry.mjs';
+import { missingWeeksIn } from './analysis/weekCoverage.mjs';
 import { TANK_WATCH_TASK, refuseTankWatch, resolveTankWatchStartWeek } from './tankWatch.mjs';
 import { OPTIONS, editionNamed, optionNamed, quotedValues } from './options.mjs';
 import { ESPN_ROUTE_KEY, resolveAgeCurves, withRankEmojiMode } from './settings.mjs';
@@ -360,6 +364,46 @@ export function teamIdentityFor({ teams, store, league }) {
 }
 
 /**
+ * Saves the weeks before `week` that have no settled snapshot, through
+ * catch-up's loop (captureEarlierWeeks), and says which. Everything an edition
+ * reads from saved weeks — the strength window, rivalry records, player
+ * histories, the guillotine ledger, the FAAB market — would otherwise leave a
+ * skipped week out without a word.
+ *
+ * On an import route nothing is fetched: the weeks whose pages are not saved
+ * are named with their addresses, and the edition is built without them.
+ */
+async function captureMissingEarlierWeeks({ ctx, week, config, log, commandFor }) {
+  const { say, warn } = log;
+  const { league } = ctx;
+  const { weeks, unsaved } = await captureEarlierWeeks({ ...ctx, week });
+  if (unsaved.length) {
+    const provider = getProvider(league.provider);
+    const links = provider.importLinks({ leagueId: config.league.id, season: league.season, weeks: unsaved });
+    warn(
+      [
+        `No pages are saved for ${describeWeeks(unsaved)}, ` +
+          `so this edition is built without ${unsaved.length === 1 ? 'it' : 'them'}. ` +
+          `Nothing was requested from ${provider.displayName}. Save these pages and import them one week at a time:`,
+        ...links.weeks.flatMap(({ week: gap, matchups, transactions }) => [
+          `  week ${gap} matchups      ${matchups}`,
+          `  week ${gap} transactions  ${transactions}`,
+        ]),
+        `  ${commandFor('import-espn')} --week <n> <the saved files>`,
+      ].join('\n'),
+    );
+    return;
+  }
+  const written = weeks.filter(({ status }) => status === 'saved' || status === 'not-played').map((entry) => entry.week);
+  if (!written.length) return;
+  say(
+    `Saved ${describeWeeks(written)} first: ${written.length === 1 ? 'it was' : 'they were'} not on disk. ` +
+      `Team names and records in ${written.length === 1 ? 'that snapshot' : 'those snapshots'} are today's, ` +
+      `because ${providerDisplayName(league.provider ?? 'sleeper')} keeps no history of them.`,
+  );
+}
+
+/**
  * The name an edition's files share: `2026-week03-rankings`, or
  * `2026-preseason-rankings`. An edition about one team (`rosterId`) names it,
  * `2026-week03-five-year-plan-team7`, so two teams' plans for the same week
@@ -375,7 +419,9 @@ export function editionFileStem({ task, season, week, rosterId = null }) {
 
 /**
  * Builds an edition's prompt: every refusal, then open the league, resolve
- * the week, capture it, and build the context and the prompt.
+ * the week, save any earlier week not yet settled on disk (an edition about a
+ * finished week only; captureMissingEarlierWeeks), capture the week, and
+ * build the context and the prompt.
  *
  * - `task`         the edition (EDITIONS in src/options.mjs).
  * - `week`         the week asked for, or undefined to work it out.
@@ -555,6 +601,9 @@ export async function prepareEdition({
     say('Preseason edition: regular-season results are deliberately excluded.');
     strength = await rateStrength({ preseason: true });
   } else {
+    // Earlier weeks first, oldest first, before this one: captureWeek builds
+    // the guillotine ledger and the FAAB market from the weeks already stored.
+    if (!edition.forwardLooking) await captureMissingEarlierWeeks({ ctx, week, config, log, commandFor });
     const captured = await captureWeek({ ...ctx, week });
     eliminationLedger = captured.elimination ?? null;
     faabMarket = captured.faab ?? null;
@@ -743,10 +792,18 @@ export async function prepareEdition({
   if (rivalries.length && RIVALRY_TASKS.includes(task)) {
     const through = { season: String(league.season), week: edition.forwardLooking ? week - 1 : week };
     const seasons = readSavedSeasons(store, { through });
+    // The record counts only the weeks on disk, so name this season's weeks
+    // up to `through` that are not: a pair whose only meeting fell in one
+    // would otherwise read as having never met.
+    const missingWeeks = missingWeeksIn({
+      present: (seasons.find(({ season }) => season === through.season)?.snapshots ?? []).map((snapshot) => snapshot.week),
+      through: through.week,
+    });
     rivalryRecords = rivalries.map((rivalry) => ({
       ...rivalry,
       headToHead: headToHead(seasons, rivalry.rosterIds, league),
       through,
+      ...(missingWeeks.length ? { missingWeeks } : {}),
     }));
   }
 
@@ -759,11 +816,23 @@ export async function prepareEdition({
       : presentPreviousRankings(store.loadPreviousRankings(league.season, week), teamIdentityFor(ctx));
   if (previousRankings) {
     say(`Measuring movement against "${previousRankings.label ?? 'previous'}" rankings.`);
+    const gap = rankingGap(previousRankings, week);
+    if (gap?.skippedWeeks.length) {
+      warn(
+        `No ranking was recorded for ${describeWeeks(gap.skippedWeeks)}, so the arrows measure ` +
+          `${gap.weeksSpanned} weeks of movement from ${describeRankingEdition(gap.from)}.`,
+      );
+    }
     for (const { from, to } of previousRankings.renamed) say(`  Renamed since then: ${from} → ${to}`);
     if (previousRankings.unresolved.length) {
       say(`  Could not match to any current team: ${previousRankings.unresolved.join(', ')}`);
     }
   }
+
+  // Every edition: a publication's first edition is not the league's first
+  // season, and a model told neither will assume the two are the same.
+  const leagueHistory = await readLeagueHistory(ctx);
+  if (leagueHistory.unavailable) warn(`How long the league has run is not known: ${leagueHistory.unavailable}`);
 
   const context = buildContext({
     task,
@@ -772,10 +841,12 @@ export async function prepareEdition({
     teams,
     players,
     week,
+    leagueHistory,
     weekAnalysis,
     upcomingAnalysis,
     priorWeekAnalysis,
     previousRankings,
+    skippedWeekSnapshots: (skipped) => store.loadSnapshot(league.season, skipped),
     gradedPredictions,
     transactions,
     transactionsUnavailable,

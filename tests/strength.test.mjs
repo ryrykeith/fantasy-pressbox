@@ -519,6 +519,18 @@ test('a redraft league’s rankings carry a rating with no age window and no dra
   assert.deepEqual(context.strength.unavailable, []);
 });
 
+test('window.missingWeeks lists the weeks inside the window with no settled data', () => {
+  const settled = [WEEKS[0], { ...WEEKS[1], week: 4 }];
+  const strength = dynasty({ weeks: { settled, unavailable: null, throughWeek: 5 } });
+  assert.deepEqual(strength.window.weeks, [1, 4]);
+  assert.deepEqual(strength.window.missingWeeks, [2, 3, 5]);
+});
+
+test('with every week saved through the through week, window carries no missingWeeks', () => {
+  const strength = dynasty({ weeks: { settled: WEEKS, unavailable: null, throughWeek: 2 } });
+  assert.equal('missingWeeks' in strength.window, false);
+});
+
 test('editions that rank nobody carry no rating', async () => {
   for (const task of ['recap', 'preview']) {
     const context = await build(task, { week: task === 'preview' ? 2 : 1 });

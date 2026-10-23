@@ -560,7 +560,14 @@ publication its memory:
 
 Each edition prints which ranking it is measuring movement against
 (`Measuring movement against "week-3" rankings.`). If that isn't last week,
-you missed a `record`.
+you missed a `record`, and the edition warns you, naming the weeks with no
+ranking. The prompt then tells the AI which edition the arrows measure from,
+not to call it last week, and to allow `max_normal_movement` spots for each
+week the arrows span. It also gets each skipped week's scores, results and
+opponents, with that week's top and bottom scorer, so it can explain a move
+that one big week caused; a skipped week with nothing saved is marked
+unavailable, never guessed. `doctor` lists every week since the newest recorded
+ranking that has none.
 
 Team renames are handled for you. Managers rename teams whenever they like;
 `record` pins every name to its Sleeper roster, so a renamed team keeps its
@@ -606,6 +613,33 @@ fantasy-pressbox transactions
 
 A week with no trades says so and builds no prompt.
 
+### Starting mid-season or missed a week
+
+Starting coverage in week 7, or skipped a week? Save every completed week that
+is not on disk yet with one command:
+
+```bash
+fantasy-pressbox catch-up
+```
+
+It saves weeks 1 through the last completed week in order, skips any week
+already settled without fetching it, and prints one line per week. Run it again
+and it fetches nothing. `--through 5` stops at week 5. The weeks it saves carry
+today's team names and records, because Sleeper keeps no history of them; the
+snapshots are flagged `backfilled`. On an ESPN league that imports saved pages,
+it fetches nothing: it lists the weeks still missing and the pages to save.
+
+If you forget, the editions that look back over the season (`recap`,
+`rankings`, the trade and waiver reports, and the rest that are about a
+finished week) do it for you: before building, they save every earlier week
+with no settled snapshot, in order, and say which (`Saved week 5 first: it was
+not on disk.`). The strength rating, rivalry records and player histories then
+include the week you skipped. A week already settled is never fetched again.
+On an ESPN league that imports saved pages, the edition fetches nothing: it
+names the pages still to save and is built without those weeks. A backfilled
+week's team names are today's, so they are never used to work out which team
+a name meant in that week's published rankings.
+
 ### Posting somewhere else
 
 For an iMessage group chat, add `--format imessage` to get one longer
@@ -626,8 +660,9 @@ terminal). Only `init`, `import-league` and `check` work without one.
 | Command | What it does |
 |---|---|
 | `fantasy-pressbox init` | Set up a league folder. Run this first. With `--workspace <folder>` it creates that folder. |
-| `fantasy-pressbox doctor` | Check your settings, league config and connection, and see where the league stands: the week, what was recorded for last week, whether its predictions can be graded, and what this week still needs. Run this when something is wrong. |
+| `fantasy-pressbox doctor` | Check your settings, league config and connection, and see where the league stands: the week, what was recorded for last week, every week since the newest recorded ranking that has none, whether its predictions can be graded, and what this week still needs. Run this when something is wrong. |
 | `fantasy-pressbox fetch` | Just download and save a week of league data. |
+| `fantasy-pressbox catch-up` | Save every completed week that is not on disk yet, in order: for a mid-season start or a skipped week. `--through <n>` stops at week `n`. See [Starting mid-season or missed a week](#starting-mid-season-or-missed-a-week). |
 | `fantasy-pressbox import-espn --week <n> <files>` | ESPN leagues (experimental): import pages you saved from ESPN yourself. Fantasy Pressbox never contacts ESPN on this route. Run it with no files to see the addresses to open in your signed-in browser; save each page into your league folder, never into the Fantasy Pressbox folder. Save the league page each week along with the week's two pages: a league page older than the newest week page is refused, because its standings and rosters would be out of date. This is your own manual, personal use of your league's pages. |
 | `fantasy-pressbox preview` | Build this week's matchup previews. |
 | `fantasy-pressbox survival-preview` | Build this week's survival preview. Guillotine leagues only — it replaces `preview`. |
@@ -658,6 +693,7 @@ Useful options:
 | `--task <name>` | Which edition a file is, for `record`. |
 | `--early` | Run the tank watch before its start week. |
 | `--team 3` | Which team a `five-year-plan` is about: its name (`--team "Punt Intended"`, or a name it used before), its manager's username, or its roster id. A name that has meant more than one team is refused; use the roster id. Only that edition uses it. |
+| `--through 5` | The last week `catch-up` saves (default: the last completed week). |
 | `--refresh-market` | Fetch trade values again instead of reusing the ones saved for that week. |
 | `--refresh-players` | Re-download the NFL player list instead of using the cached copy. |
 | `--workspace <folder>` | Use a league folder other than the one you are in. `PRESSBOX_WORKSPACE` does the same. |
@@ -720,6 +756,15 @@ package.
 fills it in. Left empty, the tool works it out from Sleeper, which can tell
 dynasty from redraft but never guillotine — see
 [What your league format changes](#what-your-league-format-changes).
+
+**`LEAGUE_FIRST_SEASON`** is the year of the league's first season. Every
+edition tells the writer which season of the league this is, so a first
+edition of Fantasy Pressbox is never written up as the league's first year.
+Leave it empty and the tool asks Sleeper once, following each season back to
+the one it was renewed from, and keeps the answer in `data/league-history/`.
+Set it for a league that was recreated rather than renewed (Sleeper sees only
+the new league) or an ESPN league (ESPN reports no earlier seasons). Setup
+shows what Sleeper says and asks.
 
 ### Overriding the house style for one league
 
@@ -873,7 +918,9 @@ recaps alike.
   together with your own `weights.<format>` for the same format, because
   nothing should silently win: pick one.
 - `weekly.max_normal_movement` — how far a team normally moves in one week.
-  One Sunday is a small sample, and the rankings should act like it.
+  One Sunday is a small sample, and the rankings should act like it. When the
+  last recorded ranking is older than last week, the cap is multiplied by the
+  weeks the arrows span.
 - `strength.dynasty`, `strength.redraft` and `strength_inputs` — the weights
   and the window of the [strength rating](#the-strength-rating). A preset
   carries its own weights for these too. Same rule as `weights`: each set adds
@@ -1154,6 +1201,7 @@ the prompt for any other format. Keep those lines intact in your copy.
 │   ├── tank-watch/    the draft order each tank watch reported
 │   ├── market/        the trade values each week was graded against
 │   ├── editions/      the whole reply behind each edition you recorded
+│   ├── league-history/ how many seasons the league has run (safe to delete; asked again)
 │   └── cache/         the NFL player list (safe to delete; re-downloaded)
 └── output/          the files you paste into a chat, and the finished posts
 
@@ -1264,7 +1312,8 @@ tool warns you when a week has no scores rather than inventing them.
 **The movement arrows look wrong**
 Check the line `Measuring movement against "..." rankings.` near the top of the
 command's output. If it names an older week than last week's, a `record` was
-missed; see [Don't skip `record`](#dont-skip-record).
+missed, and the warning after it names the weeks with no ranking; see
+[Don't skip `record`](#dont-skip-record).
 
 **`record` refuses a team name**
 A name in your file matches no team in the league — usually a typo, or a name

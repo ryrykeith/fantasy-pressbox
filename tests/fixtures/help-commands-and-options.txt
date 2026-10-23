@@ -23,12 +23,15 @@ Commands
   grade                         Score last week's predictions against what happened
   check <file>                  Check a file of finished posts against the league's post length limit
   fetch                         Download and save a week of league data
+  catch-up                      Save every completed week not on disk yet (mid-season start, missed week)
   import-espn [--week <n>] <files>
                                 ESPN leagues: import pages you saved from ESPN in your browser
                                 (run it with no files to see the addresses to save)
 
 Options
   --week <n>                    Which week to work on (default: worked out from Sleeper)
+  --through <n>                 The last week catch-up saves
+                                (default: the last completed week)
   --format <sleeper|imessage>   Who the output is for (default: sleeper)
   --emoji <default|none>        Rank emoji for this run: the shipped table or none
                                 (default: the league's setting)

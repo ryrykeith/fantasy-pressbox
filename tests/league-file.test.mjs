@@ -393,6 +393,54 @@ test('a league file with a bad rivalry is refused, naming the field and never ec
   assert.throws(() => validateLeagueFile(file('nope')), /settings\.declared\.rivalries must be a table/);
 });
 
+/* ------------------------------------------------ LEAGUE_FIRST_SEASON in the file */
+
+test('settings.firstSeason: absent in an earlier file reads as null, and a value that is not a year is refused', () => {
+  const file = newLeagueFile({ surface: 'cli', leagueId: FAKE_LEAGUE_ID });
+  const { firstSeason, ...earlier } = file.settings;
+  assert.equal(firstSeason, null);
+  const read = (settings) => () => parseLeagueFile(JSON.stringify({ ...file, settings }), { name: 'league.json' });
+
+  assert.equal(read(earlier)().settings.firstSeason, null, 'a file written before the field existed still validates');
+  assert.equal(read({ ...earlier, firstSeason: 2021 })().settings.firstSeason, 2021);
+  assert.equal(read({ ...earlier, firstSeason: null })().settings.firstSeason, null);
+  for (const bad of ['2021', 1999, 2101, 2021.5, true]) {
+    refused(read({ ...earlier, firstSeason: bad }), 'settings.firstSeason', /not a season/);
+  }
+});
+
+test('LEAGUE_FIRST_SEASON is read from a folder, refused when it is not a year, and written back on import', () => {
+  const folder = (value) => [{ path: '.env', text: `SLEEPER_LEAGUE_ID=${FAKE_LEAGUE_ID}\nLEAGUE_FIRST_SEASON=${value}\n` }];
+  const { leagueFile, ignoredEnvKeys } = leagueFileFromWorkspace(folder('2021'), { surface: 'cli' });
+  assert.equal(leagueFile.settings.firstSeason, 2021);
+  assert.ok(!ignoredEnvKeys.includes('LEAGUE_FIRST_SEASON'));
+  const env = workspaceFromLeagueFile(leagueFile).find((entry) => entry.path === '.env').text;
+  assert.match(env, /^LEAGUE_FIRST_SEASON=2021$/m);
+
+  assert.equal(leagueFileFromWorkspace(folder(''), { surface: 'cli' }).leagueFile.settings.firstSeason, null);
+  const absent = leagueFileFromWorkspace([folder('')[0]], { surface: 'cli' }).leagueFile;
+  assert.doesNotMatch(workspaceFromLeagueFile(absent).find((entry) => entry.path === '.env').text, /LEAGUE_FIRST_SEASON/);
+
+  assert.throws(
+    () => leagueFileFromWorkspace(folder('soon'), { surface: 'cli' }),
+    (error) => error instanceof LeagueFileError && /LEAGUE_FIRST_SEASON in \.env is "soon"/.test(error.message),
+  );
+});
+
+test('a folder with LEAGUE_FIRST_SEASON exported and imported again keeps it, and export does not list it as left out', () => {
+  const root = tempDir('pressbox-league-file-first-season-');
+  writeFileSync(join(root, '.env'), `SLEEPER_LEAGUE_ID=${FAKE_LEAGUE_ID}\nLEAGUE_FIRST_SEASON=2021\nDEBUG=false\n`);
+  const exportPath = join(root, 'league.json');
+  const exported = ok(runCli(root, ['export-league', exportPath]));
+  assert.match(exported.said, /Left out of the file from \.env: DEBUG\./);
+  assert.doesNotMatch(exported.said, /Left out[^\n]*LEAGUE_FIRST_SEASON/);
+
+  const copy = join(tempDir('pressbox-league-file-first-season-import-'), 'rebuilt');
+  ok(runCli(copy, ['import-league', exportPath]));
+  assert.match(readFileSync(join(copy, '.env'), 'utf8'), /^LEAGUE_FIRST_SEASON=2021$/m);
+  assert.equal(loadConfig({ workspaceRoot: copy }).leagueFirstSeason, 2021);
+});
+
 /* -------------------------------------------- the round trip, through the CLI */
 
 /** A reply pasted back from a chat: posts, then the JSON block. */
@@ -471,7 +519,9 @@ test('a Sleeper league folder exported and imported again has identical data/ fi
   const copy = join(tempDir('pressbox-league-file-import-'), 'rebuilt');
   const imported = ok(runCli(copy, ['import-league', exportPath]));
   assert.match(imported.said, /Imported the Sleeper league 000000000000000000/);
-  assert.deepEqual(filesIn(join(copy, 'data')), filesIn(join(root, 'history'), { skip: ['cache'] }));
+  // league-history is a cache like cache/: read from Sleeper again, never carried in the file.
+  assert.deepEqual(filesIn(join(copy, 'data')), filesIn(join(root, 'history'), { skip: ['cache', 'league-history'] }));
+  assert.match(exported.said, /Not read: .*data\/league-history\//);
   assert.deepEqual(settingsOf(copy), settingsOf(root));
   assert.ok(!readFileSync(join(copy, '.env'), 'utf8').includes('API_KEY'));
 

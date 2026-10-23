@@ -18,7 +18,7 @@ import { buildRosterWindow } from './analysis/rosterWindow.mjs';
 import { buildPickCapital, pickCapitalSeasons } from './analysis/pickCapital.mjs';
 import { byeWeekTableSource, upcomingByeExposure } from './analysis/byeExposure.mjs';
 import { buildStrength } from './analysis/strength.mjs';
-import { resolveStrengthChoice } from './settings.mjs';
+import { LEAGUE_FIRST_SEASON_KEY, resolveStrengthChoice } from './settings.mjs';
 import {
   MARKET_ID_SPACES,
   MarketValuesError,
@@ -83,6 +83,68 @@ export async function openLeague(config, { store, assets, refreshPlayers = false
     config,
     draftCapital,
   };
+}
+
+/** How a league's age is credited when the operator declared it. */
+export const DECLARED_HISTORY_SOURCE = `${LEAGUE_FIRST_SEASON_KEY} in the league's .env`;
+
+/**
+ * How long the league itself has existed, apart from this publication:
+ * `{ firstSeason, seasonNumber, source }`, or `{ unavailable }` with the
+ * reason it is not known. `seasonNumber` is 1 in the league's first season.
+ *
+ * LEAGUE_FIRST_SEASON (`config.leagueFirstSeason`) wins, for a league that was
+ * recreated rather than renewed or a provider that reports no earlier seasons.
+ * Otherwise the provider's `leagueHistory` walks the league's earlier seasons
+ * once, and the answer is cached in the store (league-history/<season>/) for
+ * every later edition of the season; a cached walk for another league ID is
+ * walked again. A walk that fails is not cached, so the next edition tries
+ * again. A provider without `leagueHistory` (ESPN) is unavailable.
+ *
+ * `provider` is openLeague's; a caller holding only a `client` gets the
+ * league's provider wrapped around it.
+ */
+export async function readLeagueHistory({ provider = null, client = null, store, league, config = null }) {
+  const season = Number.parseInt(league.season, 10);
+  if (!Number.isInteger(season)) {
+    return { unavailable: "The league's season is not known, so neither is how many seasons it has run." };
+  }
+  const view =(firstSeason, source) => ({ firstSeason, seasonNumber: season - firstSeason + 1, source });
+
+  const declared = config?.leagueFirstSeason ?? null;
+  if (declared !== null) {
+    if (declared > season) {
+      throw new Error(
+        `${LEAGUE_FIRST_SEASON_KEY} in .env is ${declared}, after this league's ${league.season} season. ` +
+          "Set it to the year of the league's first season, or remove the line.",
+      );
+    }
+    return view(declared, DECLARED_HISTORY_SOURCE);
+  }
+
+  const saved = store.loadLeagueHistory(league.season);
+  if (saved && saved.leagueId === (league.id ?? null)) return view(saved.firstSeason, saved.source);
+
+  const instance = providerInstance({ provider, client, league, config });
+  if (typeof instance.leagueHistory !== 'function') {
+    return {
+      unavailable:
+        `${instance.displayName} does not report a league's earlier seasons, so how long this league has run ` +
+        `is not known. ${LEAGUE_FIRST_SEASON_KEY} in the league's .env can say.`,
+    };
+  }
+  const walked = await instance.leagueHistory({ league });
+  if (walked.unavailable) return { unavailable: walked.unavailable };
+
+  const history = view(walked.firstSeason, walked.source);
+  store.saveLeagueHistory(league.season, {
+    leagueId: league.id ?? null,
+    season,
+    ...history,
+    seasons: walked.seasons,
+    walkedAt: new Date().toISOString(),
+  });
+  return history;
 }
 
 /**
@@ -502,7 +564,7 @@ export function readStrength({
   if (!choice) return null;
   const weeks = preseason
     ? { settled: [], unavailable: "a preseason ranking reads none of this season's results" }
-    : { settled: settledWeeks({ store, assets, league, teams, players, throughWeek }), unavailable: null };
+    : { settled: settledWeeks({ store, assets, league, teams, players, throughWeek }), unavailable: null, throughWeek };
   const capital = pickCapital === undefined ? readPickCapital({ league, teams, tradedPicks, market, config }) : pickCapital;
   const provider = providerOf(league);
   const draftCapitalUnavailable = capital
@@ -587,7 +649,8 @@ async function readSettledWeek({ provider, store, assets, league, teams, players
  * Fetch one week, save the raw bundle and the analyzed snapshot.
  *
  * `provider` is openLeague's; a caller holding only a `client` gets the
- * league's provider wrapped around it.
+ * league's provider wrapped around it. `backfilled` flags the snapshot as
+ * written to fill a gap (see catchUpWeeks).
  */
 export async function captureWeek({
   provider = null,
@@ -600,6 +663,7 @@ export async function captureWeek({
   week,
   config = null,
   draftCapital = null,
+  backfilled = false,
 }) {
   const source = providerInstance({ provider, client, league, config });
   const tradedPicks = draftCapital?.tradedPicks ?? [];
@@ -708,6 +772,10 @@ export async function captureWeek({
     season: league.season,
     played,
     settled,
+    // Captured after the week, to fill a gap (catchUpWeeks): its team names,
+    // records and standings are the league's as of that capture, not as of the
+    // week. Absent otherwise, so an ordinary snapshot is unchanged.
+    ...(backfilled ? { backfilled: true } : {}),
     // What the status report (src/inspect.mjs) names the league by offline:
     // a snapshot is the only thing a league file carries that saw the league.
     league: { name: league.name ?? null, detectedFormat: league.format?.detectedType ?? null },
@@ -747,4 +815,97 @@ export async function captureWeek({
     snapshotPath,
     kept: false,
   };
+}
+
+/**
+ * The last week that is over: Sleeper's own last scored week when the provider
+ * tracks one, else the provider's current week minus one. 0 before the season
+ * starts.
+ */
+export async function lastCompletedWeek({ provider = null, client = null, league, config = null }) {
+  const source = providerInstance({ provider, client, league, config });
+  if (source.capabilities.lastScoredWeek && Number.isInteger(league.lastScoredWeek) && league.lastScoredWeek >= 0) {
+    return league.lastScoredWeek;
+  }
+  const current = await source.currentWeek({ league });
+  if (!current.week) throw new Error('Could not determine the current week, so the last completed week is unknown.');
+  return Math.max(0, current.week - 1);
+}
+
+/**
+ * Saves every completed week that has no settled snapshot on disk, weeks 1
+ * through the last completed week (or `through`, when that is earlier), in
+ * ascending order: captureWeek builds the guillotine ledger and the FAAB
+ * market from the weeks already stored, so a later week must never be
+ * captured before an earlier one. A settled week is skipped without a fetch
+ * (isSettledSnapshot), which makes a second run a no-op. A week asked for
+ * beyond the last completed one is reported, not fetched.
+ *
+ * Every snapshot written is flagged `backfilled`: it carries today's team
+ * names and records, because the provider keeps no history of them.
+ *
+ * `onWeek({ week, status, result })` is called as each week finishes, `status`
+ * being 'saved', 'settled', 'not-played' (no scores yet) or 'not-completed'.
+ *
+ * → `{ lastCompleted, through, weeks: [{ week, status, result }] }`
+ */
+export async function catchUpWeeks({ through = null, onWeek = () => {}, ...ctx }) {
+  const { store, league } = ctx;
+  const lastCompleted = await lastCompletedWeek(ctx);
+  const target = Number.isInteger(through) ? through : lastCompleted;
+  const weeks = [];
+  const finish = (entry) => {
+    weeks.push(entry);
+    onWeek(entry);
+  };
+  for (let week = 1; week <= target; week += 1) {
+    if (week > lastCompleted) {
+      finish({ week, status: 'not-completed', result: null });
+      continue;
+    }
+    if (isSettledSnapshot(store.loadSnapshot(league.season, week), league)) {
+      finish({ week, status: 'settled', result: null });
+      continue;
+    }
+    const result = await captureWeek({ ...ctx, week, backfilled: true });
+    finish({ week, status: result.played || result.multiWeekMatchup ? 'saved' : 'not-played', result });
+  }
+  return { lastCompleted, through: target, weeks };
+}
+
+/** Weeks 1 through `throughWeek` with no settled snapshot on disk, oldest first. Reads only the disk. */
+export function weeksWithoutSettledSnapshot({ store, league, throughWeek }) {
+  const missing = [];
+  for (let week = 1; week <= throughWeek; week += 1) {
+    if (!isSettledSnapshot(store.loadSnapshot(league.season, week), league)) missing.push(week);
+  }
+  return missing;
+}
+
+/**
+ * Before an edition about `week` that looks back over the season: saves every
+ * earlier week that has no settled snapshot, so the strength window, rivalry
+ * records, player histories, the guillotine ledger and the FAAB market do not
+ * silently leave a skipped week out. It is catchUpWeeks' loop, stopped at
+ * `week - 1`: a settled week is never fetched again, and every snapshot it
+ * writes is flagged `backfilled`.
+ *
+ * A provider with an import route (ESPN under ESPN_ROUTE=import) is never
+ * asked for anything: the weeks whose pages are not saved come back as
+ * `unsaved`, for the edition to name, and nothing is captured.
+ *
+ * → `{ missing, weeks, unsaved }`: `missing` the weeks found without a settled
+ *   snapshot, `weeks` catchUpWeeks' entries (empty when nothing was missing or
+ *   nothing could be fetched), `unsaved` the import route's weeks still to save.
+ */
+export async function captureEarlierWeeks({ week, onWeek = () => {}, ...ctx }) {
+  const missing = weeksWithoutSettledSnapshot({ store: ctx.store, league: ctx.league, throughWeek: week - 1 });
+  if (missing.length === 0) return { missing, weeks: [], unsaved: [] };
+  const source = providerInstance(ctx);
+  if (typeof source.savedPages === 'function') {
+    const saved = new Set((source.savedPages()?.weeks ?? []).map((entry) => entry.week));
+    return { missing, weeks: [], unsaved: missing.filter((gap) => !saved.has(gap)) };
+  }
+  const { weeks } = await catchUpWeeks({ ...ctx, provider: source, through: week - 1, onWeek });
+  return { missing, weeks, unsaved: [] };
 }
