@@ -53,15 +53,16 @@ const entry = (context, field) => context.unavailable.find((item) => item.field 
 
 test('a week 6 ranking with nothing recorded is a mid-season debut', async () => {
   const note = entry(await firstRankings(6), 'previousRankings');
-  assert.match(note.why, /first Fantasy Pressbox edition for this league, and it arrives 5 weeks into the season/);
+  assert.match(note.why, /first Fantasy Pressbox edition for this league, and it arrives 6 weeks into the season/);
   assert.match(note.instruction, /Print no movement arrows/);
-  assert.match(note.instruction, /arriving 5 weeks into the season, and introduce the publication/);
+  assert.match(note.instruction, /arriving 6 weeks into the season, and introduce the publication/);
   assert.match(note.instruction, /judge the season so far from the records, points scored and the weeks on file/);
 });
 
-test('a week 2 ranking says one week, not "1 weeks"', async () => {
+test('a week 2 ranking counts the two weeks played', async () => {
   const note = entry(await firstRankings(2), 'previousRankings');
-  assert.match(note.why, /arrives 1 week into the season/);
+  assert.match(note.why, /arrives 2 weeks into the season/);
+  assert.match(note.instruction, /arriving 2 weeks into the season/);
 });
 
 test('a week 1 ranking keeps the existing first-edition note', async () => {

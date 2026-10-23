@@ -1639,7 +1639,8 @@ function describeMissingContext({
     // Coverage that starts partway through the season is a different opening
     // from week 1: the season already has a record to judge.
     const midSeason = Number.isInteger(week) && week > 1;
-    const weeksIn = `${week - 1} ${week === 2 ? 'week' : 'weeks'}`;
+    // The edition is built after `week` is played, so `week` weeks are in the books.
+    const weeksIn = `${week} ${week === 1 ? 'week' : 'weeks'}`;
     missing.push({
       field: 'previousRankings',
       why: midSeason
