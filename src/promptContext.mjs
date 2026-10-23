@@ -27,6 +27,7 @@ import { TANK_WATCH_TASK, tankWatchPrize, tankWatchUnavailable, tankWatchView } 
 import { draftProjectionView, pickProjection, tradePicksUnavailable, tradeProspectBoard } from './tradePicks.mjs';
 import { FUTURE_STOCK_TASK, futureStockUnavailable, futureStockView, refuseFutureStock } from './futureStock.mjs';
 import { ordinal } from './leagueAge.mjs';
+import { describeRankingEdition, describeWeeks, rankingGap } from './rankingGap.mjs';
 import {
   FIVE_YEAR_PLAN_TASK,
   fiveYearPlanUnavailable,
@@ -1028,6 +1029,26 @@ function leagueHistoryView(history) {
 }
 
 /**
+ * The note carried by a previous ranking that is more than one week old
+ * (src/rankingGap.mjs#rankingGap): which edition the arrows measure from, the
+ * weeks with no ranking in between, and the movement cap scaled by the span,
+ * because `max_normal_movement` is a one-week figure.
+ */
+function spanNote({ from, weeksSpanned, skippedWeeks }, maxNormalMovement) {
+  const edition = describeRankingEdition(from);
+  const cap = Number.isFinite(maxNormalMovement)
+    ? ` Scale editorial.movementGuidance.max_normal_movement by the ${weeksSpanned} weeks: ` +
+      `normally keep movement within ${maxNormalMovement * weeksSpanned} spots.`
+    : ` Scale editorial.movementGuidance.max_normal_movement by the ${weeksSpanned} weeks.`;
+  return (
+    `These arrows measure ${weeksSpanned} weeks of movement, from ${edition}. ` +
+    `No ranking was recorded for ${describeWeeks(skippedWeeks)}. ` +
+    `Name ${edition} as the edition the arrows measure from, and never call it last week's.` +
+    cap
+  );
+}
+
+/**
  * What the first-edition note says about the league itself, so "first
  * edition" is never read as "first season": `{ fact, rule }`, sentences to
  * add to the note's `why` and `instruction`, both empty when no history was
@@ -1250,9 +1271,16 @@ export function buildContext({
 
   if (previousRankings) {
     const renamed = (previousRankings.rankings || []).some((entry) => entry.formerly);
+    // Only said when it applies, like the rename note: a ranking from the
+    // week before is the ordinary case and needs no comment.
+    const gap = rankingGap(previousRankings, week);
+    const spansWeeks = gap && gap.weeksSpanned > 1;
     context.previousRankings = {
       label: previousRankings.label ?? null,
       publishedFor: previousRankings.week ?? null,
+      ...(spansWeeks
+        ? { weeksSpanned: gap.weeksSpanned, spanNote: spanNote(gap, config.rankings?.weekly?.max_normal_movement) }
+        : {}),
       // Only said when it applies: a rename is news, and a standing note about
       // renames that did not happen invites the model to look for one.
       ...(renamed

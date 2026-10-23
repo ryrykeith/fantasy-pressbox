@@ -49,6 +49,7 @@ import {
 import { findJsonBlock } from './validate.mjs';
 import { gradePredictions, withMovement, movementLabel } from './rankingGrades.mjs';
 import { createTeamIdentity, attachRosterIds, presentPreviousRankings, describeUnresolved } from './teamIdentity.mjs';
+import { describeRankingEdition, describeWeeks, rankingGap } from './rankingGap.mjs';
 import { resolveRivalries } from './rivalries.mjs';
 import { headToHead, readSavedSeasons } from './analysis/rivalry.mjs';
 import { TANK_WATCH_TASK, refuseTankWatch, resolveTankWatchStartWeek } from './tankWatch.mjs';
@@ -760,6 +761,13 @@ export async function prepareEdition({
       : presentPreviousRankings(store.loadPreviousRankings(league.season, week), teamIdentityFor(ctx));
   if (previousRankings) {
     say(`Measuring movement against "${previousRankings.label ?? 'previous'}" rankings.`);
+    const gap = rankingGap(previousRankings, week);
+    if (gap?.skippedWeeks.length) {
+      warn(
+        `No ranking was recorded for ${describeWeeks(gap.skippedWeeks)}, so the arrows measure ` +
+          `${gap.weeksSpanned} weeks of movement from ${describeRankingEdition(gap.from)}.`,
+      );
+    }
     for (const { from, to } of previousRankings.renamed) say(`  Renamed since then: ${from} → ${to}`);
     if (previousRankings.unresolved.length) {
       say(`  Could not match to any current team: ${previousRankings.unresolved.join(', ')}`);

@@ -76,8 +76,9 @@ edition for this league: print no arrows at all, and open by saying there is
 nothing to move from yet. It is the publication's first edition, not the
 league's first season: `league.history` says how long the league has run.
 
-Otherwise `previousRankings` holds last edition's order. Print each team's
-movement after its name:
+Otherwise `previousRankings` holds the order of the last ranking recorded.
+`publishedFor` is the week it ranked (null for the preseason edition). Print
+each team's movement after its name:
 
 ```
 🥇 1. KICKOFF KINGS ↑2
@@ -95,10 +96,18 @@ count it when you work out how far anybody else moved — the teams below it all
 rise by one for no reason of their own, which is not movement and must not be
 described as any.
 
+When `previousRankings.weeksSpanned` is present, that ranking is more than one
+week old: no ranking was recorded for the weeks in between, and
+`previousRankings.spanNote` names them. The arrows measure all of those weeks.
+Name the edition they measure from ("since the week 4 rankings"), never call
+it last week's ranking, and never write about the weeks in between as if you
+had ranked them.
+
 One week is a tiny sample. Normally keep movement within
-`editorial.movementGuidance.max_normal_movement` spots. Move a team further
-only when the week genuinely demands it, and say out loud why you broke your
-own rule.
+`editorial.movementGuidance.max_normal_movement` spots for each week the
+arrows span: multiply it by `previousRankings.weeksSpanned` when that is
+present (`spanNote` gives the result). Move a team further only when the
+results genuinely demand it, and say out loud why you broke your own rule.
 
 **Justify every move with evidence.** "Fell because they scored badly" is not
 analysis. "Fell because their floor dropped to 71 and three starters are on
@@ -114,7 +123,8 @@ SURVIVAL RANKINGS • 1/8
 
 1. **Opening.** How many are left, who went last week and on what score. What
    the chop line is doing — drifting up, drifting down — and what that means
-   for everyone still here. What you got wrong last time.
+   for everyone still here. What you got wrong in the ranking the arrows
+   measure from (when it spans several weeks, say which edition that was).
 2-N. **One post per surviving team**, ranked 1 to `survivorCount`. Each post
    carries the rank emoji, rank, team name and movement, then:
    - the core of the roster, by name

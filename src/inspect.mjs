@@ -20,11 +20,14 @@ import { createTeamIdentity } from './teamIdentity.mjs';
 import { EDITIONS, RECORDABLE_TASKS, weeklyEditions } from './options.mjs';
 import { getProvider } from './providers.mjs';
 import { createMemoryStore } from './storeCore.mjs';
+import { describeRankingEdition, describeWeeks, rankedAfterWeek, rankingGap } from './rankingGap.mjs';
 
 /** Editions that file a called shot under predictions/. */
 const PREDICTION_TASKS = ['preview', 'survival-preview'];
 /** Season-long ranking editions and the ranking label each files under. */
 const SEASON_LONG_LABELS = { 'preseason-rankings': 'preseason', postseason: 'final' };
+/** Editions that file a ranking under `week-N` each week. */
+const WEEKLY_RANKING_TASKS = ['rankings', 'survival-rankings'];
 
 const asId = (value) => (value === null || value === undefined ? null : String(value));
 
@@ -54,6 +57,29 @@ function recordedEdition({ store, season, task, week, label = null }) {
     from: entry ? (reply?.from ?? null) : null,
     writtenBy: entry ? (reply?.writtenBy ?? null) : null,
     fullReply: entry ? Boolean(reply) : false,
+  };
+}
+
+/**
+ * The newest ranking recorded at or before `week`, and every completed week
+ * since it with no ranking: the weeks the next ranking's arrows will span
+ * without having ranked. Checking only last week would miss a week skipped
+ * before it. With nothing recorded, every completed week is listed.
+ *
+ * → `{ task, newest: { label, week } | null, missingWeeks }`, or null when
+ *   the format has no weekly ranking edition.
+ */
+function rankingHistory({ store, season, week, ordered }) {
+  const task = WEEKLY_RANKING_TASKS.find((name) => ordered.includes(name));
+  if (!task) return null;
+  const saved = store.loadPreviousRankings(season, week + 1);
+  const newest = saved?.rankings?.length ? saved : null;
+  const from = rankedAfterWeek(newest) ?? 0;
+  const gap = rankingGap({ week: from }, week);
+  return {
+    task,
+    newest: newest ? { label: newest.label ?? null, week: from } : null,
+    missingWeeks: gap ? gap.skippedWeeks : [],
   };
 }
 
@@ -90,7 +116,9 @@ function gradability({ store, season, week }) {
  * @param teams          the league's teams now, `[{ rosterId, name, manager }]`,
  *                       when the caller has them; else the latest saved week's
  *
- * → `{ league, format, season, week, espn, lastWeek, coverage, gradable, thisWeek, rivalries, problems }`
+ * → `{ league, format, season, week, espn, lastWeek, coverage, seasonLong, rankings, gradable, thisWeek, rivalries, problems }`
+ *   `rankings` is `{ task, newest, missingWeeks }` (rankingHistory), or null
+ *   without a completed week or a weekly ranking edition for the format.
  *   `rivalries` is `{ declared, checked, unresolved }`: `checked` is false
  *   when no team list was known (nothing is saved yet), and `unresolved`
  *   lists each rivalry that no longer resolves to a team, `{ index, code,
@@ -221,6 +249,8 @@ export function inspectLeague({
     }
   }
 
+  const rankings = seasonName && lastWeek ? rankingHistory({ store, season: seasonName, week: week.number, ordered }) : null;
+
   const gradable = seasonName ? gradability({ store, season: seasonName, week: lastWeek }) : { gradable: false, reason: 'no season is known' };
 
   const missing = [];
@@ -256,6 +286,7 @@ export function inspectLeague({
     lastWeek,
     coverage,
     seasonLong,
+    rankings,
     gradable,
     thisWeek: { week: week?.number ?? null, missing },
     rivalries: rivalryReport,
@@ -279,7 +310,7 @@ const period = (p) => (p === null ? 'unknown' : `scoring period ${p}`);
  * section with nothing to say is an empty list.
  */
 export function describeInspection(report) {
-  const { league, format, week, espn, lastWeek, coverage, seasonLong, gradable, thisWeek } = report;
+  const { league, format, week, espn, lastWeek, coverage, seasonLong, rankings, gradable, thisWeek } = report;
 
   const leagueLines = [
     row('League', `${league.name ?? 'name not known'}${league.nameFrom ? ` (from ${league.nameFrom})` : ''}, ${league.provider} ${league.id ?? 'no ID'}`),
@@ -342,6 +373,17 @@ export function describeInspection(report) {
     for (const entry of seasonLong) {
       coverageLines.push(
         `${CONTINUED}${entry.task.padEnd(18)} ${entry.recorded ? `recorded${entry.recordedAt ? ` ${dateOf(entry.recordedAt)}` : ''}` : 'not recorded'} (season-long)`,
+      );
+    }
+    if (rankings) {
+      coverageLines.push(
+        row(
+          'Rankings',
+          `${rankings.newest ? `newest recorded is ${describeRankingEdition(rankings.newest.week)}` : 'none recorded yet'}; ` +
+            (rankings.missingWeeks.length
+              ? `✗ none recorded for ${describeWeeks(rankings.missingWeeks)}`
+              : 'none missing since'),
+        ),
       );
     }
     coverageLines.push(
