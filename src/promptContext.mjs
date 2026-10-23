@@ -1633,13 +1633,41 @@ function describeMissingContext({
 
   if (isRanking && !context.previousRankings) {
     const age = leagueAgeNote(history, context.league.season);
+    // Coverage that starts partway through the season is a different opening
+    // from week 1: the season already has a record to judge.
+    const midSeason = Number.isInteger(week) && week > 1;
+    const weeksIn = `${week - 1} ${week === 2 ? 'week' : 'weeks'}`;
     missing.push({
       field: 'previousRankings',
-      why: `No earlier ranking has been published, so this is the first Fantasy Pressbox edition for this league.${age.fact}`,
+      why: midSeason
+        ? `No earlier ranking has been published, so this is the first Fantasy Pressbox edition for this league, ` +
+          `and it arrives ${weeksIn} into the season.${age.fact}`
+        : `No earlier ranking has been published, so this is the first Fantasy Pressbox edition for this league.${age.fact}`,
+      instruction: midSeason
+        ? 'Print no movement arrows and no previous ranks. Do not write ↑, ↓ or —. ' +
+          `Say in the opening that this is the first Fantasy Pressbox edition, arriving ${weeksIn} into the season, ` +
+          'and introduce the publication. Do not write as though it were week 1 or as though this week alone decided the picture: ' +
+          'judge the season so far from the records, points scored and the weeks on file.' +
+          age.rule
+        : 'Print no movement arrows and no previous ranks. Do not write ↑, ↓ or —. ' +
+          'Say in the opening that this is the first Fantasy Pressbox edition and there is nothing to move from.' +
+          age.rule,
+    });
+  }
+
+  // The rating rests on the weeks on disk. Fewer than the window it was
+  // configured for (a league that began coverage mid-season) is a thinner sample.
+  const strengthWindow = context.strength?.window;
+  if (strengthWindow && strengthWindow.weeks.length < strengthWindow.lineupWeeks) {
+    const held = strengthWindow.weeks.length;
+    missing.push({
+      field: 'strengthWindow',
+      why:
+        `The strength rating is meant to rest on the last ${strengthWindow.lineupWeeks} weeks, but only ${held} ` +
+        `${held === 1 ? 'week is' : 'weeks are'} on file (${describeWeeks(strengthWindow.weeks)}).`,
       instruction:
-        'Print no movement arrows and no previous ranks. Do not write ↑, ↓ or —. ' +
-        'Say in the opening that this is the first Fantasy Pressbox edition and there is nothing to move from.' +
-        age.rule,
+        `Treat the lineup, depth and age components as a ${held}-week sample: weigh them accordingly, ` +
+        'do not call them settled, and lean on records and points scored.',
     });
   }
 

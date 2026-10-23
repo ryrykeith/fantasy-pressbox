@@ -116,7 +116,7 @@ function gradability({ store, season, week }) {
  * @param teams          the league's teams now, `[{ rosterId, name, manager }]`,
  *                       when the caller has them; else the latest saved week's
  *
- * → `{ league, format, season, week, espn, lastWeek, coverage, seasonLong, rankings, gradable, thisWeek, rivalries, problems }`
+ * → `{ league, format, season, week, espn, lastWeek, missingWeeks, coverage, seasonLong, rankings, gradable, thisWeek, rivalries, problems }`
  *   `rankings` is `{ task, newest, missingWeeks }` (rankingHistory), or null
  *   without a completed week or a weekly ranking edition for the format.
  *   `rivalries` is `{ declared, checked, unresolved }`: `checked` is false
@@ -253,6 +253,17 @@ export function inspectLeague({
 
   const gradable = seasonName ? gradability({ store, season: seasonName, week: lastWeek }) : { gradable: false, reason: 'no season is known' };
 
+  // Completed weeks with no settled snapshot on disk: coverage that began
+  // mid-season, or a week that was skipped. Offline, so it reads the
+  // snapshot's own `settled` flag; one written before the flag counts as kept.
+  const missingWeeks = [];
+  if (seasonName && lastWeek) {
+    for (let number = 1; number <= lastWeek; number += 1) {
+      const saved = store.loadSnapshot(seasonName, number);
+      if (!saved || saved.settled === false) missingWeeks.push(number);
+    }
+  }
+
   const missing = [];
   if (seasonName && week) {
     for (const { task, when, recordable: isRecordable } of weeklyEditions(formatType)) {
@@ -284,6 +295,7 @@ export function inspectLeague({
     week,
     espn,
     lastWeek,
+    missingWeeks,
     coverage,
     seasonLong,
     rankings,
@@ -296,6 +308,13 @@ export function inspectLeague({
 
 /** `2026-10-12T18:00:00Z` → `2026-10-12`, or the text unchanged when it is not a date. */
 const dateOf = (iso) => (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10) : iso);
+
+/**
+ * The command that saves missing weeks. Spelled out here, not taken from
+ * src/welcome.mjs: this module is part of core, which reads no process or node:
+ * modules (tests/core-purity.test.mjs).
+ */
+const CATCH_UP_COMMAND = 'fantasy-pressbox catch-up';
 
 const row = (label, text) => `  ${label.padEnd(18)} ${text}`;
 const CONTINUED = ' '.repeat(21);
@@ -310,7 +329,7 @@ const period = (p) => (p === null ? 'unknown' : `scoring period ${p}`);
  * section with nothing to say is an empty list.
  */
 export function describeInspection(report) {
-  const { league, format, week, espn, lastWeek, coverage, seasonLong, rankings, gradable, thisWeek } = report;
+  const { league, format, week, espn, lastWeek, missingWeeks, coverage, seasonLong, rankings, gradable, thisWeek } = report;
 
   const leagueLines = [
     row('League', `${league.name ?? 'name not known'}${league.nameFrom ? ` (from ${league.nameFrom})` : ''}, ${league.provider} ${league.id ?? 'no ID'}`),
@@ -392,6 +411,15 @@ export function describeInspection(report) {
   }
 
   const nextLines = [];
+  if (missingWeeks.length) {
+    nextLines.push(
+      row(
+        'Weeks not saved',
+        `${describeWeeks(missingWeeks)} ${missingWeeks.length === 1 ? 'is' : 'are'} not on disk; ` +
+          `run \`${CATCH_UP_COMMAND}\` to save every completed week`,
+      ),
+    );
+  }
   if (thisWeek.week) {
     nextLines.push(
       row(
