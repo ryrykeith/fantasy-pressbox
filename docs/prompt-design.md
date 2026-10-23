@@ -139,7 +139,11 @@ Every other edition ends without one. The prompts for `future-stock`,
 outright: "No JSON block at the end. This edition is not recorded."
 
 Team names in these blocks must match the context exactly. `extractJsonBlock`
-reads the last one; `stripJsonBlock` removes it from the human-facing copy.
+reads the block after the last `%%%` line (a fence inside a post is never read):
+the last fence tagged `json` in any case, or, when none is tagged, the last bare
+fence, since the chat sometimes drops the tag. `findJsonBlock` also says whether
+a block was found but would not parse, which recording reports as its own error.
+`stripJsonBlock` removes the same block from the human-facing copy.
 
 This is what makes the copy-and-paste workflow have a memory: the user runs
 `record` on the reply, and the block is filed.

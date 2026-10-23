@@ -122,21 +122,54 @@ export function checkPosts(text, { maxChars = 900, context = null } = {}) {
 }
 
 /**
- * Pulls the trailing ```json block out of a generated edition.
- * Previews end with their predictions in machine-readable form so that the
- * recap can grade them later without anyone re-typing anything.
+ * Finds the machine-readable block of a generated edition.
+ *
+ * Previews end with their predictions and ranking editions end with their
+ * order, in machine-readable form, so that the recap can grade them later
+ * without anyone re-typing anything. The block is a fenced block after the last
+ * %%% line (the whole text when there is no %%%): a fence inside a post is
+ * prose and is never read. The chat sometimes drops the `json` tag, so a block
+ * tagged json (any case) or untagged is accepted, and a json-tagged one wins
+ * when both are present. Other languages are not the block.
+ *
+ * Returns { status: 'none' } when there is no such fence, { status: 'unreadable',
+ * start, end } when there is one that is not valid JSON, and { status: 'found',
+ * value, start, end } otherwise; start and end are offsets into `text`.
  */
-export function extractJsonBlock(text) {
-  const blocks = [...String(text).matchAll(/```json\s*\n([\s\S]*?)```/g)];
-  if (blocks.length === 0) return null;
+export function findJsonBlock(text) {
+  const source = String(text);
+  const delimiters = [...source.matchAll(new RegExp(POST_DELIMITER.source, 'gm'))];
+  const lastDelimiter = delimiters.at(-1);
+  const tailStart = lastDelimiter ? lastDelimiter.index + lastDelimiter[0].length : 0;
+  const fenced = /^[ \t]*```([A-Za-z]*)[ \t]*\n([\s\S]*?)^[ \t]*```[ \t]*$/gm;
+  const fences = [...source.slice(tailStart).matchAll(fenced)]
+    .map((m) => ({
+      tag: m[1].toLowerCase(),
+      body: m[2],
+      start: tailStart + m.index,
+      end: tailStart + m.index + m[0].length,
+    }))
+    .filter((fence) => fence.tag === 'json' || fence.tag === '');
+  const chosen = fences.findLast((fence) => fence.tag === 'json') ?? fences.at(-1);
+  if (!chosen) return { status: 'none' };
+  const { start, end } = chosen;
   try {
-    return JSON.parse(blocks.at(-1)[1]);
+    return { status: 'found', value: JSON.parse(chosen.body), start, end };
   } catch {
-    return null;
+    return { status: 'unreadable', start, end };
   }
 }
 
-/** Strips the machine-readable tail so the human-facing copy stays clean. */
+/** The machine-readable block's parsed value, or null when there is none or it does not parse. */
+export function extractJsonBlock(text) {
+  const found = findJsonBlock(text);
+  return found.status === 'found' ? found.value : null;
+}
+
+/** Strips the block `extractJsonBlock` reads, so the human-facing copy stays clean. */
 export function stripJsonBlock(text) {
-  return String(text).replace(/```json\s*\n[\s\S]*?```\s*$/, '').trim();
+  const source = String(text);
+  const found = findJsonBlock(source);
+  if (found.status === 'none') return source.trim();
+  return (source.slice(0, found.start) + source.slice(found.end)).trim();
 }
