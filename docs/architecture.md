@@ -117,7 +117,7 @@ the website uses.
   "league": { "provider": "sleeper", "leagueId": "000000000000000000" },
   "settings": {
     "displayName": "Taco Tuesday League", "format": null, "season": null, "week": null,
-    "espnRoute": null, "tone": null, "roastIntensity": null, "postFormat": "sleeper",
+    "firstSeason": null, "espnRoute": null, "tone": null, "roastIntensity": null, "postFormat": "sleeper",
     "maxChars": null, "rankEmoji": { "mode": "default" }, "editorial": null, "rankings": null,
     "declared": { "eliminations": null, "rookieDraft": null, "prospects": {}, "rivalries": null }
   },
@@ -142,7 +142,10 @@ the website uses.
   the package default applies. From `.env`: `displayName`
   (`LEAGUE_DISPLAY_NAME`), `format` (`LEAGUE_FORMAT`), `season`
   (`LEAGUE_SEASON`, else `SLEEPER_SEASON`), `week` (`FANTASY_WEEK`),
-  `espnRoute` (`ESPN_ROUTE`), `tone` (`PRESSBOX_TONE`, else `tone` in
+  `firstSeason` (`LEAGUE_FIRST_SEASON`, a year; optional in the file, so a
+  file written before it existed reads it as null, and not in the required
+  settings keys; the cached season chain in `data/league-history/` stays out
+  of the file), `espnRoute` (`ESPN_ROUTE`), `tone` (`PRESSBOX_TONE`, else `tone` in
   `editorial.yml`), `maxChars` (`POST_MAX_LENGTH`, else
   `SLEEPER_POST_MAX_LENGTH`, else `editorial.yml`), and `rankEmoji`:
   `none` when emoji are off (`INCLUDE_EMOJI`), `custom` with the table when
