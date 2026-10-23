@@ -353,7 +353,7 @@ test('prepareEdition in memory builds the prompt the CLI writes, and recordEditi
 
   assert.throws(
     () => recordEdition({ task: 'rankings', week: 1, text: 'no block here', store, league: prepared.league, teams: prepared.teams }),
-    /No ```json block found at the end of that file/,
+    /No JSON block found at the end of that file/,
   );
 });
 

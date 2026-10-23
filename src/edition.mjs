@@ -45,7 +45,7 @@ import {
   buildPrompt,
   describePlayer,
 } from './promptContext.mjs';
-import { extractJsonBlock } from './validate.mjs';
+import { findJsonBlock } from './validate.mjs';
 import { gradePredictions, withMovement, movementLabel } from './rankingGrades.mjs';
 import { createTeamIdentity, attachRosterIds, presentPreviousRankings, describeUnresolved } from './teamIdentity.mjs';
 import { resolveRivalries } from './rivalries.mjs';
@@ -866,11 +866,18 @@ export function recordEdition({
         'so every team name in the reply can be pinned to its roster.',
     );
   }
-  const block = extractJsonBlock(text);
+  const found = findJsonBlock(text);
+  const block = found.status === 'found' ? found.value : null;
   if (from === 'pasted') {
+    if (found.status === 'unreadable') {
+      throw new Error(
+        'Found the JSON block after the last %%% but could not read it as JSON.\n' +
+          'Copy the whole reply from the chat again; the block may have been cut off or edited.',
+      );
+    }
     if (!block) {
       throw new Error(
-        'No ```json block found at the end of that file.\n' +
+        'No JSON block found at the end of that file.\n' +
           'Copy the whole reply from the chat, including the JSON block after the last %%%.',
       );
     }
