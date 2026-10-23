@@ -145,7 +145,14 @@ export function createStoreOver(backend) {
       return store
         .loadSnapshotsThrough(season, Number.POSITIVE_INFINITY)
         .flatMap((snapshot) =>
-          (snapshot.teams || []).map((team) => ({ week: snapshot.week, rosterId: team.rosterId, name: team.name })),
+          (snapshot.teams || []).map((team) => ({
+            week: snapshot.week,
+            rosterId: team.rosterId,
+            name: team.name,
+            // Captured after the week (catch-up): the name is the one the team
+            // went by at capture, not that week. src/teamIdentity.mjs skips it.
+            ...(snapshot.backfilled ? { backfilled: true } : {}),
+          })),
         );
     },
 

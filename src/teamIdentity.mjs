@@ -19,10 +19,16 @@ const normalise = (name) => String(name ?? '').trim().toLowerCase();
 /**
  * @param teams    the league's teams now: `[{ rosterId, name, manager }]`
  * @param history  every name a roster has been published under, as recorded
- *                 in weekly snapshots: `[{ week, rosterId, name }]`
+ *                 in weekly snapshots: `[{ week, rosterId, name, backfilled? }]`.
+ *                 An entry from a backfilled snapshot (one captured after its
+ *                 week, by catch-up) is ignored: its name is the one the team
+ *                 went by at capture, not the one that week was published
+ *                 under, and reading it as that week's would resolve a name
+ *                 published then to whichever team holds it now.
  */
-export function createTeamIdentity({ teams, history = [] }) {
+export function createTeamIdentity({ teams, history: recorded = [] }) {
   const current = new Map(teams.map((team) => [team.rosterId, team]));
+  const history = recorded.filter((entry) => !entry.backfilled);
 
   // A name that has meant more than one roster cannot be resolved by name
   // alone — one team may have taken another's old name. Those resolve to null

@@ -626,6 +626,17 @@ today's team names and records, because Sleeper keeps no history of them; the
 snapshots are flagged `backfilled`. On an ESPN league that imports saved pages,
 it fetches nothing: it lists the weeks still missing and the pages to save.
 
+If you forget, the editions that look back over the season (`recap`,
+`rankings`, the trade and waiver reports, and the rest that are about a
+finished week) do it for you: before building, they save every earlier week
+with no settled snapshot, in order, and say which (`Saved week 5 first: it was
+not on disk.`). The strength rating, rivalry records and player histories then
+include the week you skipped. A week already settled is never fetched again.
+On an ESPN league that imports saved pages, the edition fetches nothing: it
+names the pages still to save and is built without those weeks. A backfilled
+week's team names are today's, so they are never used to work out which team
+a name meant in that week's published rankings.
+
 ### Posting somewhere else
 
 For an iMessage group chat, add `--format imessage` to get one longer

@@ -872,3 +872,40 @@ export async function catchUpWeeks({ through = null, onWeek = () => {}, ...ctx }
   }
   return { lastCompleted, through: target, weeks };
 }
+
+/** Weeks 1 through `throughWeek` with no settled snapshot on disk, oldest first. Reads only the disk. */
+export function weeksWithoutSettledSnapshot({ store, league, throughWeek }) {
+  const missing = [];
+  for (let week = 1; week <= throughWeek; week += 1) {
+    if (!isSettledSnapshot(store.loadSnapshot(league.season, week), league)) missing.push(week);
+  }
+  return missing;
+}
+
+/**
+ * Before an edition about `week` that looks back over the season: saves every
+ * earlier week that has no settled snapshot, so the strength window, rivalry
+ * records, player histories, the guillotine ledger and the FAAB market do not
+ * silently leave a skipped week out. It is catchUpWeeks' loop, stopped at
+ * `week - 1`: a settled week is never fetched again, and every snapshot it
+ * writes is flagged `backfilled`.
+ *
+ * A provider with an import route (ESPN under ESPN_ROUTE=import) is never
+ * asked for anything: the weeks whose pages are not saved come back as
+ * `unsaved`, for the edition to name, and nothing is captured.
+ *
+ * → `{ missing, weeks, unsaved }`: `missing` the weeks found without a settled
+ *   snapshot, `weeks` catchUpWeeks' entries (empty when nothing was missing or
+ *   nothing could be fetched), `unsaved` the import route's weeks still to save.
+ */
+export async function captureEarlierWeeks({ week, onWeek = () => {}, ...ctx }) {
+  const missing = weeksWithoutSettledSnapshot({ store: ctx.store, league: ctx.league, throughWeek: week - 1 });
+  if (missing.length === 0) return { missing, weeks: [], unsaved: [] };
+  const source = providerInstance(ctx);
+  if (typeof source.savedPages === 'function') {
+    const saved = new Set((source.savedPages()?.weeks ?? []).map((entry) => entry.week));
+    return { missing, weeks: [], unsaved: missing.filter((gap) => !saved.has(gap)) };
+  }
+  const { weeks } = await catchUpWeeks({ ...ctx, provider: source, through: week - 1, onWeek });
+  return { missing, weeks, unsaved: [] };
+}
