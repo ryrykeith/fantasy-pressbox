@@ -20,6 +20,6 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [catch-up command: save every completed week not yet on disk](./catch-up-command-save-every-completed.md) | completed |
 | [Coverage labels name the weeks actually on file](./coverage-labels-name-the-weeks.md) | pending |
 | [Gap-aware ranking movement](./gap-aware-ranking-movement.md) | completed |
-| [Mid-season debut edition](./mid-season-debut-edition.md) | pending |
+| [Mid-season debut edition](./mid-season-debut-edition.md) | completed |
 | [Summarize skipped weeks in a ranking that spans a gap](./summarize-skipped-weeks-in-a-ranking.md) | completed |
 | [Tell the model how old the league is, apart from the publication](./tell-the-model-how-old-the-league-is.md) | completed |
