@@ -15,7 +15,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 
 | Title | Status |
 |-------|--------|
-| [Capture missing earlier weeks before a backward-looking edition](./capture-missing-earlier-weeks-before-a.md) | pending |
+| [Capture missing earlier weeks before a backward-looking edition](./capture-missing-earlier-weeks-before-a.md) | completed |
 | [Carry LEAGUE_FIRST_SEASON in the league file](./carry-league-first-season-in-the.md) | pending |
 | [catch-up command: save every completed week not yet on disk](./catch-up-command-save-every-completed.md) | completed |
 | [Coverage labels name the weeks actually on file](./coverage-labels-name-the-weeks.md) | pending |
