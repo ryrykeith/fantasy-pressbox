@@ -180,6 +180,7 @@ const CLI = join(PACKAGE_ROOT, 'src', 'cli.mjs');
 
 const DYNASTY_ID = '111111111111';
 const REDRAFT_ID = '222222222222';
+const MID_SEASON_ID = '333333333333';
 
 const LEAGUES = {
   [DYNASTY_ID]: {
@@ -197,6 +198,14 @@ const LEAGUES = {
     settings: { type: 0, num_teams: 18, playoff_teams: 0 },
     scoring_settings: { rec: 0.5, pass_td: 4 },
     roster_positions: ['QB', 'RB', 'WR', 'TE', 'FLEX', 'BN'],
+  },
+  [MID_SEASON_ID]: {
+    league_id: MID_SEASON_ID,
+    name: 'Late Starters',
+    season: '2026',
+    settings: { type: 2, num_teams: 12, playoff_teams: 6, playoff_week_start: 15, last_scored_leg: 6 },
+    scoring_settings: { rec: 1, bonus_rec_te: 0.5, pass_td: 4 },
+    roster_positions: ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'BN'],
   },
 };
 
@@ -273,6 +282,16 @@ test('setup ends with the commands to run next, written for the league folder', 
   assert.match(result.stdout, /record <reply file> --task rankings/);
   // Run from a league folder outside the clone, the short form would not resolve.
   assert.doesNotMatch(result.stdout, /node src\/cli\.mjs/);
+});
+
+test('a league whose season is under way is told to run catch-up; one before kickoff is not', () => {
+  const underWay = runSetup(dynastyAnswers({ id: MID_SEASON_ID }), { workspace: tempDir() });
+  assert.equal(underWay.status, 0, underWay.stdout + underWay.stderr);
+  assert.match(underWay.stdout, /Your season is under way \(6 weeks played\)/);
+  assert.match(underWay.stdout, / catch-up\n/);
+  const preseason = runSetup(dynastyAnswers(), { workspace: tempDir() });
+  assert.equal(preseason.status, 0, preseason.stdout + preseason.stderr);
+  assert.doesNotMatch(preseason.stdout, /catch-up/);
 });
 
 test('the scoring Sleeper reports is shown back for confirmation', () => {

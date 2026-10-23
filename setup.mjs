@@ -814,6 +814,13 @@ async function main() {
   }
   say(`  ${bold(`${cli} doctor`)}`);
   say('');
+  // A season already under way has weeks behind it that nothing has saved.
+  if (Number.isInteger(league.lastScoredWeek) && league.lastScoredWeek >= 1) {
+    say(`Your season is under way (${league.lastScoredWeek} week${league.lastScoredWeek === 1 ? '' : 's'} played). Save the earlier weeks first:`);
+    say('');
+    say(`  ${bold(`${cli} catch-up`)}`);
+    say('');
+  }
   say('Then every week, from that folder:');
   say('');
   for (const line of weeklyRoutine(cli, formatType)) say(line);

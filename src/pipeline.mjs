@@ -587,7 +587,8 @@ async function readSettledWeek({ provider, store, assets, league, teams, players
  * Fetch one week, save the raw bundle and the analyzed snapshot.
  *
  * `provider` is openLeague's; a caller holding only a `client` gets the
- * league's provider wrapped around it.
+ * league's provider wrapped around it. `backfilled` flags the snapshot as
+ * written to fill a gap (see catchUpWeeks).
  */
 export async function captureWeek({
   provider = null,
@@ -600,6 +601,7 @@ export async function captureWeek({
   week,
   config = null,
   draftCapital = null,
+  backfilled = false,
 }) {
   const source = providerInstance({ provider, client, league, config });
   const tradedPicks = draftCapital?.tradedPicks ?? [];
@@ -708,6 +710,10 @@ export async function captureWeek({
     season: league.season,
     played,
     settled,
+    // Captured after the week, to fill a gap (catchUpWeeks): its team names,
+    // records and standings are the league's as of that capture, not as of the
+    // week. Absent otherwise, so an ordinary snapshot is unchanged.
+    ...(backfilled ? { backfilled: true } : {}),
     // What the status report (src/inspect.mjs) names the league by offline:
     // a snapshot is the only thing a league file carries that saw the league.
     league: { name: league.name ?? null, detectedFormat: league.format?.detectedType ?? null },
@@ -747,4 +753,60 @@ export async function captureWeek({
     snapshotPath,
     kept: false,
   };
+}
+
+/**
+ * The last week that is over: Sleeper's own last scored week when the provider
+ * tracks one, else the provider's current week minus one. 0 before the season
+ * starts.
+ */
+export async function lastCompletedWeek({ provider = null, client = null, league, config = null }) {
+  const source = providerInstance({ provider, client, league, config });
+  if (source.capabilities.lastScoredWeek && Number.isInteger(league.lastScoredWeek) && league.lastScoredWeek >= 0) {
+    return league.lastScoredWeek;
+  }
+  const current = await source.currentWeek({ league });
+  if (!current.week) throw new Error('Could not determine the current week, so the last completed week is unknown.');
+  return Math.max(0, current.week - 1);
+}
+
+/**
+ * Saves every completed week that has no settled snapshot on disk, weeks 1
+ * through the last completed week (or `through`, when that is earlier), in
+ * ascending order: captureWeek builds the guillotine ledger and the FAAB
+ * market from the weeks already stored, so a later week must never be
+ * captured before an earlier one. A settled week is skipped without a fetch
+ * (isSettledSnapshot), which makes a second run a no-op. A week asked for
+ * beyond the last completed one is reported, not fetched.
+ *
+ * Every snapshot written is flagged `backfilled`: it carries today's team
+ * names and records, because the provider keeps no history of them.
+ *
+ * `onWeek({ week, status, result })` is called as each week finishes, `status`
+ * being 'saved', 'settled', 'not-played' (no scores yet) or 'not-completed'.
+ *
+ * → `{ lastCompleted, through, weeks: [{ week, status, result }] }`
+ */
+export async function catchUpWeeks({ through = null, onWeek = () => {}, ...ctx }) {
+  const { store, league } = ctx;
+  const lastCompleted = await lastCompletedWeek(ctx);
+  const target = Number.isInteger(through) ? through : lastCompleted;
+  const weeks = [];
+  const finish = (entry) => {
+    weeks.push(entry);
+    onWeek(entry);
+  };
+  for (let week = 1; week <= target; week += 1) {
+    if (week > lastCompleted) {
+      finish({ week, status: 'not-completed', result: null });
+      continue;
+    }
+    if (isSettledSnapshot(store.loadSnapshot(league.season, week), league)) {
+      finish({ week, status: 'settled', result: null });
+      continue;
+    }
+    const result = await captureWeek({ ...ctx, week, backfilled: true });
+    finish({ week, status: result.played || result.multiWeekMatchup ? 'saved' : 'not-played', result });
+  }
+  return { lastCompleted, through: target, weeks };
 }

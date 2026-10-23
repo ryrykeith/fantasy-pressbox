@@ -606,6 +606,22 @@ fantasy-pressbox transactions
 
 A week with no trades says so and builds no prompt.
 
+### Starting mid-season or missed a week
+
+Starting coverage in week 7, or skipped a week? Save every completed week that
+is not on disk yet with one command:
+
+```bash
+fantasy-pressbox catch-up
+```
+
+It saves weeks 1 through the last completed week in order, skips any week
+already settled without fetching it, and prints one line per week. Run it again
+and it fetches nothing. `--through 5` stops at week 5. The weeks it saves carry
+today's team names and records, because Sleeper keeps no history of them; the
+snapshots are flagged `backfilled`. On an ESPN league that imports saved pages,
+it fetches nothing: it lists the weeks still missing and the pages to save.
+
 ### Posting somewhere else
 
 For an iMessage group chat, add `--format imessage` to get one longer
@@ -628,6 +644,7 @@ terminal). Only `init`, `import-league` and `check` work without one.
 | `fantasy-pressbox init` | Set up a league folder. Run this first. With `--workspace <folder>` it creates that folder. |
 | `fantasy-pressbox doctor` | Check your settings, league config and connection, and see where the league stands: the week, what was recorded for last week, whether its predictions can be graded, and what this week still needs. Run this when something is wrong. |
 | `fantasy-pressbox fetch` | Just download and save a week of league data. |
+| `fantasy-pressbox catch-up` | Save every completed week that is not on disk yet, in order: for a mid-season start or a skipped week. `--through <n>` stops at week `n`. See [Starting mid-season or missed a week](#starting-mid-season-or-missed-a-week). |
 | `fantasy-pressbox import-espn --week <n> <files>` | ESPN leagues (experimental): import pages you saved from ESPN yourself. Fantasy Pressbox never contacts ESPN on this route. Run it with no files to see the addresses to open in your signed-in browser; save each page into your league folder, never into the Fantasy Pressbox folder. Save the league page each week along with the week's two pages: a league page older than the newest week page is refused, because its standings and rosters would be out of date. This is your own manual, personal use of your league's pages. |
 | `fantasy-pressbox preview` | Build this week's matchup previews. |
 | `fantasy-pressbox survival-preview` | Build this week's survival preview. Guillotine leagues only — it replaces `preview`. |
@@ -658,6 +675,7 @@ Useful options:
 | `--task <name>` | Which edition a file is, for `record`. |
 | `--early` | Run the tank watch before its start week. |
 | `--team 3` | Which team a `five-year-plan` is about: its name (`--team "Punt Intended"`, or a name it used before), its manager's username, or its roster id. A name that has meant more than one team is refused; use the roster id. Only that edition uses it. |
+| `--through 5` | The last week `catch-up` saves (default: the last completed week). |
 | `--refresh-market` | Fetch trade values again instead of reusing the ones saved for that week. |
 | `--refresh-players` | Re-download the NFL player list instead of using the cached copy. |
 | `--workspace <folder>` | Use a league folder other than the one you are in. `PRESSBOX_WORKSPACE` does the same. |

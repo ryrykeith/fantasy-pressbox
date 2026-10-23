@@ -202,7 +202,7 @@ test('--help lists exactly the editions in EDITIONS that a command builds', () =
   for (const edition of built) {
     assert.match(commands, new RegExp(`^ {2}${edition.command} +${edition.summary.replace(/[()]/g, '\\$&')}$`, 'm'));
   }
-  const others = ['init', 'doctor', 'migrate', 'export-league', 'import-league', 'record', 'grade', 'check', 'fetch', 'import-espn'];
+  const others = ['init', 'doctor', 'migrate', 'export-league', 'import-league', 'record', 'grade', 'check', 'fetch', 'catch-up', 'import-espn'];
   assert.deepEqual([...listed].sort(), [...others, ...built.map((edition) => edition.command)].sort());
 });
 
