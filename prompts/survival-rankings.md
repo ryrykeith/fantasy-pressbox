@@ -71,8 +71,10 @@ edition does not know and carries an instruction. Follow all of them exactly.
 
 ## Movement
 
-If `unavailable` names `previousRankings`, this is the first edition: print no
-arrows at all, and open by saying there is nothing to move from yet.
+If `unavailable` names `previousRankings`, this is the first Fantasy Pressbox
+edition for this league: print no arrows at all, and open by saying there is
+nothing to move from yet. It is the publication's first edition, not the
+league's first season: `league.history` says how long the league has run.
 
 Otherwise `previousRankings` holds last edition's order. Print each team's
 movement after its name:

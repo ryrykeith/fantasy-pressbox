@@ -26,6 +26,7 @@ import { prospectBoardView } from './prospectBoard.mjs';
 import { TANK_WATCH_TASK, tankWatchPrize, tankWatchUnavailable, tankWatchView } from './tankWatch.mjs';
 import { draftProjectionView, pickProjection, tradePicksUnavailable, tradeProspectBoard } from './tradePicks.mjs';
 import { FUTURE_STOCK_TASK, futureStockUnavailable, futureStockView, refuseFutureStock } from './futureStock.mjs';
+import { ordinal } from './leagueAge.mjs';
 import {
   FIVE_YEAR_PLAN_TASK,
   fiveYearPlanUnavailable,
@@ -1017,8 +1018,46 @@ function marketValuesView(market) {
 }
 
 /**
+ * `context.league.history`: `{ firstSeason, seasonNumber, source }`, or
+ * `{ unavailable }` when the league's age is not known.
+ */
+function leagueHistoryView(history) {
+  if (history.unavailable) return { unavailable: history.unavailable };
+  const { firstSeason, seasonNumber, source } = history;
+  return { firstSeason, seasonNumber, source };
+}
+
+/**
+ * What the first-edition note says about the league itself, so "first
+ * edition" is never read as "first season": `{ fact, rule }`, sentences to
+ * add to the note's `why` and `instruction`, both empty when no history was
+ * read.
+ */
+function leagueAgeNote(history, season) {
+  if (!history) return { fact: '', rule: '' };
+  if (history.unavailable) {
+    return { fact: '', rule: ' Do not say whether the league itself is new: how long it has run is not known.' };
+  }
+  if (history.seasonNumber > 1) {
+    return {
+      fact:
+        ` The league itself is not new: ${season} is its ${ordinal(history.seasonNumber)} season ` +
+        `(it started in ${history.firstSeason}).`,
+      rule:
+        " Do not call this the league's first season and do not describe the league as new. " +
+        'Describe nothing from its earlier seasons: none of it is on file.',
+    };
+  }
+  return { fact: ` This is also the league's first season (${season}).`, rule: '' };
+}
+
+/**
  * @param {object} input
  * @param {string} input.task one of TASKS
+ * @param {object|null} input.leagueHistory from
+ *        src/pipeline.mjs#readLeagueHistory: `{ firstSeason, seasonNumber,
+ *        source }` or `{ unavailable }`. Null (not looked up) leaves
+ *        `league.history` out of the context.
  * @param {boolean} input.transactionsUnavailable true when the week's
  *        transactions are unknown (captureWeek's flag), so an empty list is
  *        not reported as a quiet week.
@@ -1062,6 +1101,7 @@ export function buildContext({
   teams,
   players,
   week,
+  leagueHistory = null,
   weekAnalysis = null,
   upcomingAnalysis = null,
   priorWeekAnalysis = null,
@@ -1129,6 +1169,9 @@ export function buildContext({
       positionalValue: describePositionalValue(league.format?.scoring),
       playoffTeams: league.playoffTeams,
       playoffWeekStart: league.playoffWeekStart,
+      // How long the league itself has run, apart from this publication.
+      // An unknown one also gets a `leagueHistory` entry in `unavailable`.
+      ...(leagueHistory ? { history: leagueHistoryView(leagueHistory) } : {}),
     },
     editorial: editorialView(config, league.format, task),
     week,
@@ -1537,13 +1580,28 @@ function describeMissingContext({
     });
   }
 
+  // A league whose age is not known. Every edition: an opening line about a
+  // "new league" or "year three" is a league fact like any other.
+  const history = context.league.history ?? null;
+  if (history?.unavailable) {
+    missing.push({
+      field: 'leagueHistory',
+      why: history.unavailable,
+      instruction:
+        'Do not say how many seasons this league has run, when it started, or that this is its first season. ' +
+        "Describe nothing from the league's earlier seasons.",
+    });
+  }
+
   if (isRanking && !context.previousRankings) {
+    const age = leagueAgeNote(history, context.league.season);
     missing.push({
       field: 'previousRankings',
-      why: 'No earlier ranking has been published, so this is the first edition.',
+      why: `No earlier ranking has been published, so this is the first Fantasy Pressbox edition for this league.${age.fact}`,
       instruction:
         'Print no movement arrows and no previous ranks. Do not write ↑, ↓ or —. ' +
-        'Say in the opening that this is the first edition and there is nothing to move from.',
+        'Say in the opening that this is the first Fantasy Pressbox edition and there is nothing to move from.' +
+        age.rule,
     });
   }
 

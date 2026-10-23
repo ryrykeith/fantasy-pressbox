@@ -22,6 +22,7 @@ import {
   captureWeek,
   openLeague,
   readByeExposure,
+  readLeagueHistory,
   readMarketValues,
   readPickCapital,
   readRosterWindow,
@@ -765,6 +766,11 @@ export async function prepareEdition({
     }
   }
 
+  // Every edition: a publication's first edition is not the league's first
+  // season, and a model told neither will assume the two are the same.
+  const leagueHistory = await readLeagueHistory(ctx);
+  if (leagueHistory.unavailable) warn(`How long the league has run is not known: ${leagueHistory.unavailable}`);
+
   const context = buildContext({
     task,
     config,
@@ -772,6 +778,7 @@ export async function prepareEdition({
     teams,
     players,
     week,
+    leagueHistory,
     weekAnalysis,
     upcomingAnalysis,
     priorWeekAnalysis,

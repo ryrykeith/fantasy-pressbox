@@ -987,6 +987,27 @@ export function parseEspnRoute(value, { source = `${ESPN_ROUTE_KEY} in .env` } =
   );
 }
 
+/** The .env key that declares the season a league started, overriding what its provider reports. */
+export const LEAGUE_FIRST_SEASON_KEY = 'LEAGUE_FIRST_SEASON';
+
+/**
+ * Reads LEAGUE_FIRST_SEASON, or refuses it: a four-digit year, or null when
+ * absent or empty (the provider's chain of seasons answers instead). For a
+ * league that was recreated rather than renewed, or one on a provider that
+ * reports no earlier seasons (ESPN).
+ */
+export function parseLeagueFirstSeason(value, { source = `${LEAGUE_FIRST_SEASON_KEY} in .env` } = {}) {
+  const text = value === undefined || value === null ? '' : String(value).trim();
+  if (text === '') return null;
+  const year = /^\d{4}$/.test(text) ? Number(text) : NaN;
+  if (year >= 2000 && year <= 2100) return year;
+  throw new Error(
+    `${source} is "${text}", which is not a season.\n\n` +
+      `Set ${LEAGUE_FIRST_SEASON_KEY} to the four-digit year of the league's first season, such as 2023, ` +
+      "or remove the line and the league's provider is asked instead.",
+  );
+}
+
 /**
  * Which league a folder's .env names, without its secrets:
  * `{ provider, id, season, route }`.

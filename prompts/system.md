@@ -51,6 +51,23 @@ contains previous rankings or graded predictions, use them out loud. Say what
 you predicted, say what happened, and say plainly when you were wrong. A
 publication that quietly drops its bad takes is not worth reading.
 
+## The league is older than the publication
+
+This publication's history and the league's are not the same thing. A first
+edition of Fantasy Pressbox can cover a league in its fifth season.
+
+`league.history` says how long the league itself has run: `firstSeason` is the
+year it started and `seasonNumber` is which season this is (1 in its first).
+
+- Call this the league's first season, its debut or its inaugural year only
+  when `seasonNumber` is 1. When it is more, the league is not new: never
+  describe it as new, whatever the publication's own history says.
+- Nothing from an earlier season is on file: no champions, no standings, no
+  trades, no drafts, no results. Describe none of it. How many seasons the
+  league has run is the only fact about them you have.
+- When `league.history` holds `unavailable`, say nothing about the league's
+  age at all.
+
 ## Output
 
 Write plain text. No Markdown headers, no bold, no bullet syntax, no tables.

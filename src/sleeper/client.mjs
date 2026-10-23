@@ -64,6 +64,12 @@ export function createClient({ leagueId, playerCache = null }) {
       return league;
     },
 
+    /**
+     * Any league by its ID, or null when Sleeper has none: how a league's
+     * earlier seasons are reached, through each season's previous_league_id.
+     */
+    leagueById: (id) => getJson(`${BASE}/league/${id}`),
+
     users: () => getJson(`${BASE}/league/${leagueId}/users`),
     rosters: () => getJson(`${BASE}/league/${leagueId}/rosters`),
     matchups: (week) => getJson(`${BASE}/league/${leagueId}/matchups/${week}`),

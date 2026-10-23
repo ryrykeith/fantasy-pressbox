@@ -471,7 +471,9 @@ test('a Sleeper league folder exported and imported again has identical data/ fi
   const copy = join(tempDir('pressbox-league-file-import-'), 'rebuilt');
   const imported = ok(runCli(copy, ['import-league', exportPath]));
   assert.match(imported.said, /Imported the Sleeper league 000000000000000000/);
-  assert.deepEqual(filesIn(join(copy, 'data')), filesIn(join(root, 'history'), { skip: ['cache'] }));
+  // league-history is a cache like cache/: read from Sleeper again, never carried in the file.
+  assert.deepEqual(filesIn(join(copy, 'data')), filesIn(join(root, 'history'), { skip: ['cache', 'league-history'] }));
+  assert.match(exported.said, /Not read: .*data\/league-history\//);
   assert.deepEqual(settingsOf(copy), settingsOf(root));
   assert.ok(!readFileSync(join(copy, '.env'), 'utf8').includes('API_KEY'));
 

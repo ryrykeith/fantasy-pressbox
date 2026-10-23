@@ -60,8 +60,10 @@ rating as though it were the rank.
 
 ## Movement
 
-If `unavailable` names `previousRankings`, this is the first edition: print no
-arrows at all, and open by saying there is nothing to move from yet.
+If `unavailable` names `previousRankings`, this is the first Fantasy Pressbox
+edition for this league: print no arrows at all, and open by saying there is
+nothing to move from yet. It is the publication's first edition, not the
+league's first season: `league.history` says how long the league has run.
 
 Otherwise `previousRankings` holds last edition's order. Print each team's
 movement after its name:
@@ -103,9 +105,10 @@ higher or lower.
 
 `futureDraftCapital` lists picks for drafts that **have not happened yet**, and
 only those. Picks for the current season and earlier are already spent and are
-excluded from the context on purpose — in a league's first year those are
-startup-draft picks, and treating them as assets is a straightforward analytical
-error.
+excluded from the context on purpose — they were spent in a draft that has
+already happened (the startup draft, when `league.history.seasonNumber` is 1),
+and treating them as assets is a straightforward analytical error. That a pick
+is spent says nothing about how old the league is.
 
 Read it as follows:
 

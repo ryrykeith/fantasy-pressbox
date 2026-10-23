@@ -739,6 +739,15 @@ fills it in. Left empty, the tool works it out from Sleeper, which can tell
 dynasty from redraft but never guillotine — see
 [What your league format changes](#what-your-league-format-changes).
 
+**`LEAGUE_FIRST_SEASON`** is the year of the league's first season. Every
+edition tells the writer which season of the league this is, so a first
+edition of Fantasy Pressbox is never written up as the league's first year.
+Leave it empty and the tool asks Sleeper once, following each season back to
+the one it was renewed from, and keeps the answer in `data/league-history/`.
+Set it for a league that was recreated rather than renewed (Sleeper sees only
+the new league) or an ESPN league (ESPN reports no earlier seasons). Setup
+shows what Sleeper says and asks.
+
 ### Overriding the house style for one league
 
 Copy the file you want to change into your league folder at the same relative
@@ -1172,6 +1181,7 @@ the prompt for any other format. Keep those lines intact in your copy.
 │   ├── tank-watch/    the draft order each tank watch reported
 │   ├── market/        the trade values each week was graded against
 │   ├── editions/      the whole reply behind each edition you recorded
+│   ├── league-history/ how many seasons the league has run (safe to delete; asked again)
 │   └── cache/         the NFL player list (safe to delete; re-downloaded)
 └── output/          the files you paste into a chat, and the finished posts
 

@@ -16,6 +16,10 @@
  *   market/<season>/week-<n>.json       trade values as fetched for that week
  *   tank-watch/<season>/week-<n>.json   the draft order a tank watch reported
  *   editions/<season>/week-<n>-<task>.json  the whole reply an edition was recorded from
+ *   league-history/<season>/league.json     the seasons the league has run, as its provider reported them
+ *
+ * league-history is a cache, not history: it can be read from the provider
+ * again at any time, so the league file (src/leagueFile.mjs) does not carry it.
  *
  * This module has no node: imports. A back end supplies five operations:
  *   read(kind, season, file)         → the saved value, or null
@@ -88,6 +92,19 @@ export function createStoreOver(backend) {
     },
     loadImportedLeague(season) {
       return read('import', season, 'league.json');
+    },
+
+    /**
+     * The seasons the league has run, as walked once from its provider
+     * (src/pipeline.mjs#readLeagueHistory): `{ leagueId, season, firstSeason,
+     * seasonNumber, source, seasons, walkedAt }`. Kept per season, because
+     * the answer changes when the league is renewed.
+     */
+    saveLeagueHistory(season, record) {
+      return write('league-history', season, 'league.json', record);
+    },
+    loadLeagueHistory(season) {
+      return read('league-history', season, 'league.json');
     },
 
     saveSnapshot(season, week, snapshot) {

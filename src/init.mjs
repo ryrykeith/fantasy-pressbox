@@ -20,6 +20,21 @@ import { parseYaml } from './lib/yaml.mjs';
 import { FORMAT_TYPES, parseDeclaredFormatType } from './format.mjs';
 import { draftOrderInWords, parseDeclaredDraftOrder, parseDeclaredRoundOrder } from './rookieDraft.mjs';
 import { parseTankWatchStartWeek } from './tankWatch.mjs';
+import { parseLeagueFirstSeason } from './settings.mjs';
+
+/**
+ * The season a league started, as typed at setup: a year no later than
+ * `season`, or null for an empty answer. Read by LEAGUE_FIRST_SEASON's own
+ * parser, so what setup writes always loads.
+ */
+export function parseFirstSeasonAnswer(text, season) {
+  const year = parseLeagueFirstSeason(text, { source: 'The first season' });
+  const current = Number.parseInt(season, 10);
+  if (year !== null && Number.isInteger(current) && year > current) {
+    throw new Error(`The first season is ${year}, after this league's ${current} season.`);
+  }
+  return year;
+}
 
 /** Accepts a bare league ID or a whole pasted Sleeper address. Empty when there is none. */
 export function extractLeagueId(input) {

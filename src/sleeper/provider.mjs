@@ -24,6 +24,65 @@ import {
 const NAME = 'sleeper';
 const DISPLAY_NAME = 'Sleeper';
 
+/** How a league's age is credited when Sleeper's chain of seasons supplied it. */
+const HISTORY_SOURCE = "Sleeper (each season's previous_league_id)";
+
+/** A chain longer than this is not a league's history but a loop Sleeper failed to close. */
+const MAX_SEASONS = 50;
+
+/** Sleeper writes "0", or nothing, for a league that was not renewed from another. */
+const hasPrevious = (id) => id !== null && id !== undefined && id !== '' && String(id) !== '0';
+
+/**
+ * The seasons a league has run, by walking previous_league_id back from
+ * `league` (a normalized League) until a season names none.
+ *
+ * → `{ firstSeason, seasons: [{ season, leagueId }], source }`, newest first,
+ *   or `{ unavailable }` with the reason when the chain cannot be read: a
+ *   link Sleeper does not know, a season out of order, a loop, or no
+ *   connection. A failure is reported, never guessed past: a shorter chain
+ *   would understate the league's age.
+ */
+async function walkSeasons(fetchLeague, league) {
+  const season = Number.parseInt(league?.season, 10);
+  if (!Number.isInteger(season)) return { unavailable: `${DISPLAY_NAME} did not report this league's season.` };
+  const seasons = [{ season, leagueId: league.id ?? null }];
+  const seen = new Set([String(league.id)]);
+  let previous = league.previousLeagueId;
+  try {
+    while (hasPrevious(previous)) {
+      const id = String(previous);
+      const later = seasons.at(-1).season;
+      if (seen.has(id) || seasons.length >= MAX_SEASONS) {
+        return { unavailable: `${DISPLAY_NAME}'s chain of earlier seasons loops back on itself at league ${id}.` };
+      }
+      seen.add(id);
+      const raw = await fetchLeague(id);
+      if (!raw) {
+        return {
+          unavailable:
+            `The ${later} league names ${id} as its previous season, and ${DISPLAY_NAME} has no league ` +
+            'with that ID, so the earlier seasons cannot be counted.',
+        };
+      }
+      const earlier = Number.parseInt(raw.season, 10);
+      if (!Number.isInteger(earlier) || earlier >= later) {
+        return {
+          unavailable:
+            `The ${later} league names ${id} as its previous season, and ${DISPLAY_NAME} reports that ` +
+            `league's season as ${JSON.stringify(raw.season ?? null)}, which is not an earlier year.`,
+        };
+      }
+      seasons.push({ season: earlier, leagueId: id });
+      previous = raw.previous_league_id;
+    }
+  } catch (error) {
+    if (!(error instanceof SleeperError)) throw error;
+    return { unavailable: `The league's earlier seasons could not be read: ${error.message}` };
+  }
+  return { firstSeason: seasons.at(-1).season, seasons, source: HISTORY_SOURCE };
+}
+
 /** A normalized League, tagged with the provider it came from. */
 function leagueFrom(rawLeague, { declaredFormatType = null } = {}) {
   return { ...normalizeLeague(rawLeague, { declaredFormatType }), provider: NAME };
@@ -72,6 +131,15 @@ function instance(client, { config = null, league = null } = {}) {
         matchups,
         transactions,
       };
+    },
+
+    /**
+     * The seasons this league has run (walkSeasons): one request per earlier
+     * season, none for a league that was not renewed. The caller caches it
+     * (src/pipeline.mjs#readLeagueHistory).
+     */
+    leagueHistory({ league: known = current } = {}) {
+      return walkSeasons((id) => client.leagueById(id), known);
     },
 
     /**
@@ -129,6 +197,12 @@ export const sleeperProvider = Object.freeze({
   async lookupLeague({ id, declaredFormatType = null } = {}) {
     const raw = await createClient({ leagueId: id }).league();
     return leagueFrom(raw, { declaredFormatType });
+  },
+
+  /** The seasons the League `league` has run (walkSeasons), for setup to show. */
+  lookupLeagueHistory({ league }) {
+    const client = createClient({ leagueId: league.id });
+    return walkSeasons((id) => client.leagueById(id), league);
   },
 
   /** A saved bundle as WeekData. Pure: reads nothing, fetches nothing. */

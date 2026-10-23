@@ -46,7 +46,13 @@ import { loadAssets } from './assets.mjs';
 import { createDiskPlayerCache } from './diskPlayerCache.mjs';
 import { parseProspectBoard } from './prospectBoard.mjs';
 import { parseRivalries } from './rivalries.mjs';
-import { firstSet, leagueSettingsFromEnv, mergeSettingsLayer, resolveSettings } from './settings.mjs';
+import {
+  firstSet,
+  leagueSettingsFromEnv,
+  mergeSettingsLayer,
+  parseLeagueFirstSeason,
+  resolveSettings,
+} from './settings.mjs';
 
 // The pure half moved to src/settings.mjs. Re-exported so existing importers
 // of config.mjs keep working; new code that has no business with the disk
@@ -334,6 +340,10 @@ export function loadConfig({
     // What kind of league this is, if the operator said. Null means "work it
     // out from Sleeper"; a misspelling throws here, before any command runs.
     leagueFormat: parseDeclaredFormatType(env.LEAGUE_FORMAT, { provider: providerDisplayName(league.provider) }),
+    // The season the league started, if the operator said (LEAGUE_FIRST_SEASON).
+    // Null means "ask the provider" (src/pipeline.mjs#readLeagueHistory); a
+    // value that is not a year throws here, before any command runs.
+    leagueFirstSeason: parseLeagueFirstSeason(env.LEAGUE_FIRST_SEASON),
     ai: {
       provider: (env.AI_PROVIDER || '').trim().toLowerCase() || null,
       anthropicKey: (env.ANTHROPIC_API_KEY || '').trim(),

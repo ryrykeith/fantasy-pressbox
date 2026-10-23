@@ -18,7 +18,7 @@ import { buildRosterWindow } from './analysis/rosterWindow.mjs';
 import { buildPickCapital, pickCapitalSeasons } from './analysis/pickCapital.mjs';
 import { byeWeekTableSource, upcomingByeExposure } from './analysis/byeExposure.mjs';
 import { buildStrength } from './analysis/strength.mjs';
-import { resolveStrengthChoice } from './settings.mjs';
+import { LEAGUE_FIRST_SEASON_KEY, resolveStrengthChoice } from './settings.mjs';
 import {
   MARKET_ID_SPACES,
   MarketValuesError,
@@ -83,6 +83,68 @@ export async function openLeague(config, { store, assets, refreshPlayers = false
     config,
     draftCapital,
   };
+}
+
+/** How a league's age is credited when the operator declared it. */
+export const DECLARED_HISTORY_SOURCE = `${LEAGUE_FIRST_SEASON_KEY} in the league's .env`;
+
+/**
+ * How long the league itself has existed, apart from this publication:
+ * `{ firstSeason, seasonNumber, source }`, or `{ unavailable }` with the
+ * reason it is not known. `seasonNumber` is 1 in the league's first season.
+ *
+ * LEAGUE_FIRST_SEASON (`config.leagueFirstSeason`) wins, for a league that was
+ * recreated rather than renewed or a provider that reports no earlier seasons.
+ * Otherwise the provider's `leagueHistory` walks the league's earlier seasons
+ * once, and the answer is cached in the store (league-history/<season>/) for
+ * every later edition of the season; a cached walk for another league ID is
+ * walked again. A walk that fails is not cached, so the next edition tries
+ * again. A provider without `leagueHistory` (ESPN) is unavailable.
+ *
+ * `provider` is openLeague's; a caller holding only a `client` gets the
+ * league's provider wrapped around it.
+ */
+export async function readLeagueHistory({ provider = null, client = null, store, league, config = null }) {
+  const season = Number.parseInt(league.season, 10);
+  if (!Number.isInteger(season)) {
+    return { unavailable: "The league's season is not known, so neither is how many seasons it has run." };
+  }
+  const view =(firstSeason, source) => ({ firstSeason, seasonNumber: season - firstSeason + 1, source });
+
+  const declared = config?.leagueFirstSeason ?? null;
+  if (declared !== null) {
+    if (declared > season) {
+      throw new Error(
+        `${LEAGUE_FIRST_SEASON_KEY} in .env is ${declared}, after this league's ${league.season} season. ` +
+          "Set it to the year of the league's first season, or remove the line.",
+      );
+    }
+    return view(declared, DECLARED_HISTORY_SOURCE);
+  }
+
+  const saved = store.loadLeagueHistory(league.season);
+  if (saved && saved.leagueId === (league.id ?? null)) return view(saved.firstSeason, saved.source);
+
+  const instance = providerInstance({ provider, client, league, config });
+  if (typeof instance.leagueHistory !== 'function') {
+    return {
+      unavailable:
+        `${instance.displayName} does not report a league's earlier seasons, so how long this league has run ` +
+        `is not known. ${LEAGUE_FIRST_SEASON_KEY} in the league's .env can say.`,
+    };
+  }
+  const walked = await instance.leagueHistory({ league });
+  if (walked.unavailable) return { unavailable: walked.unavailable };
+
+  const history = view(walked.firstSeason, walked.source);
+  store.saveLeagueHistory(league.season, {
+    leagueId: league.id ?? null,
+    season,
+    ...history,
+    seasons: walked.seasons,
+    walkedAt: new Date().toISOString(),
+  });
+  return history;
 }
 
 /**
