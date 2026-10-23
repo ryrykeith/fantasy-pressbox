@@ -563,7 +563,10 @@ Each edition prints which ranking it is measuring movement against
 you missed a `record`, and the edition warns you, naming the weeks with no
 ranking. The prompt then tells the AI which edition the arrows measure from,
 not to call it last week, and to allow `max_normal_movement` spots for each
-week the arrows span. `doctor` lists every week since the newest recorded
+week the arrows span. It also gets each skipped week's scores, results and
+opponents, with that week's top and bottom scorer, so it can explain a move
+that one big week caused; a skipped week with nothing saved is marked
+unavailable, never guessed. `doctor` lists every week since the newest recorded
 ranking that has none.
 
 Team renames are handled for you. Managers rename teams whenever they like;

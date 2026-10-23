@@ -22,7 +22,7 @@ import { prepareEdition } from '../src/edition.mjs';
 import { describeInspection, inspectLeague } from '../src/inspect.mjs';
 import { createMemoryPlayerCache } from '../src/playerCache.mjs';
 import { buildContext } from '../src/promptContext.mjs';
-import { describeWeeks, rankedAfterWeek, rankingGap } from '../src/rankingGap.mjs';
+import { describeWeeks, rankedAfterWeek, rankingGap, summarizeSkippedWeeks } from '../src/rankingGap.mjs';
 import { deriveScoringProfile } from '../src/sleeper/normalize.mjs';
 import { createMemoryStore } from '../src/storeCore.mjs';
 
@@ -60,7 +60,10 @@ test('skipped weeks read as a list', () => {
 
 /* ------------------------------------------------------- what the model sees */
 
-function rankingContext(previousRankings, { week = 6, task = 'rankings', maxNormalMovement = 3 } = {}) {
+function fullRankingContext(
+  previousRankings,
+  { week = 6, task = 'rankings', maxNormalMovement = 3, skippedWeekSnapshots = null, teams = [] } = {},
+) {
   return buildContext({
     task,
     config: {
@@ -88,12 +91,99 @@ function rankingContext(previousRankings, { week = 6, task = 'rankings', maxNorm
         scoring: deriveScoringProfile({ rec: 1, pass_td: 4 }, { startingSlots: ['QB', 'RB', 'WR'] }),
       },
     },
-    teams: [],
+    teams,
     players: {},
     week,
     previousRankings,
-  }).previousRankings;
+    skippedWeekSnapshots,
+  });
 }
+
+const rankingContext = (previousRankings, options) => fullRankingContext(previousRankings, options).previousRankings;
+
+/* ------------------------------------------- the weeks the arrows span */
+
+/** A saved week: two teams, one game. */
+const savedWeek = (week, a, b, extra = {}) => ({
+  week,
+  played: true,
+  analysis: {
+    week,
+    games: [{ teams: [{ rosterId: 1, team: 'Old Name' }, { rosterId: 2, team: 'Pick Six Appeal' }] }],
+    teamWeeks: [
+      { rosterId: 1, team: 'Old Name', points: a, result: a > b ? 'W' : 'L', opponent: 'Pick Six Appeal', opponentPoints: b },
+      { rosterId: 2, team: 'Pick Six Appeal', points: b, result: b > a ? 'W' : 'L', opponent: 'Old Name', opponentPoints: a },
+    ],
+  },
+  ...extra,
+});
+const NOW = [
+  { rosterId: 1, name: 'Punt Intended', manager: 'm1', record: { wins: 3, losses: 2, ties: 0 }, playerIds: [] },
+  { rosterId: 2, name: 'Pick Six Appeal', manager: 'm2', record: { wins: 2, losses: 3, ties: 0 }, playerIds: [] },
+];
+
+test('a week 6 ranking measured against week 4 carries week 5\'s results in sinceLastEdition', () => {
+  const asked = [];
+  const context = fullRankingContext(weekRanking(4), {
+    teams: NOW,
+    skippedWeekSnapshots: (week) => {
+      asked.push(week);
+      return savedWeek(week, 180, 95);
+    },
+  });
+  assert.deepEqual(asked, [5]);
+  assert.deepEqual(context.sinceLastEdition, [
+    {
+      week: 5,
+      results: [
+        { team: 'Punt Intended', points: 180, result: 'W', opponent: 'Pick Six Appeal', opponentPoints: 95 },
+        { team: 'Pick Six Appeal', points: 95, result: 'L', opponent: 'Punt Intended', opponentPoints: 180 },
+      ],
+      topScorer: { team: 'Punt Intended', points: 180 },
+      bottomScorer: { team: 'Pick Six Appeal', points: 95 },
+    },
+  ]);
+});
+
+test('a ranking with no gap carries no sinceLastEdition, and reads no snapshot', () => {
+  const context = fullRankingContext(weekRanking(5), {
+    teams: NOW,
+    skippedWeekSnapshots: () => assert.fail('no week was skipped'),
+  });
+  assert.equal('sinceLastEdition' in context, false);
+});
+
+test('a skipped week missing from disk, or without per-team results, is reported unavailable', () => {
+  const context = fullRankingContext(PRESEASON, {
+    week: 4,
+    teams: NOW,
+    skippedWeekSnapshots: (week) =>
+      week === 1 ? savedWeek(1, 100, 90) : week === 2 ? null : savedWeek(3, 1, 2, { analysis: undefined }),
+  });
+  assert.deepEqual(context.sinceLastEdition.map((entry) => entry.week), [1, 2, 3]);
+  assert.ok(context.sinceLastEdition[0].results);
+  assert.match(context.sinceLastEdition[1].unavailable, /Week 2 was never saved/);
+  assert.match(context.sinceLastEdition[2].unavailable, /Week 3 has no per-team results/);
+  for (const skipped of context.sinceLastEdition.slice(1)) assert.deepEqual(Object.keys(skipped).sort(), ['unavailable', 'week']);
+});
+
+test('a skipped week of a format with no matchups lists points only', () => {
+  const snapshot = {
+    week: 5,
+    played: true,
+    analysis: { games: [], teamWeeks: [{ rosterId: 1, team: 'Punt Intended', points: 120 }, { rosterId: 2, team: 'Pick Six Appeal', points: 80 }] },
+  };
+  const [entry] = summarizeSkippedWeeks([5], () => snapshot);
+  assert.deepEqual(entry.results, [{ team: 'Punt Intended', points: 120 }, { team: 'Pick Six Appeal', points: 80 }]);
+});
+
+test('both ranking prompts tell the model to use sinceLastEdition to explain the span', () => {
+  for (const name of ['weekly-power-rankings.md', 'survival-rankings.md']) {
+    const prompt = readFileSync(join(PACKAGE_ROOT, 'prompts', name), 'utf8');
+    assert.match(prompt, /`sinceLastEdition`/, name);
+    assert.match(prompt, /explain movement across the span/, name);
+  }
+});
 
 test('a week 6 ranking whose last recorded ranking is week 4 carries weeksSpanned 2 and a note', () => {
   const previous = rankingContext(weekRanking(4));

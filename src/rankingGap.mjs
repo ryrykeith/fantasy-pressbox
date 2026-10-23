@@ -46,3 +46,52 @@ export function describeWeeks(weeks) {
 export function describeRankingEdition(from) {
   return from === 0 ? 'the preseason rankings' : `the week ${from} rankings`;
 }
+
+/**
+ * What happened in each week a ranking's arrows span but no ranking covered,
+ * read from the weeks' saved snapshots.
+ *
+ * `snapshotOf(week)` returns a week's saved snapshot or null. `nameOf` maps a
+ * roster id to the name the team goes by now (null when unknown, then the
+ * snapshot's own name stands), so a team renamed since reads as itself.
+ *
+ * Every skipped week gets an entry. One with no usable snapshot (nothing on
+ * disk, not played, or no per-team analysis such as a multi-week matchup) is
+ * `{ week, unavailable }` naming the reason: never omitted, never guessed.
+ * Otherwise `{ week, results, topScorer, bottomScorer }`, results highest
+ * score first; each is `{ team, points }` plus, where the format pairs teams,
+ * `result`, `opponent` and `opponentPoints`.
+ */
+export function summarizeSkippedWeeks(skippedWeeks, snapshotOf, nameOf = () => null) {
+  return skippedWeeks.map((week) => {
+    const snapshot = snapshotOf(week);
+    if (!snapshot) return { week, unavailable: `Week ${week} was never saved, so its results are not known.` };
+    const teamWeeks = snapshot.played ? snapshot.analysis?.teamWeeks : null;
+    if (!teamWeeks?.length) {
+      return { week, unavailable: `Week ${week} has no per-team results on file, so they are not known.` };
+    }
+    const names = new Map(teamWeeks.map((entry) => [entry.rosterId, nameOf(entry.rosterId) ?? entry.team]));
+    // The snapshot records an opponent by name; its game pairs the roster ids,
+    // which is how a rename since then is followed.
+    const opponents = new Map();
+    for (const game of snapshot.analysis.games ?? []) {
+      const [a, b] = game.teams ?? [];
+      if (a && b) {
+        opponents.set(a.rosterId, names.get(b.rosterId) ?? b.team);
+        opponents.set(b.rosterId, names.get(a.rosterId) ?? a.team);
+      }
+    }
+    const results = teamWeeks
+      .map((entry) => ({
+        team: names.get(entry.rosterId),
+        points: entry.points,
+        ...(entry.result ? { result: entry.result } : {}),
+        ...(entry.opponent
+          ? { opponent: opponents.get(entry.rosterId) ?? entry.opponent, opponentPoints: entry.opponentPoints }
+          : {}),
+      }))
+      .sort((a, b) => b.points - a.points);
+    const scorer = ({ team, points }) => ({ team, points });
+    return { week, results, topScorer: scorer(results[0]), bottomScorer: scorer(results[results.length - 1]) };
+  });
+}

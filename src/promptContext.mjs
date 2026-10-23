@@ -27,7 +27,7 @@ import { TANK_WATCH_TASK, tankWatchPrize, tankWatchUnavailable, tankWatchView } 
 import { draftProjectionView, pickProjection, tradePicksUnavailable, tradeProspectBoard } from './tradePicks.mjs';
 import { FUTURE_STOCK_TASK, futureStockUnavailable, futureStockView, refuseFutureStock } from './futureStock.mjs';
 import { ordinal } from './leagueAge.mjs';
-import { describeRankingEdition, describeWeeks, rankingGap } from './rankingGap.mjs';
+import { describeRankingEdition, describeWeeks, rankingGap, summarizeSkippedWeeks } from './rankingGap.mjs';
 import {
   FIVE_YEAR_PLAN_TASK,
   fiveYearPlanUnavailable,
@@ -1114,6 +1114,9 @@ function leagueAgeNote(history, season) {
  *        `headToHead` (src/analysis/rivalry.mjs#headToHead) and `through`
  *        (`{ season, week }`, the last week the record read); only read by
  *        RIVALRY_TASKS, and only where teams meet head to head.
+ * @param {Function|null} input.skippedWeekSnapshots `(week) => snapshot|null`,
+ *        a week's saved snapshot; read only by a ranking whose
+ *        `previousRankings` spans more than one week (`sinceLastEdition`).
  */
 export function buildContext({
   task,
@@ -1127,6 +1130,7 @@ export function buildContext({
   upcomingAnalysis = null,
   priorWeekAnalysis = null,
   previousRankings = null,
+  skippedWeekSnapshots = null,
   gradedPredictions = null,
   transactions = null,
   transactionsUnavailable = false,
@@ -1297,6 +1301,12 @@ export function buildContext({
         ...(entry.formerly ? { formerly: entry.formerly } : {}),
       })),
     };
+    // The weeks between that ranking and this one, which the arrows span but
+    // nothing else in the context shows. Absent when no week was skipped.
+    if (spansWeeks && ranking && skippedWeekSnapshots) {
+      const nameOf = (rosterId) => teams.find((team) => team.rosterId === rosterId)?.name ?? null;
+      context.sinceLastEdition = summarizeSkippedWeeks(gap.skippedWeeks, skippedWeekSnapshots, nameOf);
+    }
   }
 
   // A preview is about games that have not happened. It still needs to know

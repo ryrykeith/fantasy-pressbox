@@ -103,6 +103,12 @@ Name the edition they measure from ("since the week 4 rankings"), never call
 it last week's ranking, and never write about the weeks in between as if you
 had ranked them.
 
+`sinceLastEdition` (present with `weeksSpanned`) lists each skipped week: every
+surviving team's points, plus that week's `topScorer` and `bottomScorer`. Use
+it to explain movement across the span. An entry with `unavailable` has no
+results on file: say nothing about that week beyond what it states, and never
+guess its scores.
+
 One week is a tiny sample. Normally keep movement within
 `editorial.movementGuidance.max_normal_movement` spots for each week the
 arrows span: multiply it by `previousRankings.weeksSpanned` when that is

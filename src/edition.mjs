@@ -837,6 +837,7 @@ export async function prepareEdition({
     upcomingAnalysis,
     priorWeekAnalysis,
     previousRankings,
+    skippedWeekSnapshots: (skipped) => store.loadSnapshot(league.season, skipped),
     gradedPredictions,
     transactions,
     transactionsUnavailable,

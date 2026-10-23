@@ -382,6 +382,11 @@ before(async () => {
     }),
     espnContext('recap', base, { gradedPredictions: { week: SCORED_WEEK, correct: 0, total: 0, predictions: [] } }),
     espnContext('rankings', base, { previousRankings: lastRankings }),
+    // A ranking recorded two weeks back spans the week between, read from its saved snapshot.
+    espnContext('rankings', base, {
+      previousRankings: { ...lastRankings, label: 'Week 2', week: SCORED_WEEK - 2 },
+      skippedWeekSnapshots: (week) => ({ week, played: true, analysis: base.captured.analysis }),
+    }),
   );
 });
 
