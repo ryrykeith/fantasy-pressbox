@@ -1,0 +1,15 @@
+---
+id: "b7ae6b95-ddb3-4b4e-becd-9f9d4e692e8a"
+level: "task"
+title: "Summarize skipped weeks in a ranking that spans a gap"
+status: "pending"
+priority: "medium"
+source: "operator review session 2026-10-22"
+acceptanceCriteria:
+  - "A week 6 ranking measured against week 4 carries week 5's results in sinceLastEdition"
+  - "A ranking with no gap carries no sinceLastEdition"
+  - "A skipped week missing from disk is reported unavailable, not omitted or invented"
+description: "Builds on 'Gap-aware ranking movement' and 'Capture missing earlier weeks before a backward-looking edition'. A ranking's context covers thisWeek (the week it is about) plus season-to-date record and points-for. When its arrows span more than one week, the weeks in between are invisible except as part of those totals, so the model cannot explain a two-week move (a 180-point week 5 blowup simply is not there). WHAT TO ADD: when previousRankings.weeksSpanned is more than 1, context.sinceLastEdition lists each skipped week from its saved snapshot: every team's score, result and opponent, plus the week's top and bottom scorer. A skipped week with no snapshot on disk gets an unavailable entry naming it, never a guess. The rankings prompts say to use it to explain movement across the span."
+lastModified: "2026-10-22T19:08:15.112Z"
+lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
+---

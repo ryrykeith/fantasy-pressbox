@@ -1,0 +1,17 @@
+---
+id: "efbc9ce2-edfa-468b-9ac7-ef7146d243aa"
+level: "task"
+title: "Gap-aware ranking movement"
+status: "pending"
+priority: "high"
+source: "operator review session 2026-10-22"
+acceptanceCriteria:
+  - "A week 6 ranking whose last recorded ranking is week 4 carries weeksSpanned 2 and a note; one with week 5 recorded carries neither"
+  - "The CLI names the skipped weeks when it measures movement across a gap"
+  - "The rankings prompts tell the model the span and scale max_normal_movement by it"
+  - "doctor lists every week since the last recorded ranking that has none"
+  - "Tests cover a gap, no gap, and the preseason-only fallback"
+description: "When the last recorded ranking is older than the week before this one, the edition says almost nothing about it. store.loadPreviousRankings (src/storeCore.mjs) returns the newest recorded ranking before this week however old, and the CLI prints only 'Measuring movement against \"week-4\" rankings.' (src/edition.mjs). The prompt context carries previousRankings.publishedFor, but prompts/weekly-power-rankings.md calls it last edition's order, the opening asks what you got wrong last time, and editorial.movementGuidance.max_normal_movement is justified as one week being a tiny sample. On the operator's week 6 rankings (last recorded: week 4) the model is likely to call week 4 last week and squeeze two weeks of movement into a one-week cap. WHAT TO ADD: a CLI warning naming the weeks with no recorded ranking; context.previousRankings.weeksSpanned (week minus publishedFor) and a note when it is more than 1; instructions in weekly-power-rankings.md and survival-rankings.md to name the edition the arrows measure from, never call it last week, and scale max_normal_movement by the weeks spanned; doctor (src/inspect.mjs) reporting the newest recorded ranking and every week since it that has none (today it checks only last week and this week)."
+lastModified: "2026-10-22T19:07:59.895Z"
+lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
+---
