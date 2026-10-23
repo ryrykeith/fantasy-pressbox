@@ -18,7 +18,7 @@ lastModifiedBy: "Ryan Keith <ryan.k@endash.us>"
 | [Capture missing earlier weeks before a backward-looking edition](./capture-missing-earlier-weeks-before-a.md) | completed |
 | [Carry LEAGUE_FIRST_SEASON in the league file](./carry-league-first-season-in-the.md) | pending |
 | [catch-up command: save every completed week not yet on disk](./catch-up-command-save-every-completed.md) | completed |
-| [Coverage labels name the weeks actually on file](./coverage-labels-name-the-weeks.md) | pending |
+| [Coverage labels name the weeks actually on file](./coverage-labels-name-the-weeks.md) | completed |
 | [Gap-aware ranking movement](./gap-aware-ranking-movement.md) | completed |
 | [Mid-season debut edition](./mid-season-debut-edition.md) | completed |
 | [Summarize skipped weeks in a ranking that spans a gap](./summarize-skipped-weeks-in-a-ranking.md) | completed |
